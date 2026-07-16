@@ -9,7 +9,7 @@ The core qualitative findings replicate:
 - The most significant control>lesion sequences are systematic progressions
   (e.g., arm 2*->3*->4* = rewarded neighboring-arm traversal)
 
-> **Note on asymmetry:** We find more les>ctrl (219) than ctrl>les (106) significant sequences. This likely reflects differences in subjects (111 vs paper's 85) and/or seq_len_max=4 vs the paper's 6. The paper does not report this breakdown for all significant sequences (only for 'complete' sequences in Fig 5a).
+> **Note on asymmetry:** We find more les>ctrl (219) than ctrl>les (105) significant sequences. This likely reflects differences in subjects (111 vs paper's 85) and/or seq_len_max=4 vs the paper's 6. The paper does not report this breakdown for all significant sequences (only for 'complete' sequences in Fig 5a).
 
 ## Summary
 
@@ -20,11 +20,11 @@ The core qualitative findings replicate:
 | Criterion | 800 | 800 |
 | Resamples | 1,000 | 10,000 |
 | Sequences evaluated | 2,425 | 24,342 |
-| Significant | 325 (13.4%) | 409 (1.7%) |
-| Control > Lesion | 106 | not separately reported |
+| Significant | 324 (13.4%) | 409 (1.7%) |
+| Control > Lesion | 105 | not separately reported |
 | Lesion > Control | 219 | not separately reported |
 | k (k-FWER) | 17 | not reported |
-| Runtime | 2.8s | not reported |
+| Runtime | 2.4s | not reported |
 
 ## Manhattan Plot
 
@@ -159,11 +159,11 @@ through neighboring arms, while lesion rats show more erratic jumping.
 
 | Stage | Time (s) | % Total |
 |---|---|---|
-| build_count_matrix | 0.13 | 4.6% |
+| build_count_matrix | 0.12 | 5.1% |
 | compute_test_stats | 0.00 | 0.0% |
-| bootstrap | 0.60 | 21.6% |
-| k_fwer | 2.05 | 73.8% |
-| **TOTAL** | **2.78** | |
+| bootstrap | 0.17 | 7.0% |
+| k_fwer | 2.14 | 87.9% |
+| **TOTAL** | **2.43** | |
 
 The k-FWER step-down is the bottleneck — it repeatedly scans all bootstrap
 resamples to iteratively remove significant sequences. This is parallelized

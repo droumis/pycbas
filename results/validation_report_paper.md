@@ -24,7 +24,7 @@ The core qualitative findings replicate:
 | Control > Lesion | 173 | not separately reported |
 | Lesion > Control | 207 | not separately reported |
 | k (k-FWER) | 20 | not reported |
-| Runtime | 155.5s | not reported |
+| Runtime | 91.2s | not reported |
 
 ## Manhattan Plot
 
@@ -122,29 +122,29 @@ through neighboring arms, while lesion rats show more erratic jumping.
 |---|---|---|---|
 | 0-1 | ctrl>les | 0.0001 | 1 2 |
 | 3-8-7-8-9 | ctrl>les | 0.0001 | 4 3* 2* 3* 4* |
+| 8-1-8-1 | les>ctrl | 0.0001 | 3* 2 3* 2 |
 | 8-3-8-7-8-9 | ctrl>les | 0.0001 | 3* 4 3* 2* 3* 4* |
 | 0-1-8 | ctrl>les | 0.0001 | 1 2 3* |
+| 8-1-8-1-8 | les>ctrl | 0.0001 | 3* 2 3* 2 3* |
+| 7-3 | les>ctrl | 0.0001 | 2* 4 |
+| 8-7-3 | les>ctrl | 0.0001 | 3* 2* 4 |
 | 7-3-8 | les>ctrl | 0.0001 | 2* 4 3* |
 | 8-7-3-8 | les>ctrl | 0.0001 | 3* 2* 4 3* |
 | 1-8-1-8-1 | les>ctrl | 0.0001 | 2 3* 2 3* 2 |
 | 0-1-8-9-8 | ctrl>les | 0.0001 | 1 2 3* 4* 3* |
 | 8-1-8-1-8-1 | les>ctrl | 0.0001 | 3* 2 3* 2 3* 2 |
+| 1-8-1-8-1-8 | les>ctrl | 0.0001 | 2 3* 2 3* 2 3* |
+| 3-8-7-3-8 | les>ctrl | 0.0001 | 4 3* 2* 4 3* |
+| 7-0-1-8-9-8 | ctrl>les | 0.0001 | 2* 1 2 3* 4* 3* |
+| 7-8-9-4 | ctrl>les | 0.0001 | 2* 3* 4* 5 |
+| 8-7-8-9-4 | ctrl>les | 0.0001 | 3* 2* 3* 4* 5 |
 | 9-4-3 | ctrl>les | 0.0001 | 4* 5 4 |
 | 8-9-4-3 | ctrl>les | 0.0001 | 3* 4* 5 4 |
 | 4-3-8-7-8 | ctrl>les | 0.0001 | 5 4 3* 2* 3* |
-| 4-3-8-7-8-9 | ctrl>les | 0.0001 | 5 4 3* 2* 3* 4* |
-| 0-1-8-9-8-3 | ctrl>les | 0.0001 | 1 2 3* 4* 3* 4 |
-| 7-8-9-4-3 | ctrl>les | 0.0001 | 2* 3* 4* 5 4 |
-| 8-7-8-9-4-3 | ctrl>les | 0.0001 | 3* 2* 3* 4* 5 4 |
-| 9-4-3-8-7-8 | ctrl>les | 0.0001 | 4* 5 4 3* 2* 3* |
-| 7-8-9-4-3-8 | ctrl>les | 0.0001 | 2* 3* 4* 5 4 3* |
-| 7-3-8-3 | les>ctrl | 0.0001 | 2* 4 3* 4 |
-| 8-7-3-8-3 | les>ctrl | 0.0001 | 3* 2* 4 3* 4 |
-| 3-8-7-8-9-4 | ctrl>les | 0.0001 | 4 3* 2* 3* 4* 5 |
-| 7-8-1-0-1 | ctrl>les | 0.0001 | 2* 3* 2 1 2 |
-| 8-7-8-1-0-1 | ctrl>les | 0.0001 | 3* 2* 3* 2 1 2 |
-| 8-3-8-7-3-8 | les>ctrl | 0.0001 | 3* 4 3* 2* 4 3* |
-| 8-4-8 | les>ctrl | 0.0001 | 3* 5 3* |
+| 9-4-3-8 | ctrl>les | 0.0001 | 4* 5 4 3* |
+| 8-9-4-3-8 | ctrl>les | 0.0001 | 3* 4* 5 4 3* |
+| 8-1-0-1 | ctrl>les | 0.0001 | 3* 2 1 2 |
+| 9-4-3-8-7 | ctrl>les | 0.0001 | 4* 5 4 3* 2* |
 
 > **Paper comparison (Fig 5a-b):** The paper highlights the same patterns:
 > - **Control > Lesion:** neighboring arms in a consistent direction
@@ -159,11 +159,11 @@ through neighboring arms, while lesion rats show more erratic jumping.
 
 | Stage | Time (s) | % Total |
 |---|---|---|
-| build_count_matrix | 0.29 | 0.2% |
+| build_count_matrix | 0.25 | 0.3% |
 | compute_test_stats | 0.01 | 0.0% |
-| bootstrap | 57.27 | 36.8% |
-| k_fwer | 97.96 | 63.0% |
-| **TOTAL** | **155.53** | |
+| bootstrap | 3.69 | 4.1% |
+| k_fwer | 87.25 | 95.7% |
+| **TOTAL** | **91.20** | |
 
 The k-FWER step-down is the bottleneck — it repeatedly scans all bootstrap
 resamples to iteratively remove significant sequences. This is parallelized
