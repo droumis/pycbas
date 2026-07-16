@@ -5,20 +5,22 @@ Run directly:  pixi run validate
 This is NOT part of the fast test suite (test_cbas.py).
 
 Produces:
-  - validation_report.md    — human-readable markdown report with figures
-  - figures/validation_*.png — annotated figures with paper comparison
-  - figures/results.npz     — cached results for re-plotting without re-running
-  - timing_profile.txt      — per-stage timing breakdown
+  - results/validation_report.md       — human-readable markdown report
+  - results/figures/validation_*.png   — annotated figures with paper comparison
+  - results/figures/results.npz        — cached results for re-plotting
+  - results/timing_profile.txt         — per-stage timing breakdown
 
 To regenerate figures from cached results:
-  pixi run python test_validate.py --figures-only
+  pixi run figures
 """
 
 import argparse
+import sys
 import time
 import numpy as np
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).parent.parent))
 from pycbas import (
     CBASParams,
     load_subject_data,
@@ -30,13 +32,16 @@ from pycbas import (
     run_cbas_comparative,
 )
 
-DATA_DIR = Path(__file__).parent / "igor_cbas" / "data"
+ROOT_DIR = Path(__file__).parent.parent
+DATA_DIR = ROOT_DIR / "igor_cbas" / "data"
+RESULTS_DIR = ROOT_DIR / "results"
 
 # These are set by main() based on --paper-params
-OUT_DIR = Path(__file__).parent / "figures"
+FIG_SUFFIX = ""
+OUT_DIR = RESULTS_DIR / "figures"
 CACHE_PATH = OUT_DIR / "results.npz"
-REPORT_PATH = Path(__file__).parent / "validation_report.md"
-TIMING_PATH = Path(__file__).parent / "timing_profile.txt"
+REPORT_PATH = RESULTS_DIR / "validation_report.md"
+TIMING_PATH = RESULTS_DIR / "timing_profile.txt"
 
 
 def load_all_rats(n_ctrl_max=None, n_les_max=None):
@@ -79,7 +84,7 @@ def save_results(sequences, g_values, test_stats, significant, directions,
                  sig_g_values, k_final, params, timings, n_subjects, n_ctrl, n_les,
                  null_matrix):
     """Save all result data needed for figures and report."""
-    OUT_DIR.mkdir(exist_ok=True)
+    OUT_DIR.mkdir(parents=True, exist_ok=True)
 
     seq_lengths = np.array([len(s) for s in sequences])
     seq_strs = np.array(["-".join(str(x) for x in s) for s in sequences])
@@ -221,9 +226,7 @@ def generate_figures_from_cache():
     test_stats = data["test_stats"]
     significant = data["significant"]
     directions = data["directions"]
-    sig_g_arr = data["sig_g_values"]
     seq_lengths = data["seq_lengths"]
-    seq_strs = data["seq_strs"]
     null_row_maxes = data["null_row_maxes"]
     seq_len_max = int(data["params_seq_len_max"][0])
     n_sequences = len(seq_lengths)
@@ -310,9 +313,9 @@ def generate_figures_from_cache():
     ax.set_ylim(bottom=-0.1)
     ax.tick_params(axis="x", which="both", bottom=False, labelbottom=False)
     fig.tight_layout()
-    fig.savefig(OUT_DIR / "validation_manhattan.png", dpi=150)
+    fig.savefig(OUT_DIR / f"validation_manhattan{FIG_SUFFIX}.png", dpi=150)
     plt.close(fig)
-    print(f"  Figure: {OUT_DIR / 'validation_manhattan.png'}")
+    print(f"  Figure: {OUT_DIR / f'validation_manhattan{FIG_SUFFIX}.png'}")
 
     # --- Figure 2: Significant sequences by direction and length ---
     fig, ax = plt.subplots(figsize=(8, 5))
@@ -352,9 +355,9 @@ def generate_figures_from_cache():
     ax.set_xticklabels(list(lengths))
     ax.legend()
     fig.tight_layout()
-    fig.savefig(OUT_DIR / "validation_direction_counts.png", dpi=150)
+    fig.savefig(OUT_DIR / f"validation_direction_counts{FIG_SUFFIX}.png", dpi=150)
     plt.close(fig)
-    print(f"  Figure: {OUT_DIR / 'validation_direction_counts.png'}")
+    print(f"  Figure: {OUT_DIR / f'validation_direction_counts{FIG_SUFFIX}.png'}")
 
     # --- Figure 3: Null distribution vs observed test stats ---
     fig, ax = plt.subplots(figsize=(8, 5))
@@ -375,9 +378,9 @@ def generate_figures_from_cache():
                  "(Strong separation confirms real group differences beyond chance)")
     ax.legend()
     fig.tight_layout()
-    fig.savefig(OUT_DIR / "validation_null_vs_observed.png", dpi=150)
+    fig.savefig(OUT_DIR / f"validation_null_vs_observed{FIG_SUFFIX}.png", dpi=150)
     plt.close(fig)
-    print(f"  Figure: {OUT_DIR / 'validation_null_vs_observed.png'}")
+    print(f"  Figure: {OUT_DIR / f'validation_null_vs_observed{FIG_SUFFIX}.png'}")
 
     # --- Figure 4: Sequence space ---
     fig, ax = plt.subplots(figsize=(7, 4.5))
@@ -404,9 +407,9 @@ def generate_figures_from_cache():
     for l, c in zip(lengths_list, counts_list):
         ax.text(l, c * 1.3, str(c), ha="center", fontsize=9)
     fig.tight_layout()
-    fig.savefig(OUT_DIR / "validation_sequence_space.png", dpi=150)
+    fig.savefig(OUT_DIR / f"validation_sequence_space{FIG_SUFFIX}.png", dpi=150)
     plt.close(fig)
-    print(f"  Figure: {OUT_DIR / 'validation_sequence_space.png'}")
+    print(f"  Figure: {OUT_DIR / f'validation_sequence_space{FIG_SUFFIX}.png'}")
 
     # --- Figure 5: g-value distribution ---
     fig, ax = plt.subplots(figsize=(8, 4))
@@ -432,131 +435,9 @@ def generate_figures_from_cache():
                  "(Bimodal: true differences pile up near 0, nulls near 1)")
     ax.legend()
     fig.tight_layout()
-    fig.savefig(OUT_DIR / "validation_gvalue_dist.png", dpi=150)
+    fig.savefig(OUT_DIR / f"validation_gvalue_dist{FIG_SUFFIX}.png", dpi=150)
     plt.close(fig)
-    print(f"  Figure: {OUT_DIR / 'validation_gvalue_dist.png'}")
-
-    # --- Figure 6: Complete sequences (paper Fig 5a style) ---
-    # A significant sequence S is "complete" if every longer containing sequence
-    # with sufficient prevalence is also significant in the same direction.
-    # Paper uses power threshold 0.174 (rat dataset-specific).
-    POWER_THRESHOLD = 0.174
-    n_subjects_total = int(data["n_subjects"][0])
-
-    # Build lookup: seq_str -> index
-    seq_str_to_idx = {str(seq_strs[i]): i for i in range(n_sequences)}
-
-    # For each significant sequence, check completeness
-    sig_indices_arr = np.where(significant)[0]
-    complete_ctrl = []  # (seq_str, g_value) tuples for ctrl>les
-    complete_les = []   # (seq_str, g_value) tuples for les>ctrl
-
-    for idx in sig_indices_arr:
-        seq_str = str(seq_strs[idx])
-        seq_parts = seq_str.split("-")
-        seq_len = len(seq_parts)
-        direction = str(directions[idx])
-
-        if seq_len >= seq_len_max:
-            # Max-length sequences are automatically complete (no longer sequences exist)
-            if direction == "ctrl>les":
-                complete_ctrl.append((seq_str, float(sig_g_arr[idx])))
-            else:
-                complete_les.append((seq_str, float(sig_g_arr[idx])))
-            continue
-
-        # Find all longer sequences containing this one
-        is_complete = True
-        for longer_idx in range(n_sequences):
-            if seq_lengths[longer_idx] <= seq_len:
-                continue
-            longer_str = str(seq_strs[longer_idx])
-            longer_parts = longer_str.split("-")
-
-            # Check if seq is a contiguous subsequence of longer
-            found = False
-            for start in range(len(longer_parts) - seq_len + 1):
-                if longer_parts[start:start + seq_len] == seq_parts:
-                    found = True
-                    break
-            if not found:
-                continue
-
-            # Check prevalence: mean usage rate in the relevant group
-            # We approximate by using the test stat magnitude as a proxy,
-            # but the proper check is mean rate >= threshold.
-            # Since we stored test_stats, we check if the longer sequence
-            # has sufficient prevalence. The paper defines prevalence as
-            # mean rate in the group where the shorter seq was more prevalent.
-            # With our cached data, we approximate: if a longer sequence exists
-            # in the dataset (it does, by definition), check its mean usage.
-            # We don't have per-group means cached, so use total count proxy:
-            # a sequence appearing in the dataset with mean rate >= threshold
-            # means total_count / n_subjects >= threshold.
-            # We can't compute this exactly from cached data, but the test_stats
-            # being non-NaN implies both groups have nonzero variance.
-            # Use a simpler proxy: check if this longer sequence is non-NaN
-            # in test_stats (meaning it has nonzero variance in both groups).
-            longer_pos_g = g_values[longer_idx * 2]
-            longer_neg_g = g_values[longer_idx * 2 + 1]
-
-            # Skip if the longer sequence has negligible presence
-            # (both test stats are NaN = zero variance = likely rare)
-            if np.isnan(test_stats[longer_idx * 2]) and np.isnan(test_stats[longer_idx * 2 + 1]):
-                continue
-
-            # Check if the longer sequence is significant in the same direction
-            if direction == "ctrl>les":
-                if not (not np.isnan(longer_pos_g) and longer_pos_g < 0.5):
-                    is_complete = False
-                    break
-            else:
-                if not (not np.isnan(longer_neg_g) and longer_neg_g < 0.5):
-                    is_complete = False
-                    break
-
-        if is_complete:
-            if direction == "ctrl>les":
-                complete_ctrl.append((seq_str, float(sig_g_arr[idx])))
-            else:
-                complete_les.append((seq_str, float(sig_g_arr[idx])))
-
-    # Sort by sequence length then g-value
-    complete_ctrl.sort(key=lambda x: (len(x[0].split("-")), x[1]))
-    complete_les.sort(key=lambda x: (len(x[0].split("-")), x[1]))
-
-    # Plot: side-by-side display of complete sequences
-    fig, (ax_ctrl, ax_les) = plt.subplots(1, 2, figsize=(14, max(6, (len(complete_ctrl) + len(complete_les)) * 0.15 + 2)))
-
-    def plot_sequences_panel(ax, seq_list, title, color):
-        if not seq_list:
-            ax.text(0.5, 0.5, "None found", ha="center", va="center", transform=ax.transAxes)
-            ax.set_title(title)
-            return
-        labels = []
-        for seq_str, gval in seq_list:
-            decoded = decode_sequence(tuple(int(x) for x in seq_str.split("-")))
-            labels.append(f"{decoded}  (g={gval:.4f})")
-
-        y_pos = np.arange(len(labels))
-        ax.barh(y_pos, [1] * len(labels), color=color, alpha=0.3, edgecolor=color)
-        ax.set_yticks(y_pos)
-        ax.set_yticklabels(labels, fontsize=7, fontfamily="monospace")
-        ax.set_xlim(0, 1.2)
-        ax.set_xlabel("")
-        ax.set_title(f"{title}\n({len(seq_list)} sequences)")
-        ax.tick_params(axis="x", bottom=False, labelbottom=False)
-        ax.invert_yaxis()
-
-    plot_sequences_panel(ax_ctrl, complete_ctrl, "Control > Lesion", "steelblue")
-    plot_sequences_panel(ax_les, complete_les, "Lesion > Control", "sienna")
-    fig.suptitle("'Complete' Significant Sequences — cf. Paper Fig 5a\n"
-                 "(Sequences where all sufficiently-prevalent longer sequences are also significant)",
-                 fontsize=11)
-    fig.tight_layout()
-    fig.savefig(OUT_DIR / "validation_complete_sequences.png", dpi=150)
-    plt.close(fig)
-    print(f"  Figure: {OUT_DIR / 'validation_complete_sequences.png'}")
+    print(f"  Figure: {OUT_DIR / f'validation_gvalue_dist{FIG_SUFFIX}.png'}")
 
 
 def write_report_from_cache():
@@ -642,8 +523,7 @@ def write_report_from_cache():
 
     lines.append("## Manhattan Plot")
     lines.append("")
-    fig_dir = OUT_DIR.name
-    lines.append(f"![Manhattan Plot]({fig_dir}/validation_manhattan.png)")
+    lines.append(f"![Manhattan Plot](figures/validation_manhattan{FIG_SUFFIX}.png)")
     lines.append("")
     lines.append("> **Paper reference:** Figure 1c (right panel). The paper plots sequences on a")
     lines.append("> log-scale x-axis within each length group, ordered by frequency. Our plot")
@@ -653,7 +533,7 @@ def write_report_from_cache():
 
     lines.append("## Significant Sequences by Direction")
     lines.append("")
-    lines.append(f"![Direction Counts]({fig_dir}/validation_direction_counts.png)")
+    lines.append(f"![Direction Counts](figures/validation_direction_counts{FIG_SUFFIX}.png)")
     lines.append("")
     lines.append("> **Paper reference:** Figure 5a shows 'complete' sequences split by direction.")
     lines.append("> Our full significant set (before 'complete' filtering) shows the same broad")
@@ -662,7 +542,7 @@ def write_report_from_cache():
 
     lines.append("## Null Distribution vs Observed")
     lines.append("")
-    lines.append(f"![Null vs Observed]({fig_dir}/validation_null_vs_observed.png)")
+    lines.append(f"![Null vs Observed](figures/validation_null_vs_observed{FIG_SUFFIX}.png)")
     lines.append("")
     lines.append("> **Paper reference:** Not directly plotted. The clear separation between the")
     lines.append("> null (label-permuted) distribution and the observed test statistics confirms")
@@ -671,7 +551,7 @@ def write_report_from_cache():
 
     lines.append("## Sequence Space")
     lines.append("")
-    lines.append(f"![Sequence Space]({fig_dir}/validation_sequence_space.png)")
+    lines.append(f"![Sequence Space](figures/validation_sequence_space{FIG_SUFFIX}.png)")
     lines.append("")
     lines.append("> **Paper reference:** 24,342 unique sequences at length 6. With 12 symbols,")
     lines.append("> theoretical max is 3.2M. The sparsity reflects that 800 choices can only")
@@ -680,7 +560,7 @@ def write_report_from_cache():
 
     lines.append("## g-value Distribution")
     lines.append("")
-    lines.append(f"![g-value Distribution]({fig_dir}/validation_gvalue_dist.png)")
+    lines.append(f"![g-value Distribution](figures/validation_gvalue_dist{FIG_SUFFIX}.png)")
     lines.append("")
     lines.append("> **Paper reference:** Not plotted. The bimodal shape confirms that FDP control")
     lines.append("> cleanly separates signal from noise.")
@@ -769,17 +649,12 @@ def write_timing_from_cache():
 
 def _set_output_paths(paper_params):
     """Configure output paths based on run mode."""
-    global OUT_DIR, CACHE_PATH, REPORT_PATH, TIMING_PATH
-    base = Path(__file__).parent
-    if paper_params:
-        OUT_DIR = base / "figures_paper"
-        REPORT_PATH = base / "validation_report_paper.md"
-        TIMING_PATH = base / "timing_profile_paper.txt"
-    else:
-        OUT_DIR = base / "figures"
-        REPORT_PATH = base / "validation_report.md"
-        TIMING_PATH = base / "timing_profile.txt"
-    CACHE_PATH = OUT_DIR / "results.npz"
+    global OUT_DIR, CACHE_PATH, REPORT_PATH, TIMING_PATH, FIG_SUFFIX
+    FIG_SUFFIX = "_paper" if paper_params else ""
+    OUT_DIR = RESULTS_DIR / "figures"
+    CACHE_PATH = OUT_DIR / f"results{FIG_SUFFIX}.npz"
+    REPORT_PATH = RESULTS_DIR / f"validation_report{FIG_SUFFIX}.md"
+    TIMING_PATH = RESULTS_DIR / f"timing_profile{FIG_SUFFIX}.txt"
 
 
 def main():

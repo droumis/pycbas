@@ -9,7 +9,7 @@ The core qualitative findings replicate:
 - The most significant control>lesion sequences are systematic progressions
   (e.g., arm 2*->3*->4* = rewarded neighboring-arm traversal)
 
-> **Note on asymmetry:** We find more les>ctrl (219) than ctrl>les (106) significant sequences. This likely reflects using all 111 subjects (initial + replication) vs the paper's 85 (initial only), and using seq_len_max=4 vs the paper's 6. The paper does not report this breakdown for all significant sequences (only for 'complete' sequences in Fig 5a).
+> **Note on asymmetry:** We find more les>ctrl (219) than ctrl>les (106) significant sequences. This likely reflects differences in subjects (111 vs paper's 85) and/or seq_len_max=4 vs the paper's 6. The paper does not report this breakdown for all significant sequences (only for 'complete' sequences in Fig 5a).
 
 ## Summary
 
@@ -24,7 +24,7 @@ The core qualitative findings replicate:
 | Control > Lesion | 106 | not separately reported |
 | Lesion > Control | 219 | not separately reported |
 | k (k-FWER) | 17 | not reported |
-| Runtime | 7.1s | not reported |
+| Runtime | 7.0s | not reported |
 
 ## Manhattan Plot
 
@@ -107,11 +107,11 @@ The core qualitative findings replicate:
 
 | Stage | Time (s) | % Total |
 |---|---|---|
-| build_count_matrix | 0.11 | 1.5% |
+| build_count_matrix | 0.10 | 1.5% |
 | compute_test_stats | 0.00 | 0.0% |
-| bootstrap | 0.49 | 6.8% |
-| k_fwer | 6.56 | 91.7% |
-| **TOTAL** | **7.15** | |
+| bootstrap | 0.46 | 6.6% |
+| k_fwer | 6.44 | 91.9% |
+| **TOTAL** | **7.00** | |
 
 > k-FWER step-down dominates. Accelerated with numba @njit (cached).
 > Debug with `NUMBA_DISABLE_JIT=1 pixi run validate`.

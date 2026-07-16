@@ -13,8 +13,8 @@ matplotlib = ">=3.7"
 numba = ">=0.59"
 
 [tasks]
-test = "python -m pytest test_cbas.py -v"
-validate = "python test_validate.py"
-figures = "python test_validate.py --figures-only"
-validate-paper = "python test_validate.py --paper-params"
-figures-paper = "python test_validate.py --figures-only --paper-params"
+test = "python -m pytest tests/test_cbas.py -v"
+validate = "python tests/test_validate.py"
+figures = "python tests/test_validate.py --figures-only"
+validate-paper = "python tests/test_validate.py --paper-params"
+figures-paper = "python tests/test_validate.py --figures-only --paper-params"

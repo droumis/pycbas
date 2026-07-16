@@ -1,10 +1,10 @@
 # CBAS — Choice-Wide Behavioral Association Study
 
-Python reimplementation of the core CBAS algorithm originally written in Igor Pro by [David Kastner](https://github.com/dkastner).
+Python reimplementation of the [core CBAS algorithm](https://github.com/dbkastner/CBAS) originally written in Igor Pro by David Kastner.
 
 CBAS identifies behavioral sequences that differ significantly between experimental groups (comparative mode) or correlate with a continuous measure (correlative mode). It uses Romano-Wolf step-down for multiple comparison correction and k-FWER iteration for false discovery proportion control.
 
-**Reference:** Kastner et al., "Choice-Wide Behavioral Association Study" (2026 preprint)
+**Reference:** Kastner et al., "Choice-Wide Behavioral Association Study" [(2026 preprint)](https://www.biorxiv.org/content/10.1101/2024.02.26.582115v4)
 
 ## Setup
 
@@ -36,7 +36,13 @@ print(f"{result.n_significant} significant sequences (k={result.k_final})")
 
 ## Validation
 
-Run the fast validation (~7s, reduced parameters):
+The validation scripts compare output against the rat spatial alternation dataset from the paper. To run them, first download the data from David Kastner's repo:
+
+```bash
+git clone https://github.com/dbkastner/CBAS.git igor_cbas
+```
+
+Then run the fast validation (~7s, reduced parameters):
 
 ```bash
 pixi run validate
@@ -58,7 +64,7 @@ pixi run figures-paper    # from paper-params run
 ## Tests
 
 ```bash
-pixi run test    # 19 unit + integration tests, ~1s
+pixi run test
 ```
 
 ## Performance
