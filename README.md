@@ -53,13 +53,13 @@ The validation scripts compare output against the rat spatial alternation datase
 git clone https://github.com/dbkastner/CBAS.git igor_cbas
 ```
 
-Then run the fast validation (~7s, reduced parameters):
+Then run the fast validation (~3s, reduced parameters):
 
 ```bash
 pixi run validate
 ```
 
-Run with paper-matched parameters (~8 min, seq_len_max=6, M=10,000, 85 subjects):
+Run with paper-matched parameters (~2.5 min, seq_len_max=6, M=10,000, 85 subjects):
 
 ```bash
 pixi run validate-paper
@@ -86,7 +86,7 @@ pixi run test
 
 ## Performance
 
-The step-down procedure is accelerated with numba JIT (~10x speedup). Set `NUMBA_DISABLE_JIT=1` in the environment to disable for debugging.
+The step-down procedure is parallelized across bootstrap resamples with numba JIT + prange. Full paper-params validation runs in ~2.5 minutes on an Apple M-series chip. Set `NUMBA_DISABLE_JIT=1` in the environment to disable for debugging.
 
 ---
 
@@ -114,7 +114,7 @@ The core qualitative findings replicate:
 | Control > Lesion | 173 | not separately reported |
 | Lesion > Control | 207 | not separately reported |
 | k (k-FWER) | 20 | not reported |
-| Runtime | 458.7s | not reported |
+| Runtime | 155.5s | not reported |
 
 ### Manhattan Plot
 
@@ -249,12 +249,13 @@ through neighboring arms, while lesion rats show more erratic jumping.
 
 | Stage | Time (s) | % Total |
 |---|---|---|
-| build_count_matrix | 0.22 | 0.0% |
-| compute_test_stats | 0.00 | 0.0% |
-| bootstrap | 46.37 | 10.1% |
-| k_fwer | 412.14 | 89.8% |
-| **TOTAL** | **458.73** | |
+| build_count_matrix | 0.29 | 0.2% |
+| compute_test_stats | 0.01 | 0.0% |
+| bootstrap | 57.27 | 36.8% |
+| k_fwer | 97.96 | 63.0% |
+| **TOTAL** | **155.53** | |
 
 The k-FWER step-down is the bottleneck — it repeatedly scans all bootstrap
-resamples to iteratively remove significant sequences. This is accelerated
-with numba JIT compilation (first run compiles, subsequent runs are fast).
+resamples to iteratively remove significant sequences. This is parallelized
+across resamples with numba JIT + prange (first run compiles, subsequent
+runs are fast).

@@ -24,7 +24,7 @@ The core qualitative findings replicate:
 | Control > Lesion | 106 | not separately reported |
 | Lesion > Control | 219 | not separately reported |
 | k (k-FWER) | 17 | not reported |
-| Runtime | 7.0s | not reported |
+| Runtime | 2.8s | not reported |
 
 ## Manhattan Plot
 
@@ -159,14 +159,15 @@ through neighboring arms, while lesion rats show more erratic jumping.
 
 | Stage | Time (s) | % Total |
 |---|---|---|
-| build_count_matrix | 0.10 | 1.5% |
+| build_count_matrix | 0.13 | 4.6% |
 | compute_test_stats | 0.00 | 0.0% |
-| bootstrap | 0.46 | 6.6% |
-| k_fwer | 6.44 | 91.9% |
-| **TOTAL** | **7.00** | |
+| bootstrap | 0.60 | 21.6% |
+| k_fwer | 2.05 | 73.8% |
+| **TOTAL** | **2.78** | |
 
 The k-FWER step-down is the bottleneck — it repeatedly scans all bootstrap
-resamples to iteratively remove significant sequences. This is accelerated
-with numba JIT compilation (first run compiles, subsequent runs are fast).
+resamples to iteratively remove significant sequences. This is parallelized
+across resamples with numba JIT + prange (first run compiles, subsequent
+runs are fast).
 
 > To debug without JIT: `NUMBA_DISABLE_JIT=1 pixi run validate`
