@@ -24,11 +24,11 @@ The core qualitative findings replicate:
 | Control > Lesion | 173 | not separately reported |
 | Lesion > Control | 207 | not separately reported |
 | k (k-FWER) | 20 | not reported |
-| Runtime | 453.8s | not reported |
+| Runtime | 458.7s | not reported |
 
 ## Manhattan Plot
 
-![Manhattan Plot](figures_paper/validation_manhattan.png)
+![Manhattan Plot](figures/validation_manhattan_paper.png)
 
 > **Paper reference:** Figure 1c (right panel). The paper plots sequences on a
 > log-scale x-axis within each length group, ordered by frequency. Our plot
@@ -37,7 +37,7 @@ The core qualitative findings replicate:
 
 ## Significant Sequences by Direction
 
-![Direction Counts](figures_paper/validation_direction_counts.png)
+![Direction Counts](figures/validation_direction_counts_paper.png)
 
 > **Paper reference:** Figure 5a shows 'complete' sequences split by direction.
 > Our full significant set (before 'complete' filtering) shows the same broad
@@ -45,7 +45,7 @@ The core qualitative findings replicate:
 
 ## Null Distribution vs Observed
 
-![Null vs Observed](figures_paper/validation_null_vs_observed.png)
+![Null vs Observed](figures/validation_null_vs_observed_paper.png)
 
 > **Paper reference:** Not directly plotted. The clear separation between the
 > null (label-permuted) distribution and the observed test statistics confirms
@@ -53,7 +53,7 @@ The core qualitative findings replicate:
 
 ## Sequence Space
 
-![Sequence Space](figures_paper/validation_sequence_space.png)
+![Sequence Space](figures/validation_sequence_space_paper.png)
 
 > **Paper reference:** 24,342 unique sequences at length 6. With 12 symbols,
 > theoretical max is 3.2M. The sparsity reflects that 800 choices can only
@@ -61,7 +61,7 @@ The core qualitative findings replicate:
 
 ## g-value Distribution
 
-![g-value Distribution](figures_paper/validation_gvalue_dist.png)
+![g-value Distribution](figures/validation_gvalue_dist_paper.png)
 
 > **Paper reference:** Not plotted. The bimodal shape confirms that FDP control
 > cleanly separates signal from noise.
@@ -107,11 +107,11 @@ The core qualitative findings replicate:
 
 | Stage | Time (s) | % Total |
 |---|---|---|
-| build_count_matrix | 0.21 | 0.0% |
+| build_count_matrix | 0.22 | 0.0% |
 | compute_test_stats | 0.00 | 0.0% |
-| bootstrap | 45.54 | 10.0% |
-| k_fwer | 408.05 | 89.9% |
-| **TOTAL** | **453.80** | |
+| bootstrap | 46.37 | 10.1% |
+| k_fwer | 412.14 | 89.8% |
+| **TOTAL** | **458.73** | |
 
 > k-FWER step-down dominates. Accelerated with numba @njit (cached).
 > Debug with `NUMBA_DISABLE_JIT=1 pixi run validate`.

@@ -6,12 +6,12 @@ Data: 85 subjects, 16483 sequences
 
 Stage                          Time (s)     % Total    Notes
 --------------------------------------------------------------------------------
-  build_count_matrix           0.209        0.0        85 subj x 6 lengths
-  compute_test_stats           0.005        0.0        16483 sequences x 2 directions
-  bootstrap                    45.539       10.0       10000 resamples x 16483 sequences
-  k_fwer                       408.046      89.9       converged at k=20, numba-jitted step-down
+  build_count_matrix           0.216        0.0        85 subj x 6 lengths
+  compute_test_stats           0.004        0.0        16483 sequences x 2 directions
+  bootstrap                    46.371       10.1       10000 resamples x 16483 sequences
+  k_fwer                       412.141      89.8       converged at k=20, numba-jitted step-down
 --------------------------------------------------------------------------------
-  TOTAL                        453.799     
+  TOTAL                        458.732     
 
 Optimization notes:
   - Step-down uses numba @njit with k-th largest via insertion buffer
