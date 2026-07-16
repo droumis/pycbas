@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+
+# Pixi
+.pixi/
+
+# Pytest
+.pytest_cache/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Cached results (regenerable)
+figures/results.npz
+figures_paper/results.npz
+
+# Reference materials (not for distribution)
+papers/
+cbas_paper_docling/
+igor_cbas/
+utilities/
+notes.md

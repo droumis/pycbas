@@ -1,0 +1,20 @@
+[workspace]
+name = "pycbas"
+version = "0.1.0"
+description = "Choice-Wide Behavioral Association Study"
+channels = ["conda-forge"]
+platforms = ["osx-arm64"]
+
+[dependencies]
+python = ">=3.11"
+numpy = ">=1.24"
+pytest = ">=7"
+matplotlib = ">=3.7"
+numba = ">=0.59"
+
+[tasks]
+test = "python -m pytest test_cbas.py -v"
+validate = "python test_validate.py"
+figures = "python test_validate.py --figures-only"
+validate-paper = "python test_validate.py --paper-params"
+figures-paper = "python test_validate.py --figures-only --paper-params"

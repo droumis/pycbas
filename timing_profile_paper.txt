@@ -1,0 +1,21 @@
+CBAS Timing Profile
+========================================
+
+Parameters: seq_len_max=6, criterion=800, resamples=10000
+Data: 85 subjects, 16483 sequences
+
+Stage                          Time (s)     % Total    Notes
+--------------------------------------------------------------------------------
+  build_count_matrix           0.209        0.0        85 subj x 6 lengths
+  compute_test_stats           0.005        0.0        16483 sequences x 2 directions
+  bootstrap                    45.539       10.0       10000 resamples x 16483 sequences
+  k_fwer                       408.046      89.9       converged at k=20, numba-jitted step-down
+--------------------------------------------------------------------------------
+  TOTAL                        453.799     
+
+Optimization notes:
+  - Step-down uses numba @njit with k-th largest via insertion buffer
+  - Early-exit during k-iteration (stops at alpha, not 1.0)
+  - Null matrix preparation (sort + NaN->-inf) done once, shared across k iters
+  - Bootstrap uses vectorized numpy per resample
+  - Further: parallelize bootstrap with numba.prange
