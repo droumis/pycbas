@@ -14,7 +14,7 @@ numba = ">=0.59"
 
 [tasks]
 test = "python -m pytest tests/test_cbas.py -v"
-validate = "python tests/test_validate.py"
-figures = "python tests/test_validate.py --figures-only"
-validate-paper = "python tests/test_validate.py --paper-params"
-figures-paper = "python tests/test_validate.py --figures-only --paper-params"
+validate = "python scripts/validate.py"
+figures = "python scripts/validate.py --figures-only"
+validate-paper = "python scripts/validate.py --paper-params"
+figures-paper = "python scripts/validate.py --figures-only --paper-params"
