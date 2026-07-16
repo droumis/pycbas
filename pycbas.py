@@ -161,6 +161,46 @@ def compute_test_stats(count_matrix, group_indices):
     return stats
 
 
+@njit(cache=True, parallel=True)
+def _bootstrap_parallel(count_matrix, boot_indices_0, boot_indices_1, n0, n1, n_seq, M):
+    """Numba-parallelized bootstrap computation."""
+    null_stats = np.full((M, n_seq * 2), np.nan)
+
+    for m in prange(M):
+        for s in range(n_seq):
+            sum0 = 0.0
+            sum1 = 0.0
+            for i in range(n0):
+                sum0 += count_matrix[boot_indices_0[m, i], s]
+            for i in range(n1):
+                sum1 += count_matrix[boot_indices_1[m, i], s]
+            mean0 = sum0 / n0
+            mean1 = sum1 / n1
+
+            var0 = 0.0
+            var1 = 0.0
+            for i in range(n0):
+                diff = count_matrix[boot_indices_0[m, i], s] - mean0
+                var0 += diff * diff
+            for i in range(n1):
+                diff = count_matrix[boot_indices_1[m, i], s] - mean1
+                var1 += diff * diff
+
+            sem0 = np.sqrt(var0 / (n0 * (n0 - 1)))
+            sem1 = np.sqrt(var1 / (n1 * (n1 - 1)))
+            sigma = np.sqrt(sem0 * sem0 + sem1 * sem1)
+
+            delta = mean0 - mean1
+            if sigma > 0.0 and delta != 0.0:
+                t_val = delta / sigma
+                if delta > 0.0:
+                    null_stats[m, s * 2] = t_val
+                else:
+                    null_stats[m, s * 2 + 1] = -t_val
+
+    return null_stats
+
+
 def bootstrap_test_stats(count_matrix, group_indices, params, rng=None):
     """Generate bootstrap null distribution by resampling ignoring group labels.
 
@@ -173,36 +213,18 @@ def bootstrap_test_stats(count_matrix, group_indices, params, rng=None):
     grp1 = group_indices[1]
     n0 = len(grp0)
     n1 = len(grp1)
-    all_indices = np.concatenate([grp0, grp1])
-    n_total = len(all_indices)
+    n_total = n0 + n1
     n_seq = count_matrix.shape[1]
     M = params.resample_number
 
-    null_stats = np.full((M, n_seq * 2), np.nan)
+    # Pre-generate all bootstrap indices
+    boot_indices_0 = rng.integers(0, n_total, size=(M, n0))
+    boot_indices_1 = rng.integers(0, n_total, size=(M, n1))
 
-    for m in range(M):
-        boot0 = rng.choice(all_indices, size=n0, replace=True)
-        boot1 = rng.choice(all_indices, size=n1, replace=True)
-
-        counts0 = count_matrix[boot0]
-        counts1 = count_matrix[boot1]
-
-        mean0 = counts0.mean(axis=0)
-        mean1 = counts1.mean(axis=0)
-        sem0 = counts0.std(axis=0, ddof=1) / np.sqrt(n0)
-        sem1 = counts1.std(axis=0, ddof=1) / np.sqrt(n1)
-
-        delta = mean0 - mean1
-        sigma = np.sqrt(sem0**2 + sem1**2)
-
-        valid = (sigma > 0) & (delta != 0)
-        safe_sigma = np.where(sigma > 0, sigma, 1.0)
-        t_vals = np.where(valid, delta / safe_sigma, np.nan)
-
-        pos_mask = valid & (delta > 0)
-        neg_mask = valid & (delta < 0)
-        null_stats[m, 0::2] = np.where(pos_mask, t_vals, np.nan)
-        null_stats[m, 1::2] = np.where(neg_mask, -t_vals, np.nan)
+    count_matrix_f = np.ascontiguousarray(count_matrix, dtype=np.float64)
+    null_stats = _bootstrap_parallel(
+        count_matrix_f, boot_indices_0, boot_indices_1, n0, n1, n_seq, M
+    )
 
     return null_stats
 
