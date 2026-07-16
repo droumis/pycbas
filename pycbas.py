@@ -15,8 +15,10 @@ import numpy as np
 from dataclasses import dataclass
 
 try:
-    from numba import njit
+    from numba import njit, prange
 except ImportError:
+    prange = range
+
     def njit(*args, **kwargs):
         def wrapper(fn):
             return fn
@@ -205,9 +207,11 @@ def bootstrap_test_stats(count_matrix, group_indices, params, rng=None):
     return null_stats
 
 
-@njit(cache=True)
+@njit(cache=True, parallel=True)
 def _stepdown_core(sorted_stats, null_sub, k, max_pval):
     """Numba-accelerated inner loop of Romano-Wolf step-down.
+
+    Parallelizes across M bootstrap resamples using numba prange.
 
     Args:
         sorted_stats: (n_valid,) test stats sorted descending
@@ -228,12 +232,10 @@ def _stepdown_core(sorted_stats, null_sub, k, max_pval):
     for step in range(n_valid):
         n_active = int(active.sum())
         if n_active <= k - 1:
-            comparison_val = np.empty(M)
-            for m in range(M):
-                comparison_val[m] = -np.inf
+            comparison_val = np.full(M, -np.inf)
         else:
             comparison_val = np.empty(M)
-            for m in range(M):
+            for m in prange(M):
                 buf = np.empty(k)
                 buf[:] = -np.inf
                 for col in range(n_valid):

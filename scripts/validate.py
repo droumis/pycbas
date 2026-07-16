@@ -637,8 +637,9 @@ def write_report_from_cache():
     lines.append(f"| **TOTAL** | **{timings['total']:.2f}** | |")
     lines.append("")
     lines.append("The k-FWER step-down is the bottleneck — it repeatedly scans all bootstrap")
-    lines.append("resamples to iteratively remove significant sequences. This is accelerated")
-    lines.append("with numba JIT compilation (first run compiles, subsequent runs are fast).")
+    lines.append("resamples to iteratively remove significant sequences. This is parallelized")
+    lines.append("across resamples with numba JIT + prange (first run compiles, subsequent")
+    lines.append("runs are fast).")
     lines.append("")
     lines.append("> To debug without JIT: `NUMBA_DISABLE_JIT=1 pixi run validate`")
 
