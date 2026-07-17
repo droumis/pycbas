@@ -1,0 +1,36 @@
+{
+  "dataset": "rats",
+  "mode": "comparative",
+  "groups": {
+    "control": 46,
+    "lesion": 39
+  },
+  "params": {
+    "num_arms": 6,
+    "seq_len_max": 6,
+    "criterion": 800,
+    "resample_number": 10000,
+    "alpha": 0.5,
+    "gamma": 0.05
+  },
+  "results": {
+    "n_subjects": 85,
+    "n_sequences": 16483,
+    "n_significant": 380,
+    "n_positive": 173,
+    "n_negative": 207,
+    "fraction_significant": 0.023054055693745072,
+    "k_final": 20
+  },
+  "timing": {
+    "build_count_matrix": 0.24116729199886322,
+    "compute_test_stats": 0.007105999975465238,
+    "bootstrap": 3.690358499996364,
+    "k_fwer": 82.91112954204436,
+    "total": 86.84976133401506
+  },
+  "labels": {
+    "positive_direction": "control > lesion",
+    "negative_direction": "lesion > control"
+  }
+}

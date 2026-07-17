@@ -179,35 +179,52 @@ def make_figures(data):
     plt.close()
 
     # --- Sequence space ---
-    fig, ax = plt.subplots(figsize=(5, 3))
+    num_arms = 2
+    fig, ax = plt.subplots(figsize=(7, 4.5))
     counts_per_len = {}
     for slen in unique_lens:
         counts_per_len[slen] = int(np.sum(seq_lengths == slen))
-    ax.bar(list(counts_per_len.keys()), list(counts_per_len.values()), color="#4488cc")
+    lengths_list = sorted(counts_per_len.keys())
+    counts_list = [counts_per_len[l] for l in lengths_list]
+    theoretical = [num_arms**l for l in lengths_list]
+
+    ax.bar(lengths_list, counts_list, color="teal", alpha=0.7, edgecolor="white",
+           label="Observed unique sequences")
+    ax.plot(lengths_list, theoretical, "k--o", markersize=5, linewidth=1,
+            label=f"Theoretical max (${{2}}^L$)")
+    ax.set_yscale("log")
     ax.set_xlabel("Sequence length")
-    ax.set_ylabel("# unique sequences")
-    ax.set_title("Sequence Space by Length")
+    ax.set_ylabel("Count (log scale)")
+    ax.set_title(f"Sequence Space: {n_seq:,} unique / "
+                 f"{sum(theoretical):,} theoretical")
+    ax.legend()
+    for l, c in zip(lengths_list, counts_list):
+        ax.text(l, c * 1.3, str(c), ha="center", fontsize=9)
     plt.tight_layout()
     plt.savefig(FIG_DIR / "sequence_space.png", dpi=150, bbox_inches="tight")
     plt.close()
 
-    # --- g-value distribution ---
-    valid_g = []
+    # --- g-value distribution (best direction per sequence) ---
+    all_g = []
     for i in range(n_seq):
         pos_g = g_values[i * 2]
         neg_g = g_values[i * 2 + 1]
-        if not np.isnan(pos_g):
-            valid_g.append(pos_g)
-        if not np.isnan(neg_g):
-            valid_g.append(neg_g)
-    valid_g = np.array(valid_g)
+        best_g = min(pos_g if not np.isnan(pos_g) else 1.0,
+                     neg_g if not np.isnan(neg_g) else 1.0)
+        all_g.append(best_g)
+    all_g = np.array(all_g)
 
-    fig, ax = plt.subplots(figsize=(5, 3))
-    ax.hist(valid_g, bins=50, color="#4488cc", edgecolor="white", linewidth=0.3)
-    ax.axvline(0.5, color="red", linestyle="--", linewidth=1, label="ζ = 0.5 threshold")
-    ax.set_xlabel("ζ (adjusted p-value)")
+    fig, ax = plt.subplots(figsize=(8, 4))
+    ax.hist(all_g[all_g < 1.0], bins=50, color="steelblue", alpha=0.7, edgecolor="white")
+    ax.axvline(0.5, color="red", linestyle="--", linewidth=1.5, label="Threshold (g = 0.5)")
+    n_below = int((all_g < 0.5).sum())
+    ax.annotate(f"{n_below} significant\n(g < 0.5)",
+                xy=(0.25, 0.85), xycoords="axes fraction",
+                fontsize=11, ha="center", color="steelblue", fontweight="bold")
+    ax.set_xlabel("g-value (best direction per sequence)")
     ax.set_ylabel("Count")
-    ax.set_title("g-value Distribution")
+    ax.set_title("Distribution of g-values")
+    ax.set_xlim(-0.02, 1.02)
     ax.legend()
     plt.tight_layout()
     plt.savefig(FIG_DIR / "gvalue_dist.png", dpi=150, bbox_inches="tight")

@@ -1,15 +1,16 @@
 """
-Run CBAS on the human two-step task dataset (correlative mode).
+Run CBAS on the rat spatial alternation dataset.
 
-Correlates sequence usage with CBIT scores (compulsivity measure).
-6 choice values × 2 reward states = 12 possible symbols per position.
+Compares control vs hippocampal lesion rats. 6-arm maze with reward encoding
+(12 symbols), first 800 choices per rat.
 
-Paper params: num_arms=6, seq_len_max=4, criterion=400, M=10,000
-Paper result: 31/408 significant sequences (Fig 1c middle panel)
+Paper params: num_arms=6, seq_len_max=6, criterion=800, M=10,000
+Paper result: 409/24,342 significant sequences (Fig 1c right panel)
 
 Usage:
-    pixi run human             # paper params
-    pixi run human-quick       # reduced for fast check
+    pixi run rats             # paper params (85 subjects)
+    pixi run rats-quick       # reduced for fast check
+    pixi run rats --full      # all available subjects
 """
 
 import argparse
@@ -19,55 +20,51 @@ import numpy as np
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
+sys.path.insert(0, str(Path(__file__).parent))
 from pycbas import (
     CBASParams,
     load_subject_data,
     build_count_matrix,
-    compute_test_stats_correlative,
-    bootstrap_test_stats_correlative,
+    compute_test_stats,
+    bootstrap_test_stats,
     find_k_fwer,
 )
 from results_io import save_results_json, compute_significance_summary
 
 ROOT_DIR = Path(__file__).parent.parent
-DATA_DIR = ROOT_DIR / "data" / "humans"
-RESULTS_DIR = ROOT_DIR / "results" / "humans"
+DATA_DIR = ROOT_DIR / "igor_cbas" / "data"
+RESULTS_DIR = ROOT_DIR / "results" / "rats"
 FIG_DIR = RESULTS_DIR / "figures"
 
 
-def load_humans():
-    """Load human data and CBIT scores from info file."""
-    info_path = DATA_DIR / "humanInfo.txt"
-    info = {}
-    with open(info_path) as f:
-        for line in f:
-            parts = line.strip().split(",")
-            info[int(parts[0])] = float(parts[1])
+def load_rats(n_ctrl_max=46, n_les_max=39):
+    """Load rat data files. Optionally limit to first N of each group."""
+    ctrl_data, les_data = [], []
+    for f in sorted(DATA_DIR.glob("*.txt")):
+        name = f.stem
+        if "Control" in name:
+            ctrl_data.append(load_subject_data(f))
+        elif "Lesion" in name:
+            les_data.append(load_subject_data(f))
 
-    subjects_data = []
-    covariate = []
-    for subj_id in sorted(info.keys()):
-        fpath = DATA_DIR / f"subject{subj_id}.txt"
-        if fpath.exists():
-            subjects_data.append(load_subject_data(fpath))
-            covariate.append(info[subj_id])
+    if n_ctrl_max is not None:
+        ctrl_data = ctrl_data[:n_ctrl_max]
+    if n_les_max is not None:
+        les_data = les_data[:n_les_max]
 
-    return subjects_data, np.array(covariate)
-
-
-def decode_human_symbol(sym, num_arms=6):
-    """Decode human symbol into choice description."""
-    choice = sym % num_arms
-    rewarded = sym // num_arms
-    choice_names = ["L1", "R1", "L2", "R2", "NC1", "NC2"]
-    name = choice_names[choice] if choice < len(choice_names) else f"c{choice}"
-    if rewarded:
-        name = name.upper()
-    return name
+    subjects_data = ctrl_data + les_data
+    group_labels = np.array([0] * len(ctrl_data) + [1] * len(les_data))
+    return subjects_data, group_labels
 
 
-def decode_human_sequence(seq, num_arms=6):
-    return " ".join(decode_human_symbol(s, num_arms) for s in seq)
+def decode_rat_sequence(seq, num_arms=6):
+    """Decode rat sequence: arm = sym % 6, rewarded = sym // 6, display as '{arm+1}*' if rewarded."""
+    parts = []
+    for s in seq:
+        arm = s % num_arms
+        rewarded = s // num_arms
+        parts.append(f"{arm+1}{'*' if rewarded else ''}")
+    return " ".join(parts)
 
 
 def make_figures(data):
@@ -81,10 +78,9 @@ def make_figures(data):
     null_row_maxes = data["null_row_maxes"]
     n_seq = len(seq_lengths)
 
-    alpha = 0.5
-
     # --- Manhattan plot ---
-    fig, ax = plt.subplots(figsize=(7, 4))
+    fig, ax = plt.subplots(figsize=(8, 4))
+    alpha = 0.5
     neg_log_g = np.full(n_seq, np.nan)
     directions = []
     for i in range(n_seq):
@@ -94,18 +90,21 @@ def make_figures(data):
         d = ""
         if not np.isnan(pos_g) and not np.isnan(neg_g):
             best_g = min(pos_g, neg_g)
-            d = "pos_corr" if pos_g <= neg_g else "neg_corr"
+            d = "control>lesion" if pos_g <= neg_g else "lesion>control"
         elif not np.isnan(pos_g):
             best_g = pos_g
-            d = "pos_corr"
+            d = "control>lesion"
         elif not np.isnan(neg_g):
             best_g = neg_g
-            d = "neg_corr"
+            d = "lesion>control"
         if not np.isnan(best_g) and best_g > 0:
             neg_log_g[i] = -np.log10(best_g)
         directions.append(d)
 
-    colors = {1: "#00aaff", 2: "#0044cc", 3: "#88dd00", 4: "#008800"}
+    colors = {
+        1: "#00e5ff", 2: "#00aaff", 3: "#0044cc", 4: "#88dd00",
+        5: "#44bb00", 6: "#008800",
+    }
     unique_lens = sorted(set(seq_lengths))
     x_pos = np.zeros(n_seq)
     band_width = 1.0
@@ -134,13 +133,14 @@ def make_figures(data):
     threshold = -np.log10(alpha)
     ax.axhline(threshold, color="black", linestyle="--", linewidth=0.8, alpha=0.5)
     ax.set_ylabel("-log₁₀(ζ)")
-    ax.set_title("Human CBAS: Two-Step Task × CBIT (Correlative)")
+    ax.set_xlabel("Sequences (grouped by length)")
+    ax.set_title("Rat CBAS: Control vs Lesion Spatial Alternation")
+    ax.legend(loc="upper right", fontsize=7, ncol=2)
 
     xtick_pos = [i * (band_width + gap) + band_width / 2 for i in range(len(unique_lens))]
     ax.set_xticks(xtick_pos)
     ax.set_xticklabels(unique_lens)
     ax.set_xlabel("Sequence length")
-    ax.legend(loc="upper right", fontsize=8)
     plt.tight_layout()
     plt.savefig(FIG_DIR / "manhattan.png", dpi=150, bbox_inches="tight")
     plt.close()
@@ -148,16 +148,16 @@ def make_figures(data):
     # --- Direction counts ---
     directions_arr = np.array(directions)
     sig_mask = neg_log_g > threshold
-    n_pos = int(np.sum((directions_arr == "pos_corr") & sig_mask & valid))
-    n_neg = int(np.sum((directions_arr == "neg_corr") & sig_mask & valid))
+    n_ctrl_more = np.sum((directions_arr == "control>lesion") & sig_mask & valid)
+    n_les_more = np.sum((directions_arr == "lesion>control") & sig_mask & valid)
 
     fig, ax = plt.subplots(figsize=(4, 3))
-    bars = ax.bar(["Positive corr\n(↑ CBIT → ↑ usage)", "Negative corr\n(↑ CBIT → ↓ usage)"],
-                  [n_pos, n_neg], color=["#cc3300", "#0066cc"])
+    bars = ax.bar(["Control > Lesion", "Lesion > Control"], [n_ctrl_more, n_les_more],
+                  color=["steelblue", "sienna"])
     ax.set_ylabel("# significant sequences")
-    ax.set_title("Significant Sequences by Correlation Direction")
-    for bar, val in zip(bars, [n_pos, n_neg]):
-        ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.5,
+    ax.set_title("Significant Sequences by Direction")
+    for bar, val in zip(bars, [n_ctrl_more, n_les_more]):
+        ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 5,
                 str(val), ha="center", fontsize=10)
     plt.tight_layout()
     plt.savefig(FIG_DIR / "direction_counts.png", dpi=150, bbox_inches="tight")
@@ -185,18 +185,19 @@ def make_figures(data):
 
     # --- Sequence space ---
     num_arms = 6
+    num_symbols = num_arms * 2  # reward encoding
     fig, ax = plt.subplots(figsize=(7, 4.5))
     counts_per_len = {}
     for slen in unique_lens:
         counts_per_len[slen] = int(np.sum(seq_lengths == slen))
     lengths_list = sorted(counts_per_len.keys())
     counts_list = [counts_per_len[l] for l in lengths_list]
-    theoretical = [num_arms**l for l in lengths_list]
+    theoretical = [num_symbols**l for l in lengths_list]
 
     ax.bar(lengths_list, counts_list, color="teal", alpha=0.7, edgecolor="white",
            label="Observed unique sequences")
     ax.plot(lengths_list, theoretical, "k--o", markersize=5, linewidth=1,
-            label=f"Theoretical max (${{6}}^L$)")
+            label=f"Theoretical max (${{12}}^L$)")
     ax.set_yscale("log")
     ax.set_xlabel("Sequence length")
     ax.set_ylabel("Count (log scale)")
@@ -228,7 +229,8 @@ def make_figures(data):
                 fontsize=11, ha="center", color="steelblue", fontweight="bold")
     ax.set_xlabel("g-value (best direction per sequence)")
     ax.set_ylabel("Count")
-    ax.set_title("Distribution of g-values")
+    ax.set_title("Distribution of g-values\n"
+                 "(Bimodal: true differences pile up near 0, nulls near 1)")
     ax.set_xlim(-0.02, 1.02)
     ax.legend()
     plt.tight_layout()
@@ -243,16 +245,19 @@ def write_report(data, timings):
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 
     g_values = data["g_values"]
+    test_stats = data["test_stats"]
     seq_lengths = data["seq_lengths"]
     seq_strs = data["seq_strs"]
     n_subjects = int(data["n_subjects"][0])
+    n_ctrl = int(data["n_ctrl"][0])
+    n_les = int(data["n_les"][0])
     k_final = int(data["k_final"][0])
     n_seq = len(seq_lengths)
 
     alpha = 0.5
     n_sig = 0
-    n_pos = 0
-    n_neg = 0
+    n_ctrl_more = 0
+    n_les_more = 0
     sig_seqs = []
 
     for i in range(n_seq):
@@ -264,14 +269,14 @@ def write_report(data, timings):
 
         if not np.isnan(pos_g) and pos_g < alpha:
             is_sig = True
-            direction = "pos_corr"
+            direction = "control>lesion"
             best_g = pos_g
-            n_pos += 1
+            n_ctrl_more += 1
         if not np.isnan(neg_g) and neg_g < alpha:
             is_sig = True
-            direction = "neg_corr"
+            direction = "lesion>control"
             best_g = neg_g
-            n_neg += 1
+            n_les_more += 1
 
         if is_sig:
             n_sig += 1
@@ -279,31 +284,22 @@ def write_report(data, timings):
 
     sig_seqs.sort(key=lambda x: x[2])
 
-    report = f"""# Human CBAS Validation Report (Correlative Mode)
+    report = f"""# Rat CBAS Validation Report
 
 ## Summary
 
 | | pycbas | Paper (Kastner et al.) |
 |---|---|---|
-| Subjects | {n_subjects} | 1,413 |
-| Max seq length | {int(data['params_seq_len_max'][0])} | 4 |
-| Criterion | {int(data['params_criterion'][0])} | 400 |
+| Rats | {n_subjects} ({n_ctrl} control, {n_les} lesion) | 85 (46 control, 39 lesion) |
+| Max seq length | {int(data['params_seq_len_max'][0])} | 6 |
+| Criterion | {int(data['params_criterion'][0])} | 800 |
 | Resamples | {int(data['params_resample_number'][0])} | 10,000 |
-| Sequences evaluated | {n_seq:,} | 408 |
-| Significant | {n_sig} ({n_sig/n_seq*100:.1f}%) | 31 (7.6%) |
-| Positive correlation | {n_pos} | not separately reported |
-| Negative correlation | {n_neg} | not separately reported |
+| Sequences evaluated | {n_seq:,} | 24,342 |
+| Significant | {n_sig} ({n_sig/n_seq*100:.1f}%) | 409 (1.7%) |
+| Control > Lesion | {n_ctrl_more} | not separately reported |
+| Lesion > Control | {n_les_more} | not separately reported |
 | k (k-FWER) | {k_final} | not reported |
 | Runtime | {timings['total']:.1f}s | not reported |
-
-## Notes
-
-- **Mode:** Correlative — tests Pearson correlation between each sequence's usage
-  count across subjects and each subject's CBIT score (a compulsivity measure).
-- **Symbol encoding:** choice + reward × 6. Choices: 0=L1, 1=R1, 2=L2, 3=R2,
-  4=no-choice-stage1, 5=no-choice-stage2. UPPERCASE = rewarded.
-- **Interpretation:** Positive correlation means higher CBIT (more compulsive)
-  subjects use that sequence more. Negative means less.
 
 ## Timing Profile
 
@@ -320,7 +316,7 @@ def write_report(data, timings):
 ### Manhattan Plot
 ![Manhattan Plot](figures/manhattan.png)
 
-### Significant Sequences by Correlation Direction
+### Significant Sequences by Direction
 ![Direction Counts](figures/direction_counts.png)
 
 ### Null Distribution vs Observed
@@ -334,13 +330,12 @@ def write_report(data, timings):
 
 ## Top Significant Sequences
 
-| Sequence | Direction | ζ-value | Decoded |
+| Sequence | Direction | ζ-value | Decoded (arm, * = rewarded) |
 |---|---|---|---|
 """
     for seq_str, direction, gval, slen in sig_seqs[:25]:
-        decoded = decode_human_sequence(tuple(int(x) for x in seq_str.split("-")))
-        dir_label = "+" if direction == "pos_corr" else "−"
-        report += f"| {seq_str} | {dir_label} | {gval:.4f} | {decoded} |\n"
+        decoded = decode_rat_sequence(tuple(int(x) for x in seq_str.split("-")))
+        report += f"| {seq_str} | {direction} | {gval:.4f} | {decoded} |\n"
 
     report_path = RESULTS_DIR / "validation_report.md"
     with open(report_path, "w") as f:
@@ -348,41 +343,49 @@ def write_report(data, timings):
     print(f"Report saved to: {report_path}")
 
 
-def run_analysis(quick=False):
+def run_analysis(quick=False, full=False):
     print("=" * 60)
-    print("CBAS — Human Two-Step Task (Correlative with CBIT)")
+    print("CBAS — Rat Spatial Alternation (Control vs Lesion)")
     print("=" * 60)
 
-    subjects_data, covariate = load_humans()
+    if full:
+        subjects_data, group_labels = load_rats(n_ctrl_max=None, n_les_max=None)
+    else:
+        subjects_data, group_labels = load_rats(n_ctrl_max=46, n_les_max=39)
+    n_ctrl = int((group_labels == 0).sum())
+    n_les = int((group_labels == 1).sum())
     n_subjects = len(subjects_data)
-    print(f"\nData: {n_subjects} subjects")
-    print(f"CBIT scores: mean={covariate.mean():.3f}, "
-          f"std={covariate.std():.3f}, range=[{covariate.min():.2f}, {covariate.max():.2f}]")
+    print(f"\nData: {n_subjects} rats ({n_ctrl} control, {n_les} lesion)")
 
     if quick:
-        params = CBASParams(num_arms=6, seq_len_max=2, criterion=400, resample_number=1000)
+        params = CBASParams(num_arms=6, seq_len_max=4, criterion=800, resample_number=1000)
     else:
-        params = CBASParams(num_arms=6, seq_len_max=4, criterion=400, resample_number=10000)
+        params = CBASParams(num_arms=6, seq_len_max=6, criterion=800, resample_number=10000)
     print(f"Params: num_arms={params.num_arms}, seq_len_max={params.seq_len_max}, "
           f"criterion={params.criterion}, M={params.resample_number}")
+
+    group_indices = [
+        np.where(group_labels == 0)[0],
+        np.where(group_labels == 1)[0],
+    ]
 
     timings = {}
 
     t0 = time.perf_counter()
-    sequences, count_matrix = build_count_matrix(subjects_data, params, contingency=1)
+    sequences, count_matrix = build_count_matrix(subjects_data, params)
     timings["build_count_matrix"] = time.perf_counter() - t0
     n_seq = len(sequences)
     print(f"\n[{timings['build_count_matrix']:.2f}s] Count matrix: "
           f"{n_subjects} x {n_seq}")
 
     t0 = time.perf_counter()
-    test_stats = compute_test_stats_correlative(count_matrix, covariate)
+    test_stats = compute_test_stats(count_matrix, group_indices)
     timings["compute_test_stats"] = time.perf_counter() - t0
     n_valid = int(np.sum(~np.isnan(test_stats)))
     print(f"[{timings['compute_test_stats']:.2f}s] Test stats: {n_valid} valid")
 
     t0 = time.perf_counter()
-    null_matrix = bootstrap_test_stats_correlative(count_matrix, covariate, params)
+    null_matrix = bootstrap_test_stats(count_matrix, group_indices, params)
     timings["bootstrap"] = time.perf_counter() - t0
     print(f"[{timings['bootstrap']:.2f}s] Bootstrap: {params.resample_number} resamples")
 
@@ -418,12 +421,15 @@ def run_analysis(quick=False):
         params_criterion=np.array([params.criterion]),
         params_resample_number=np.array([params.resample_number]),
         n_subjects=np.array([n_subjects]),
+        n_ctrl=np.array([n_ctrl]),
+        n_les=np.array([n_les]),
     )
 
-    # Save structured results JSON
+    # Save structured results JSON (source of truth for reports/figures)
     results_json = {
-        "dataset": "humans",
-        "mode": "correlative",
+        "dataset": "rats",
+        "mode": "comparative",
+        "groups": {"control": n_ctrl, "lesion": n_les},
         "params": {
             "num_arms": params.num_arms,
             "seq_len_max": params.seq_len_max,
@@ -443,8 +449,8 @@ def run_analysis(quick=False):
         },
         "timing": timings,
         "labels": {
-            "positive_direction": "Positive correlation (↑ CBIT → ↑ usage)",
-            "negative_direction": "Negative correlation (↑ CBIT → ↓ usage)",
+            "positive_direction": "control > lesion",
+            "negative_direction": "lesion > control",
         },
     }
     json_path = RESULTS_DIR / "results.json"
@@ -458,9 +464,11 @@ def run_analysis(quick=False):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Run CBAS on human two-step task data")
+    parser = argparse.ArgumentParser(description="Run CBAS on rat data")
     parser.add_argument("--quick", action="store_true",
-                        help="Reduced params (seq_len_max=2, M=1000)")
+                        help="Reduced params (seq_len_max=4, M=1000)")
+    parser.add_argument("--full", action="store_true",
+                        help="Use all available rats (not just first 85)")
     parser.add_argument("--figures-only", action="store_true",
                         help="Regenerate figures from cached results")
     args = parser.parse_args()
@@ -473,7 +481,7 @@ def main():
         data = np.load(cache_path, allow_pickle=False)
         make_figures(data)
     else:
-        run_analysis(quick=args.quick)
+        run_analysis(quick=args.quick, full=args.full)
 
 
 if __name__ == "__main__":
