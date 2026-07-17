@@ -17,7 +17,7 @@ build/
 Thumbs.db
 
 # Cached results (regenerable)
-results/figures/results*.npz
+**/results.npz
 
 # Reference materials (not for distribution)
 papers/
