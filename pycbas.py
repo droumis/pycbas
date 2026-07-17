@@ -161,6 +161,54 @@ def compute_test_stats(count_matrix, group_indices):
     return stats
 
 
+def compute_test_stats_correlative(count_matrix, covariate):
+    """Compute studentized correlation test statistics (eq. 2-4 in paper).
+
+    For each sequence, computes the studentized Pearson correlation between
+    that sequence's usage counts across subjects and the covariate (e.g. CBIT).
+
+    Uses two one-tailed tests: positive correlation and negative correlation.
+    Returns array of shape (n_sequences * 2,) where:
+      - even indices: positive correlation (rho > 0)
+      - odd indices: negative correlation (rho < 0)
+    """
+    n = count_matrix.shape[0]
+    n_seq = count_matrix.shape[1]
+    Y = np.asarray(covariate, dtype=np.float64)
+    Y_bar = Y.mean()
+    Y_dev = Y - Y_bar
+    ss_Y = np.sum(Y_dev ** 2)
+
+    stats = np.full(n_seq * 2, np.nan)
+
+    for s in range(n_seq):
+        X = count_matrix[:, s]
+        X_bar = X.mean()
+        X_dev = X - X_bar
+        ss_X = np.sum(X_dev ** 2)
+
+        if ss_X == 0 or ss_Y == 0:
+            continue
+
+        rho = (np.sum(X * Y) - n * X_bar * Y_bar) / np.sqrt(ss_X * ss_Y)
+
+        tau_num = np.sqrt(np.sum(X_dev ** 2 * Y_dev ** 2) / n)
+        tau_den = np.sqrt(ss_X / n) * np.sqrt(ss_Y / n)
+        tau = tau_num / tau_den
+
+        if tau == 0:
+            continue
+
+        t_val = np.sqrt(n) * rho / tau
+
+        if rho > 0:
+            stats[s * 2] = t_val
+        elif rho < 0:
+            stats[s * 2 + 1] = -t_val
+
+    return stats
+
+
 @njit(cache=True, parallel=True)
 def _bootstrap_parallel(count_matrix, boot_indices_0, boot_indices_1, n0, n1, n_seq, M):
     """Numba-parallelized bootstrap computation."""
@@ -224,6 +272,92 @@ def bootstrap_test_stats(count_matrix, group_indices, params, rng=None):
     count_matrix_f = np.ascontiguousarray(count_matrix, dtype=np.float64)
     null_stats = _bootstrap_parallel(
         count_matrix_f, boot_indices_0, boot_indices_1, n0, n1, n_seq, M
+    )
+
+    return null_stats
+
+
+@njit(cache=True, parallel=True)
+def _bootstrap_correlative_parallel(count_matrix, perm_indices, covariate, n, n_seq, M):
+    """Numba-parallelized correlative bootstrap (permute covariate)."""
+    null_stats = np.full((M, n_seq * 2), np.nan)
+
+    for m in prange(M):
+        Y_bar = 0.0
+        for i in range(n):
+            Y_bar += covariate[perm_indices[m, i]]
+        Y_bar /= n
+
+        ss_Y = 0.0
+        for i in range(n):
+            d = covariate[perm_indices[m, i]] - Y_bar
+            ss_Y += d * d
+
+        if ss_Y == 0.0:
+            continue
+
+        for s in range(n_seq):
+            X_bar = 0.0
+            for i in range(n):
+                X_bar += count_matrix[i, s]
+            X_bar /= n
+
+            ss_X = 0.0
+            for i in range(n):
+                d = count_matrix[i, s] - X_bar
+                ss_X += d * d
+
+            if ss_X == 0.0:
+                continue
+
+            sum_XY = 0.0
+            tau_num_sq = 0.0
+            for i in range(n):
+                x_dev = count_matrix[i, s] - X_bar
+                y_dev = covariate[perm_indices[m, i]] - Y_bar
+                sum_XY += count_matrix[i, s] * covariate[perm_indices[m, i]]
+                tau_num_sq += (x_dev * y_dev) ** 2
+
+            rho = (sum_XY - n * X_bar * Y_bar) / np.sqrt(ss_X * ss_Y)
+
+            tau_num = np.sqrt(tau_num_sq / n)
+            tau_den = np.sqrt(ss_X / n) * np.sqrt(ss_Y / n)
+            tau = tau_num / tau_den
+
+            if tau == 0.0:
+                continue
+
+            t_val = np.sqrt(n) * rho / tau
+
+            if rho > 0.0:
+                null_stats[m, s * 2] = t_val
+            elif rho < 0.0:
+                null_stats[m, s * 2 + 1] = -t_val
+
+    return null_stats
+
+
+def bootstrap_test_stats_correlative(count_matrix, covariate, params, rng=None):
+    """Generate bootstrap null for correlative mode by permuting covariate.
+
+    Returns array of shape (resample_number, n_sequences * 2).
+    """
+    if rng is None:
+        rng = np.random.default_rng(42)
+
+    n = count_matrix.shape[0]
+    n_seq = count_matrix.shape[1]
+    M = params.resample_number
+
+    perm_indices = np.empty((M, n), dtype=np.int64)
+    for m in range(M):
+        perm_indices[m] = rng.permutation(n)
+
+    count_matrix_f = np.ascontiguousarray(count_matrix, dtype=np.float64)
+    covariate_f = np.ascontiguousarray(covariate, dtype=np.float64)
+
+    null_stats = _bootstrap_correlative_parallel(
+        count_matrix_f, perm_indices, covariate_f, n, n_seq, M
     )
 
     return null_stats
@@ -398,6 +532,43 @@ def run_cbas_comparative(subjects_data, group_labels, params=None):
     sequences, count_matrix = build_count_matrix(subjects_data, params)
     test_stats = compute_test_stats(count_matrix, group_indices)
     null_matrix = bootstrap_test_stats(count_matrix, group_indices, params)
+    g_values, k_final = find_k_fwer(test_stats, null_matrix, params.alpha, params.gamma)
+
+    significant = np.zeros(len(sequences), dtype=bool)
+    for i in range(len(sequences)):
+        pos_p = g_values[i * 2]
+        neg_p = g_values[i * 2 + 1]
+        if (not np.isnan(pos_p) and pos_p < params.alpha) or \
+           (not np.isnan(neg_p) and neg_p < params.alpha):
+            significant[i] = True
+
+    return CBASResult(
+        sequences=sequences,
+        test_stats=test_stats,
+        g_values=g_values,
+        k_final=k_final,
+        significant_mask=significant,
+    )
+
+
+def run_cbas_correlative(subjects_data, covariate, params=None):
+    """Run the full correlative CBAS pipeline.
+
+    Args:
+        subjects_data: list of subject data arrays (from load_subject_data)
+        covariate: array of continuous values (e.g. CBIT scores), one per subject
+        params: CBASParams instance
+
+    Returns:
+        CBASResult
+    """
+    if params is None:
+        params = CBASParams()
+
+    covariate = np.asarray(covariate, dtype=np.float64)
+    sequences, count_matrix = build_count_matrix(subjects_data, params)
+    test_stats = compute_test_stats_correlative(count_matrix, covariate)
+    null_matrix = bootstrap_test_stats_correlative(count_matrix, covariate, params)
     g_values, k_final = find_k_fwer(test_stats, null_matrix, params.alpha, params.gamma)
 
     significant = np.zeros(len(sequences), dtype=bool)
