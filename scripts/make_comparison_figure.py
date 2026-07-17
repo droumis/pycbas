@@ -139,10 +139,6 @@ def make_comparison():
     ax2.set_title("pycbas — Python reimplementation\n(380/16,483 significant)", fontsize=9)
     ax2.axis("off")
 
-    fig.text(0.5, -0.01,
-             "Differences in spread and count (380 vs 409 significant) reflect different\n"
-             "subject subsets — the paper uses all 85 rats while pycbas selects by data availability.",
-             ha="center", fontsize=7, color="0.4")
     fig.tight_layout(pad=1.0)
     out_path = OUT / "comparison_manhattan.png"
     fig.savefig(out_path, dpi=150, facecolor="white", bbox_inches="tight")

@@ -27,6 +27,7 @@ from pycbas import (
     bootstrap_test_stats,
     find_k_fwer,
 )
+from results_io import save_results_json, compute_significance_summary
 
 ROOT_DIR = Path(__file__).parent.parent
 DATA_DIR = ROOT_DIR / "data" / "flies"
@@ -368,17 +369,13 @@ def run_analysis(quick=False):
 
     timings["total"] = sum(timings.values())
 
-    n_sig = 0
-    for i in range(n_seq):
-        pos_g = g_values[i * 2]
-        neg_g = g_values[i * 2 + 1]
-        if (not np.isnan(pos_g) and pos_g < params.alpha) or \
-           (not np.isnan(neg_g) and neg_g < params.alpha):
-            n_sig += 1
+    # Compute significance summary
+    sig_summary = compute_significance_summary(g_values, n_seq, params.alpha)
+    n_sig = sig_summary["n_significant"]
     print(f"\nResult: {n_sig}/{n_seq} significant sequences ({n_sig/n_seq*100:.1f}%)")
     print(f"Total time: {timings['total']:.1f}s")
 
-    # Cache results
+    # Cache arrays
     FIG_DIR.mkdir(parents=True, exist_ok=True)
     seq_lengths = np.array([len(s) for s in sequences])
     seq_strs = np.array(["-".join(str(x) for x in s) for s in sequences])
@@ -400,7 +397,39 @@ def run_analysis(quick=False):
         n_ca=np.array([n_ca]),
         n_w1118=np.array([n_w1118]),
     )
-    print(f"Results cached to: {cache_path}")
+
+    # Save structured results JSON (source of truth for reports/figures)
+    results_json = {
+        "dataset": "flies",
+        "mode": "comparative",
+        "groups": {"CA": n_ca, "w1118": n_w1118},
+        "params": {
+            "num_arms": params.num_arms,
+            "seq_len_max": params.seq_len_max,
+            "criterion": params.criterion,
+            "resample_number": params.resample_number,
+            "alpha": params.alpha,
+            "gamma": params.gamma,
+        },
+        "results": {
+            "n_subjects": n_subjects,
+            "n_sequences": n_seq,
+            "n_significant": sig_summary["n_significant"],
+            "n_positive": sig_summary["n_positive"],
+            "n_negative": sig_summary["n_negative"],
+            "fraction_significant": sig_summary["fraction_significant"],
+            "k_final": k_final,
+        },
+        "timing": timings,
+        "labels": {
+            "positive_direction": "CA > w1118",
+            "negative_direction": "w1118 > CA",
+        },
+    }
+    json_path = RESULTS_DIR / "results.json"
+    save_results_json(json_path, results_json)
+    print(f"Results JSON: {json_path}")
+    print(f"Results NPZ: {cache_path}")
 
     data = np.load(cache_path, allow_pickle=False)
     make_figures(data)

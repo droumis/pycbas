@@ -1,0 +1,36 @@
+{
+  "dataset": "flies",
+  "mode": "comparative",
+  "groups": {
+    "CA": 759,
+    "w1118": 807
+  },
+  "params": {
+    "num_arms": 2,
+    "seq_len_max": 10,
+    "criterion": 250,
+    "resample_number": 10000,
+    "alpha": 0.5,
+    "gamma": 0.05
+  },
+  "results": {
+    "n_subjects": 1566,
+    "n_sequences": 2046,
+    "n_significant": 2046,
+    "n_positive": 454,
+    "n_negative": 1592,
+    "fraction_significant": 1.0,
+    "k_final": 103
+  },
+  "timing": {
+    "build_count_matrix": 2.2122832090826705,
+    "compute_test_stats": 0.011804083012975752,
+    "bootstrap": 9.183691040962003,
+    "k_fwer": 255.73588979104534,
+    "total": 267.143668124103
+  },
+  "labels": {
+    "positive_direction": "CA > w1118",
+    "negative_direction": "w1118 > CA"
+  }
+}

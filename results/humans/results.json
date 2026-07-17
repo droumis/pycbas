@@ -1,0 +1,32 @@
+{
+  "dataset": "humans",
+  "mode": "correlative",
+  "params": {
+    "num_arms": 6,
+    "seq_len_max": 4,
+    "criterion": 400,
+    "resample_number": 10000,
+    "alpha": 0.5,
+    "gamma": 0.05
+  },
+  "results": {
+    "n_subjects": 1413,
+    "n_sequences": 408,
+    "n_significant": 69,
+    "n_positive": 51,
+    "n_negative": 18,
+    "fraction_significant": 0.16911764705882354,
+    "k_final": 4
+  },
+  "timing": {
+    "build_count_matrix": 0.7241249999497086,
+    "compute_test_stats": 0.00760279200039804,
+    "bootstrap": 2.8391786670545116,
+    "k_fwer": 0.5057828749995679,
+    "total": 4.076689334004186
+  },
+  "labels": {
+    "positive_direction": "Positive correlation (\u2191 CBIT \u2192 \u2191 usage)",
+    "negative_direction": "Negative correlation (\u2191 CBIT \u2192 \u2193 usage)"
+  }
+}
