@@ -70,22 +70,16 @@ def manhattan_plot(g_values, seq_lengths, alpha=0.5, colors=None, title=None, ax
     else:
         fig = ax.get_figure()
 
+    # Paper-style: single continuous x-axis, sequences ordered by length then
+    # by index within each length. X position = cumulative rank (1-based).
     x_pos = np.zeros(n_seq)
-    band_width = 1.0
-    gap = 0.3
-
-    for band_idx, slen in enumerate(unique_lens):
+    rank = 1
+    for slen in unique_lens:
         mask = seq_lengths == slen
         indices = np.where(mask)[0]
-        n_in_band = len(indices)
-        if n_in_band > 1:
-            positions = np.logspace(0, np.log10(n_in_band), n_in_band)
-            positions = (positions - positions.min()) / (positions.max() - positions.min())
-        else:
-            positions = np.array([0.5])
-        band_start = band_idx * (band_width + gap)
         for j, idx in enumerate(indices):
-            x_pos[idx] = band_start + positions[j] * band_width
+            x_pos[idx] = rank
+            rank += 1
 
     valid = ~np.isnan(neg_log_g)
     for slen in unique_lens:
@@ -99,13 +93,13 @@ def manhattan_plot(g_values, seq_lengths, alpha=0.5, colors=None, title=None, ax
     ax.set_ylabel(r"$-\log_{10}(\zeta)$", fontsize=11)
     ax.set_xlabel("Sequence", fontsize=11, fontweight="bold")
     ax.set_ylim(-0.1, None)
+    ax.set_xscale("log")
+    ax.set_xlim(0.8, n_seq * 1.1)
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
 
     if title is not None:
         ax.set_title(title, fontsize=11)
-
-    ax.set_xticks([])
 
     # Vertical colorbar on the right
     color_list = [colors[slen] for slen in unique_lens]
