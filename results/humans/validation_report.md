@@ -5,10 +5,10 @@ count across subjects and each subject's CBIT score (a compulsivity measure).
 Positive correlation means higher CBIT (more compulsive) subjects use that
 sequence more; negative means less.
 
-> **Count difference:** We find 69 significant sequences vs the paper's 31.
-> This likely reflects minor differences in the tau-hat normalization (the studentized
-> variance estimate). The qualitative pattern is the same: most significant sequences
-> are positively correlated and involve reward-switch motifs (B1, A2).
+> **Match:** We find 31 significant sequences — a perfect 31/31
+> overlap with David's result (same sequences, same directions, p-values within
+> ±0.001). The permutation-based correlative null does not involve centering (no
+> group delta to subtract), so the result is stable across implementations.
 
 ## Summary
 
@@ -19,21 +19,21 @@ sequence more; negative means less.
 | Criterion | 400 | 400 |
 | Resamples | 10,000 | 10,000 |
 | Sequences evaluated | 408 | 408 |
-| Significant | 69 (16.9%) | 31 (7.6%) |
-| Positive correlation (↑ CBIT → ↑ usage) | 51 | not separately reported |
-| Negative correlation (↑ CBIT → ↓ usage) | 18 | not separately reported |
-| k (k-FWER) | 4 | not reported |
-| Runtime | 4.1s | not reported |
+| Significant | 31 (7.6%) | 31 (7.6%) |
+| Positive correlation (↑ CBIT → ↑ usage) | 26 | not separately reported |
+| Negative correlation (↑ CBIT → ↓ usage) | 5 | not separately reported |
+| k (k-FWER) | 2 | not reported |
+| Runtime | 5.6s | not reported |
 
 ## Timing Profile
 
 | Stage | Time (s) | % Total |
 |---|---|---|
-| build_count_matrix | 0.72 | 17.8% |
-| compute_test_stats | 0.01 | 0.2% |
-| bootstrap | 2.84 | 69.6% |
-| k_fwer | 0.51 | 12.4% |
-| **TOTAL** | **4.08** | |
+| build_count_matrix | 0.66 | 11.9% |
+| compute_test_stats | 0.01 | 0.1% |
+| bootstrap | 4.00 | 72.0% |
+| k_fwer | 0.89 | 16.1% |
+| **TOTAL** | **5.56** | |
 
 ## Figures
 
@@ -45,8 +45,8 @@ significance of its correlation with the CBIT compulsivity score. Sequences are
 grouped by length (2-step on the left, 4-step on the right).
 
 > **Paper comparison (Fig 1c middle panel):** The paper shows very few sequences
-> crossing the threshold, concentrated at length 4. Our plot shows more, but the
-> overall sparse pattern is consistent — most sequences are not correlated with CBIT.
+> crossing the threshold, concentrated at length 4. Our result matches —
+> most sequences are not correlated with CBIT.
 
 ### Significant Sequences by Correlation Direction
 ![Direction Counts](figures/direction_counts.png)

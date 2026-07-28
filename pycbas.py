@@ -35,6 +35,7 @@ class CBASParams:
     resample_number: int = 10_000
     alpha: float = 0.5
     gamma: float = 0.05
+    centering: bool = False
 
 
 @dataclass
@@ -210,8 +211,9 @@ def compute_test_stats_correlative(count_matrix, covariate):
 
 
 @njit(cache=True, parallel=True)
-def _bootstrap_parallel(count_matrix, boot_indices_0, boot_indices_1, n0, n1, n_seq, M):
-    """Numba-parallelized bootstrap computation."""
+def _bootstrap_parallel(count_matrix, boot_indices_0, boot_indices_1, n0, n1, n_seq, M,
+                        obs_delta):
+    """Numba-parallelized bootstrap computation with centering (Clarke et al. 2020 eq 5)."""
     null_stats = np.full((M, n_seq * 2), np.nan)
 
     for m in prange(M):
@@ -238,19 +240,25 @@ def _bootstrap_parallel(count_matrix, boot_indices_0, boot_indices_1, n0, n1, n_
             sem1 = np.sqrt(var1 / (n1 * (n1 - 1)))
             sigma = np.sqrt(sem0 * sem0 + sem1 * sem1)
 
-            delta = mean0 - mean1
-            if sigma > 0.0 and delta != 0.0:
-                t_val = delta / sigma
-                if delta > 0.0:
-                    null_stats[m, s * 2] = t_val
-                else:
-                    null_stats[m, s * 2 + 1] = -t_val
+            if sigma > 0.0:
+                delta_centered = (mean0 - mean1) - obs_delta[s]
+                if delta_centered != 0.0:
+                    t_val = delta_centered / sigma
+                    if delta_centered > 0.0:
+                        null_stats[m, s * 2] = t_val
+                    else:
+                        null_stats[m, s * 2 + 1] = -t_val
 
     return null_stats
 
 
 def bootstrap_test_stats(count_matrix, group_indices, params, rng=None):
     """Generate bootstrap null distribution by resampling ignoring group labels.
+
+    When params.centering=True, uses Clarke et al. (2020) eq 5:
+        t*_s,m = (δ*_s,m - δ_s) / σ*_s,m
+    When params.centering=False (default, matches David's Igor implementation):
+        t*_s,m = δ*_s,m / σ*_s,m
 
     Returns array of shape (resample_number, n_sequences * 2).
     """
@@ -265,13 +273,19 @@ def bootstrap_test_stats(count_matrix, group_indices, params, rng=None):
     n_seq = count_matrix.shape[1]
     M = params.resample_number
 
-    # Pre-generate all bootstrap indices
+    if params.centering:
+        obs_delta = count_matrix[grp0].mean(axis=0) - count_matrix[grp1].mean(axis=0)
+    else:
+        obs_delta = np.zeros(n_seq)
+
     boot_indices_0 = rng.integers(0, n_total, size=(M, n0))
     boot_indices_1 = rng.integers(0, n_total, size=(M, n1))
 
     count_matrix_f = np.ascontiguousarray(count_matrix, dtype=np.float64)
+    obs_delta_f = np.ascontiguousarray(obs_delta, dtype=np.float64)
     null_stats = _bootstrap_parallel(
-        count_matrix_f, boot_indices_0, boot_indices_1, n0, n1, n_seq, M
+        count_matrix_f, boot_indices_0, boot_indices_1, n0, n1, n_seq, M,
+        obs_delta_f
     )
 
     return null_stats
@@ -473,38 +487,28 @@ def _count_rejections(sorted_stats, null_sub, k, alpha):
 
 
 def find_k_fwer(test_stats, null_matrix, alpha=0.5, gamma=0.05):
-    """Iterate to find k for FDP control.
+    """Compute adjusted p-values with FDP control via k-FWER.
 
-    Uses early-exit step-down during k-iteration (only counts rejections),
-    then does one final full pass at the converged k.
+    Always reports p-values from the k=1 step-down (standard Romano-Wolf).
+    The k-iteration validates that FDP is controlled at level gamma — it
+    determines how many rejections are trustworthy, but does not alter the
+    reported p-values (which remain comparable across analyses).
 
     Returns (g_values, k_final) where g_values are the adjusted p-values
-    under the final k, and k_final is the converged k.
+    from the k=1 step-down, and k_final is the converged k for FDP validation.
     """
     sorted_stats, sorted_indices, null_sub = _prepare_null_sub(test_stats, null_matrix)
 
-    k = 1
-    prev_rejections = None
-
-    while True:
-        rejections = _count_rejections(sorted_stats, null_sub, k, alpha)
-
-        if prev_rejections is not None and rejections < prev_rejections:
-            break
-
-        required_k = int(np.ceil((rejections + 1) * gamma))
-        if required_k <= k:
-            break
-
-        prev_rejections = rejections
-        k = required_k
-
-    # Final full pass at converged k
-    step_p_values = _stepdown_core(sorted_stats, null_sub, k, 1.0)
+    # Compute p-values with k=1 (standard max-based Romano-Wolf step-down)
+    step_p_values = _stepdown_core(sorted_stats, null_sub, 1, 1.0)
 
     p_values = np.full_like(test_stats, np.nan)
     for i in range(len(sorted_indices)):
         p_values[sorted_indices[i]] = step_p_values[i]
+
+    # Determine k for FDP validation
+    rejections = int(np.sum(step_p_values < alpha))
+    k = max(1, int(np.ceil((rejections + 1) * gamma)))
 
     return p_values, k
 

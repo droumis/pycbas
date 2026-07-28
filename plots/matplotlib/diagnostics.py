@@ -46,7 +46,7 @@ def null_vs_observed(test_stats, null_row_maxes, ax=None):
     return fig, ax
 
 
-def gvalue_distribution(g_values, n_seq, alpha=0.5, ax=None):
+def gvalue_distribution(g_values, n_seq, alpha=0.5, title=None, ax=None):
     """Histogram of best-direction g-values with significance threshold.
 
     Parameters
@@ -57,6 +57,8 @@ def gvalue_distribution(g_values, n_seq, alpha=0.5, ax=None):
         Number of sequences.
     alpha : float
         Threshold drawn as vertical line.
+    title : str or None
+        Plot title. If None, uses "Distribution of g-values".
     ax : matplotlib Axes or None
         If None, creates a new figure.
 
@@ -87,15 +89,16 @@ def gvalue_distribution(g_values, n_seq, alpha=0.5, ax=None):
                 fontsize=11, ha="center", color="steelblue", fontweight="bold")
     ax.set_xlabel("g-value (best direction per sequence)")
     ax.set_ylabel("Count")
-    ax.set_title("Distribution of g-values")
+    ax.set_xlim(-0.02, 1.02)
+    ax.set_title(title if title is not None else "Distribution of g-values")
     ax.legend()
 
     fig.tight_layout()
     return fig, ax
 
 
-def sequence_space(seq_lengths, num_arms=None, ax=None):
-    """Bar chart of unique sequences per length.
+def sequence_space(seq_lengths, num_arms=None, title=None, ax=None):
+    """Bar chart of unique sequences per length with log scale and annotations.
 
     Parameters
     ----------
@@ -103,6 +106,8 @@ def sequence_space(seq_lengths, num_arms=None, ax=None):
         Sequence length for each sequence.
     num_arms : int or None
         If provided, overlays the theoretical maximum (num_arms^length) as a line.
+    title : str or None
+        Plot title. If None, generates a title showing unique/theoretical counts.
     ax : matplotlib Axes or None
         If None, creates a new figure.
 
@@ -111,22 +116,36 @@ def sequence_space(seq_lengths, num_arms=None, ax=None):
     fig, ax
     """
     if ax is None:
-        fig, ax = plt.subplots(figsize=(5, 3))
+        fig, ax = plt.subplots(figsize=(7, 4.5))
     else:
         fig = ax.get_figure()
 
     unique_lens = sorted(set(seq_lengths))
     counts = [int(np.sum(seq_lengths == slen)) for slen in unique_lens]
+    n_seq = len(seq_lengths)
 
-    ax.bar(unique_lens, counts, color="#4488cc")
+    ax.bar(unique_lens, counts, color="teal", alpha=0.7, edgecolor="white",
+           label="Observed unique sequences")
     ax.set_xlabel("Sequence length")
-    ax.set_ylabel("# unique sequences")
-    ax.set_title("Sequence Space by Length")
+    ax.set_ylabel("Count (log scale)")
+    ax.set_yscale("log")
 
     if num_arms is not None:
         theoretical_max = [num_arms ** slen for slen in unique_lens]
-        ax.plot(unique_lens, theoretical_max, "k--", alpha=0.6, label="Theoretical max")
-        ax.legend(fontsize=8)
+        ax.plot(unique_lens, theoretical_max, "k--o", markersize=5, linewidth=1,
+                label=f"Theoretical max (${{{num_arms}}}^L$)")
+        ax.legend()
+        if title is None:
+            title = (f"Sequence Space: {n_seq:,} unique / "
+                     f"{sum(theoretical_max):,} theoretical")
+    else:
+        if title is None:
+            title = f"Sequence Space: {n_seq:,} unique sequences"
+
+    ax.set_title(title)
+
+    for l, c in zip(unique_lens, counts):
+        ax.text(l, c * 1.3, str(c), ha="center", fontsize=9)
 
     fig.tight_layout()
     return fig, ax

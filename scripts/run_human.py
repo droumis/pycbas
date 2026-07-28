@@ -73,6 +73,7 @@ def decode_human_sequence(seq, num_arms=6):
 def make_figures(data):
     """Generate figures from cached results."""
     import matplotlib.pyplot as plt
+    from plots import manhattan_plot, null_vs_observed, gvalue_distribution, sequence_space, direction_counts
 
     FIG_DIR.mkdir(parents=True, exist_ok=True)
     g_values = data["g_values"]
@@ -80,11 +81,15 @@ def make_figures(data):
     seq_lengths = data["seq_lengths"]
     null_row_maxes = data["null_row_maxes"]
     n_seq = len(seq_lengths)
-
     alpha = 0.5
 
     # --- Manhattan plot ---
-    fig, ax = plt.subplots(figsize=(7, 4))
+    fig, ax = manhattan_plot(g_values, seq_lengths, alpha=alpha,
+                             title="Human CBAS: Two-Step Task × CBIT (Correlative)")
+    fig.savefig(FIG_DIR / "manhattan.png", dpi=150, bbox_inches="tight")
+    plt.close(fig)
+
+    # --- Direction counts ---
     neg_log_g = np.full(n_seq, np.nan)
     directions = []
     for i in range(n_seq):
@@ -105,135 +110,37 @@ def make_figures(data):
             neg_log_g[i] = -np.log10(best_g)
         directions.append(d)
 
-    colors = {1: "#00aaff", 2: "#0044cc", 3: "#88dd00", 4: "#008800"}
-    unique_lens = sorted(set(seq_lengths))
-    x_pos = np.zeros(n_seq)
-    band_width = 1.0
-    gap = 0.3
-
-    for band_idx, slen in enumerate(unique_lens):
-        mask = seq_lengths == slen
-        indices = np.where(mask)[0]
-        n_in_band = len(indices)
-        if n_in_band > 1:
-            positions = np.logspace(0, np.log10(n_in_band), n_in_band)
-            positions = (positions - positions.min()) / (positions.max() - positions.min())
-        else:
-            positions = np.array([0.5])
-        band_start = band_idx * (band_width + gap)
-        for j, idx in enumerate(indices):
-            x_pos[idx] = band_start + positions[j] * band_width
-
-    valid = ~np.isnan(neg_log_g)
-    for slen in unique_lens:
-        mask = (seq_lengths == slen) & valid
-        c = colors.get(slen, "#999999")
-        ax.scatter(x_pos[mask], neg_log_g[mask], s=20, alpha=0.7, c=c,
-                   edgecolors="black", linewidths=0.2, label=f"len={slen}")
-
     threshold = -np.log10(alpha)
-    ax.axhline(threshold, color="black", linestyle="--", linewidth=0.8, alpha=0.5)
-    ax.set_ylabel("-log₁₀(ζ)")
-    ax.set_title("Human CBAS: Two-Step Task × CBIT (Correlative)")
-
-    xtick_pos = [i * (band_width + gap) + band_width / 2 for i in range(len(unique_lens))]
-    ax.set_xticks(xtick_pos)
-    ax.set_xticklabels(unique_lens)
-    ax.set_xlabel("Sequence length")
-    ax.legend(loc="upper right", fontsize=8)
-    plt.tight_layout()
-    plt.savefig(FIG_DIR / "manhattan.png", dpi=150, bbox_inches="tight")
-    plt.close()
-
-    # --- Direction counts ---
     directions_arr = np.array(directions)
+    valid = ~np.isnan(neg_log_g)
     sig_mask = neg_log_g > threshold
     n_pos = int(np.sum((directions_arr == "pos_corr") & sig_mask & valid))
     n_neg = int(np.sum((directions_arr == "neg_corr") & sig_mask & valid))
 
-    fig, ax = plt.subplots(figsize=(4, 3))
-    bars = ax.bar(["Positive corr\n(↑ CBIT → ↑ usage)", "Negative corr\n(↑ CBIT → ↓ usage)"],
-                  [n_pos, n_neg], color=["#cc3300", "#0066cc"])
-    ax.set_ylabel("# significant sequences")
-    ax.set_title("Significant Sequences by Correlation Direction")
-    for bar, val in zip(bars, [n_pos, n_neg]):
-        ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.5,
-                str(val), ha="center", fontsize=10)
-    plt.tight_layout()
-    plt.savefig(FIG_DIR / "direction_counts.png", dpi=150, bbox_inches="tight")
-    plt.close()
+    fig, ax = direction_counts(
+        n_pos, n_neg,
+        "Positive corr\n(↑ CBIT → ↑ usage)",
+        "Negative corr\n(↑ CBIT → ↓ usage)",
+        colors=["#cc3300", "#0066cc"],
+        title="Significant Sequences by Correlation Direction",
+        text_offset=0.5)
+    fig.savefig(FIG_DIR / "direction_counts.png", dpi=150, bbox_inches="tight")
+    plt.close(fig)
 
     # --- Null vs observed ---
-    valid_observed = test_stats[~np.isnan(test_stats)]
-    valid_null = null_row_maxes[~np.isnan(null_row_maxes)]
-    fig, ax = plt.subplots(figsize=(6, 3.5))
-    if len(valid_observed) > 0:
-        ax.hist(valid_observed, bins=80, density=True, alpha=0.6, color="steelblue",
-                label="Observed test statistics", edgecolor="white", linewidth=0.3)
-        ax.axvline(np.nanmax(valid_observed), color="red", linewidth=2,
-                   label=f"Observed max = {np.nanmax(valid_observed):.2f}")
-    if len(valid_null) > 0:
-        ax.hist(valid_null, bins=50, density=True, alpha=0.6, color="gray",
-                label="Null row-max (per resample)", edgecolor="white", linewidth=0.3)
-    ax.set_xlabel("Test statistic")
-    ax.set_ylabel("Density")
-    ax.set_title("Null Distribution vs Observed")
-    ax.legend(fontsize=8)
-    plt.tight_layout()
-    plt.savefig(FIG_DIR / "null_vs_observed.png", dpi=150, bbox_inches="tight")
-    plt.close()
+    fig, ax = null_vs_observed(test_stats, null_row_maxes)
+    fig.savefig(FIG_DIR / "null_vs_observed.png", dpi=150, bbox_inches="tight")
+    plt.close(fig)
 
     # --- Sequence space ---
-    num_arms = 6
-    fig, ax = plt.subplots(figsize=(7, 4.5))
-    counts_per_len = {}
-    for slen in unique_lens:
-        counts_per_len[slen] = int(np.sum(seq_lengths == slen))
-    lengths_list = sorted(counts_per_len.keys())
-    counts_list = [counts_per_len[l] for l in lengths_list]
-    theoretical = [num_arms**l for l in lengths_list]
+    fig, ax = sequence_space(seq_lengths, num_arms=6)
+    fig.savefig(FIG_DIR / "sequence_space.png", dpi=150, bbox_inches="tight")
+    plt.close(fig)
 
-    ax.bar(lengths_list, counts_list, color="teal", alpha=0.7, edgecolor="white",
-           label="Observed unique sequences")
-    ax.plot(lengths_list, theoretical, "k--o", markersize=5, linewidth=1,
-            label=f"Theoretical max (${{6}}^L$)")
-    ax.set_yscale("log")
-    ax.set_xlabel("Sequence length")
-    ax.set_ylabel("Count (log scale)")
-    ax.set_title(f"Sequence Space: {n_seq:,} unique / "
-                 f"{sum(theoretical):,} theoretical")
-    ax.legend()
-    for l, c in zip(lengths_list, counts_list):
-        ax.text(l, c * 1.3, str(c), ha="center", fontsize=9)
-    plt.tight_layout()
-    plt.savefig(FIG_DIR / "sequence_space.png", dpi=150, bbox_inches="tight")
-    plt.close()
-
-    # --- g-value distribution (best direction per sequence) ---
-    all_g = []
-    for i in range(n_seq):
-        pos_g = g_values[i * 2]
-        neg_g = g_values[i * 2 + 1]
-        best_g = min(pos_g if not np.isnan(pos_g) else 1.0,
-                     neg_g if not np.isnan(neg_g) else 1.0)
-        all_g.append(best_g)
-    all_g = np.array(all_g)
-
-    fig, ax = plt.subplots(figsize=(8, 4))
-    ax.hist(all_g[all_g < 1.0], bins=50, color="steelblue", alpha=0.7, edgecolor="white")
-    ax.axvline(0.5, color="red", linestyle="--", linewidth=1.5, label="Threshold (g = 0.5)")
-    n_below = int((all_g < 0.5).sum())
-    ax.annotate(f"{n_below} significant\n(g < 0.5)",
-                xy=(0.25, 0.85), xycoords="axes fraction",
-                fontsize=11, ha="center", color="steelblue", fontweight="bold")
-    ax.set_xlabel("g-value (best direction per sequence)")
-    ax.set_ylabel("Count")
-    ax.set_title("Distribution of g-values")
-    ax.set_xlim(-0.02, 1.02)
-    ax.legend()
-    plt.tight_layout()
-    plt.savefig(FIG_DIR / "gvalue_dist.png", dpi=150, bbox_inches="tight")
-    plt.close()
+    # --- g-value distribution ---
+    fig, ax = gvalue_distribution(g_values, n_seq, alpha=alpha)
+    fig.savefig(FIG_DIR / "gvalue_dist.png", dpi=150, bbox_inches="tight")
+    plt.close(fig)
 
     print(f"Figures saved to: {FIG_DIR}/")
 

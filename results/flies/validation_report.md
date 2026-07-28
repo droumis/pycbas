@@ -1,14 +1,16 @@
 # Fly CBAS Validation Report
 
-**Our reimplementation produces the same set of significant sequences as the paper.**
-Both strains show clear behavioral differences: CA flies favor longer runs of same-direction
-turns (higher persistence), while w1118 flies alternate more frequently.
+**Our reimplementation uses the same algorithm as David's Igor code** (no centering,
+uncentered bootstrap null). Both strains show clear behavioral differences: CA flies
+favor longer runs of same-direction turns (higher persistence), while w1118 flies
+alternate more frequently.
 
-> **Note on 100% significance:** With the full adaptive k-FWER procedure, all 2,046
-> sequences are significant (k=103). This is a known property of the method
-> in high-power regimes (large N, strong group differences). See the
-> [k-FWER sensitivity analysis](kfwer_sensitivity_analysis.md) for details.
-> At the paper's fixed k=20, we get 1,633 significant (matching the paper's 1,605).
+> **k-FWER convergence:** Our k-iteration jumps from k=1 (R=1243) to k=63 due to
+> the formula next_k = ceil((R+1) x gamma). David's implementation gives 1,605
+> significant — likely converging at a lower k via a more gradual path (possibly
+> due to bootstrap RNG differences, though other implementation details may
+> contribute). Our 1,243 significant sequences are a strict subset of David's
+> 1,605 (0 overcalled, 362 missed).
 
 ## Summary
 
@@ -19,21 +21,21 @@ turns (higher persistence), while w1118 flies alternate more frequently.
 | Criterion | 250 | 250 |
 | Resamples | 10,000 | 10,000 |
 | Sequences evaluated | 2,046 | 2,046 |
-| Significant | 2046 (100.0%) | 1,605 (78.4%) |
-| CA > w1118 | 454 | not separately reported |
-| w1118 > CA | 1592 | not separately reported |
-| k (k-FWER) | 103 | not reported |
-| Runtime | 267.1s | not reported |
+| Significant | 1243 (60.8%) | 1,605 (78.4%) |
+| CA > w1118 | 208 | not separately reported |
+| w1118 > CA | 1035 | not separately reported |
+| k (k-FWER) | 63 | not reported |
+| Runtime | 27.5s | not reported |
 
 ## Timing Profile
 
 | Stage | Time (s) | % Total |
 |---|---|---|
-| build_count_matrix | 2.21 | 0.8% |
+| build_count_matrix | 2.38 | 8.6% |
 | compute_test_stats | 0.01 | 0.0% |
-| bootstrap | 9.18 | 3.4% |
-| k_fwer | 255.74 | 95.7% |
-| **TOTAL** | **267.14** | |
+| bootstrap | 15.85 | 57.6% |
+| k_fwer | 9.27 | 33.7% |
+| **TOTAL** | **27.51** | |
 
 ## Figures
 

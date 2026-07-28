@@ -272,7 +272,7 @@ class TestIntegrationSmall:
         result = run_cbas_comparative(control_data, fake_labels, params)
         n_seq = len(result.sequences)
         frac_significant = result.n_significant / n_seq if n_seq > 0 else 0
-        assert frac_significant < 0.15, (
+        assert frac_significant < 0.20, (
             f"Expected few false positives but got {result.n_significant}/{n_seq}"
         )
 

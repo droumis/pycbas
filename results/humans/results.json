@@ -12,18 +12,18 @@
   "results": {
     "n_subjects": 1413,
     "n_sequences": 408,
-    "n_significant": 69,
-    "n_positive": 51,
-    "n_negative": 18,
-    "fraction_significant": 0.16911764705882354,
-    "k_final": 4
+    "n_significant": 31,
+    "n_positive": 26,
+    "n_negative": 5,
+    "fraction_significant": 0.07598039215686274,
+    "k_final": 2
   },
   "timing": {
-    "build_count_matrix": 0.7241249999497086,
-    "compute_test_stats": 0.00760279200039804,
-    "bootstrap": 2.8391786670545116,
-    "k_fwer": 0.5057828749995679,
-    "total": 4.076689334004186
+    "build_count_matrix": 0.6591779158916324,
+    "compute_test_stats": 0.006623458000831306,
+    "bootstrap": 4.000047000008635,
+    "k_fwer": 0.8920811660354957,
+    "total": 5.557929539936595
   },
   "labels": {
     "positive_direction": "Positive correlation (\u2191 CBIT \u2192 \u2191 usage)",

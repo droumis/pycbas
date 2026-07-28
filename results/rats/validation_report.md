@@ -21,21 +21,21 @@ The core qualitative findings replicate:
 | Criterion | 800 | 800 |
 | Resamples | 10,000 | 10,000 |
 | Sequences evaluated | 16,483 | 24,342 |
-| Significant | 380 (2.3%) | 409 (1.7%) |
-| control > lesion | 173 | not separately reported |
-| lesion > control | 207 | not separately reported |
-| k (k-FWER) | 20 | not reported |
-| Runtime | 86.8s | not reported |
+| Significant | 111 (0.7%) | 409 (1.7%) |
+| control > lesion | 56 | not separately reported |
+| lesion > control | 55 | not separately reported |
+| k (k-FWER) | 6 | not reported |
+| Runtime | 24.9s | not reported |
 
 ## Timing Profile
 
 | Stage | Time (s) | % Total |
 |---|---|---|
-| build_count_matrix | 0.24 | 0.3% |
+| build_count_matrix | 0.36 | 1.4% |
 | compute_test_stats | 0.01 | 0.0% |
-| bootstrap | 3.69 | 4.2% |
-| k_fwer | 82.91 | 95.5% |
-| **TOTAL** | **86.85** | |
+| bootstrap | 6.34 | 25.5% |
+| k_fwer | 18.15 | 73.0% |
+| **TOTAL** | **24.85** | |
 
 ## Figures
 

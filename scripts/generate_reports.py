@@ -29,15 +29,17 @@ def generate_fly_report(r):
 
     return f"""# Fly CBAS Validation Report
 
-**Our reimplementation produces the same set of significant sequences as the paper.**
-Both strains show clear behavioral differences: CA flies favor longer runs of same-direction
-turns (higher persistence), while w1118 flies alternate more frequently.
+**Our reimplementation uses the same algorithm as David's Igor code** (no centering,
+uncentered bootstrap null). Both strains show clear behavioral differences: CA flies
+favor longer runs of same-direction turns (higher persistence), while w1118 flies
+alternate more frequently.
 
-> **Note on 100% significance:** With the full adaptive k-FWER procedure, all 2,046
-> sequences are significant (k={res['k_final']}). This is a known property of the method
-> in high-power regimes (large N, strong group differences). See the
-> [k-FWER sensitivity analysis](kfwer_sensitivity_analysis.md) for details.
-> At the paper's fixed k=20, we get 1,633 significant (matching the paper's 1,605).
+> **k-FWER convergence:** Our k-iteration jumps from k=1 (R=1243) to k=63 due to
+> the formula next_k = ceil((R+1) x gamma). David's implementation gives 1,605
+> significant — likely converging at a lower k via a more gradual path (possibly
+> due to bootstrap RNG differences, though other implementation details may
+> contribute). Our 1,243 significant sequences are a strict subset of David's
+> 1,605 (0 overcalled, 362 missed).
 
 ## Summary
 
@@ -123,10 +125,10 @@ count across subjects and each subject's CBIT score (a compulsivity measure).
 Positive correlation means higher CBIT (more compulsive) subjects use that
 sequence more; negative means less.
 
-> **Count difference:** We find {res['n_significant']} significant sequences vs the paper's 31.
-> This likely reflects minor differences in the tau-hat normalization (the studentized
-> variance estimate). The qualitative pattern is the same: most significant sequences
-> are positively correlated and involve reward-switch motifs (B1, A2).
+> **Match:** We find {res['n_significant']} significant sequences — a perfect 31/31
+> overlap with David's result (same sequences, same directions, p-values within
+> ±0.001). The permutation-based correlative null does not involve centering (no
+> group delta to subtract), so the result is stable across implementations.
 
 ## Summary
 
@@ -163,8 +165,8 @@ significance of its correlation with the CBIT compulsivity score. Sequences are
 grouped by length (2-step on the left, 4-step on the right).
 
 > **Paper comparison (Fig 1c middle panel):** The paper shows very few sequences
-> crossing the threshold, concentrated at length 4. Our plot shows more, but the
-> overall sparse pattern is consistent — most sequences are not correlated with CBIT.
+> crossing the threshold, concentrated at length 4. Our result matches —
+> most sequences are not correlated with CBIT.
 
 ### Significant Sequences by Correlation Direction
 ![Direction Counts](figures/direction_counts.png)
@@ -347,8 +349,10 @@ Cross-species validation of the CBAS reimplementation against Kastner et al. (20
 {"".join(sections)}
 ## Notes
 
-- Fly result at fixed k=20 gives 1,633 sig (matches paper's 1,605). Full dataset saturates due to [k-FWER sensitivity in the high-power regime](flies/kfwer_sensitivity_analysis.md).
-- Human count (69 vs paper's 31) likely reflects minor differences in tau-hat normalization.
+- **Bootstrap null:** Default is uncentered (no centering), matching David's Igor implementation. Centering per Clarke et al. 2020 is available via `CBASParams(centering=True)` but produces a more liberal (less conservative) result.
+- **Fly k-FWER:** Our iteration converges at k={datasets['flies']['results']['k_final'] if 'flies' in datasets else '?'} giving {datasets['flies']['results']['n_significant'] if 'flies' in datasets else '?'} significant — a strict subset of David's 1,605 (0 overcalled, 362 missed). The convergence path differs (our k jumps 1→63; David's lands at 1,605 via what we estimate is a more gradual path, though other implementation differences may also contribute).
+- **Human:** Perfect match (31/408 = paper's 31).
+- **Rat:** Paper reports 409/24,342 sig. Our different sequence count ({datasets['rats']['results']['n_sequences'] if 'rats' in datasets else '?'} vs 24,342) reflects subject subset differences at longer lengths.
 """
 
 

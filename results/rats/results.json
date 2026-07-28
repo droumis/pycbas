@@ -16,18 +16,18 @@
   "results": {
     "n_subjects": 85,
     "n_sequences": 16483,
-    "n_significant": 380,
-    "n_positive": 173,
-    "n_negative": 207,
-    "fraction_significant": 0.023054055693745072,
-    "k_final": 20
+    "n_significant": 111,
+    "n_positive": 56,
+    "n_negative": 55,
+    "fraction_significant": 0.006734211005278165,
+    "k_final": 6
   },
   "timing": {
-    "build_count_matrix": 0.24116729199886322,
-    "compute_test_stats": 0.007105999975465238,
-    "bootstrap": 3.690358499996364,
-    "k_fwer": 82.91112954204436,
-    "total": 86.84976133401506
+    "build_count_matrix": 0.35997545800637454,
+    "compute_test_stats": 0.006199041032232344,
+    "bootstrap": 6.34153045900166,
+    "k_fwer": 18.14634025003761,
+    "total": 24.854045208077878
   },
   "labels": {
     "positive_direction": "control > lesion",

@@ -2,7 +2,8 @@ import matplotlib.pyplot as plt
 import matplotlib.image as mpimg
 
 
-def direction_counts(n_positive, n_negative, pos_label, neg_label, ax=None):
+def direction_counts(n_positive, n_negative, pos_label, neg_label,
+                     colors=None, title=None, text_offset=5, ax=None):
     """Bar chart of significant sequences by direction.
 
     Parameters
@@ -15,6 +16,12 @@ def direction_counts(n_positive, n_negative, pos_label, neg_label, ax=None):
         Label for the positive direction bar.
     neg_label : str
         Label for the negative direction bar.
+    colors : list of two str or None
+        Colors for [positive, negative] bars. Defaults to ["#0066cc", "#cc6600"].
+    title : str or None
+        Plot title. Defaults to "Significant Sequences by Direction".
+    text_offset : float
+        Vertical offset for count annotations above bars.
     ax : matplotlib Axes or None
         If None, creates a new figure.
 
@@ -22,18 +29,23 @@ def direction_counts(n_positive, n_negative, pos_label, neg_label, ax=None):
     -------
     fig, ax
     """
+    if colors is None:
+        colors = ["#0066cc", "#cc6600"]
+    if title is None:
+        title = "Significant Sequences by Direction"
+
     if ax is None:
         fig, ax = plt.subplots(figsize=(4, 3))
     else:
         fig = ax.get_figure()
 
     bars = ax.bar([pos_label, neg_label], [n_positive, n_negative],
-                  color=["#0066cc", "#cc6600"])
+                  color=colors)
     ax.set_ylabel("# significant sequences")
-    ax.set_title("Significant Sequences by Direction")
+    ax.set_title(title)
 
     for bar, val in zip(bars, [n_positive, n_negative]):
-        ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 5,
+        ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + text_offset,
                 str(val), ha="center", fontsize=10)
 
     fig.tight_layout()
