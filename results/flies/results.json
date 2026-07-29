@@ -23,11 +23,11 @@
     "k_final": 80
   },
   "timing": {
-    "build_count_matrix": 1.9039980419911444,
-    "compute_test_stats": 0.010257709072902799,
-    "bootstrap": 9.29317008308135,
-    "k_fwer": 275.0497563749086,
-    "total": 286.257182209054
+    "build_count_matrix": 2.007398958085105,
+    "compute_test_stats": 0.011244917055591941,
+    "bootstrap": 8.53894770797342,
+    "k_fwer": 289.22093954100274,
+    "total": 299.77853112411685
   },
   "labels": {
     "positive_direction": "CA > w1118",

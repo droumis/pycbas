@@ -13,19 +13,19 @@
 | CA > w1118 | 286 | not separately reported |
 | w1118 > CA | 1308 | not separately reported |
 | k (k-FWER) | 80 | not reported |
-| Runtime | 286.3s | not reported |
+| Runtime | 299.8s | not reported |
 
 ## Timing Profile
 
 | Stage | Time (s) | % Total |
 |---|---|---|
-| build_count_matrix | 1.90 | 0.7% |
+| build_count_matrix | 2.01 | 0.7% |
 | compute_test_stats | 0.01 | 0.0% |
-| bootstrap | 9.29 | 3.2% |
-| k_fwer | 275.05 | 96.1% |
-| **TOTAL** | **286.26** | |
+| bootstrap | 8.54 | 2.8% |
+| k_fwer | 289.22 | 96.5% |
+| **TOTAL** | **299.78** | |
 
-## Comparison with David's Igor Results
+## Igor Comparison
 
 | | pycbas | David |
 |---|---|---|
@@ -35,7 +35,8 @@
 | Only David | — | 21 |
 | RNG stability | 5/5 seeds identical | N/A |
 
-![David Comparison](figures/david_comparison.png)
+### Ranked ζ-values (Igor comparison)
+![Ranked ζ-values](figures/ranked_gvalues.png)
 
 The 31 disagreeing sequences (21 + 10) are due to different RNG implementations
 (Igor's per-row seeded PRNG vs numpy), not algorithmic differences — our result

@@ -23,11 +23,11 @@
     "k_final": 9
   },
   "timing": {
-    "build_count_matrix": 0.21190849994309247,
-    "compute_test_stats": 0.004676291951909661,
-    "bootstrap": 3.0824352090712637,
-    "k_fwer": 25.709994915872812,
-    "total": 29.009014916839078
+    "build_count_matrix": 0.21734008402563632,
+    "compute_test_stats": 0.006982292048633099,
+    "bootstrap": 3.541623834054917,
+    "k_fwer": 28.141779917059466,
+    "total": 31.907726127188653
   },
   "labels": {
     "positive_direction": "control > lesion",

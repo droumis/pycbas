@@ -18,7 +18,7 @@ Cross-species validation of the CBAS reimplementation against Kastner et al. (20
 - 1,594/2,046 significant (k=80) vs David's 1,605
 - Sequence-level comparison: 1,584 in both, 21 David-only, 10 us-only
 - Result is perfectly stable across 5 different RNG seeds (0 unstable sequences)
-- Runtime: ~286s (directional step-down is compute-intensive)
+- Runtime: ~300s | Peak RAM: ~350 MB
 
 [Full report](flies/validation_report.md)
 
@@ -26,7 +26,7 @@ Cross-species validation of the CBAS reimplementation against Kastner et al. (20
 
 - **6 arms, seq_len_max=4, criterion=400, M=10,000**
 - 31/408 significant (k=2) — **exact match** with David
-- Runtime: ~5s
+- Runtime: ~3.5s | Peak RAM: ~160 MB
 
 [Full report](humans/validation_report.md)
 
@@ -36,7 +36,7 @@ Cross-species validation of the CBAS reimplementation against Kastner et al. (20
 - 177/16,483 significant (k=9)
 - Paper reports 386 sig (different subject count: 24,342 sequences vs our 16,483)
 - Deferred until we have David's full rat dataset
-- Runtime: ~29s
+- Runtime: ~32s | Peak RAM: ~1.7 GB
 
 [Full report](rats/validation_report.md)
 

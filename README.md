@@ -95,15 +95,17 @@ Regenerate reports from existing results (no recomputation):
 pixi run reports
 ```
 
-### Timing (full paper-matched parameters, Apple M-series)
+### Timing and memory (full paper-matched parameters, Apple M-series)
 
-| Dataset | Subjects | Sequences | Runtime |
-|---|---|---|---|
-| Flies | 1,566 | 2,046 | ~286 s |
-| Humans | 1,413 | 408 | ~5 s |
-| Rats | 85 | 16,483 | ~29 s |
+| Dataset | Subjects | Sequences | Runtime | Peak RAM |
+|---|---|---|---|---|
+| Flies | 1,566 | 2,046 | ~300 s | ~350 MB |
+| Humans | 1,413 | 408 | ~3.5 s | ~160 MB |
+| Rats | 85 | 16,483 | ~32 s | ~1.7 GB |
 
-Bootstrap and step-down are parallelized with numba JIT + prange. The directional step-down uses per-row active masks which is more compute-intensive than the simpler shared-mask variant. Set `NUMBA_DISABLE_JIT=1` to disable for debugging.
+The dominant cost is the directional step-down (per-row active masks, O(M × S) per k-iteration). The bootstrap itself is fast (~3s for flies). Peak memory comes from the null matrix (M × S float64), direction matrix (M × S int8), and the step-down active masks (M × n_valid bool).
+
+Bootstrap and step-down are parallelized with numba JIT + prange. Set `NUMBA_DISABLE_JIT=1` to disable for debugging.
 
 ## Validation results
 

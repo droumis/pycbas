@@ -13,19 +13,22 @@
 | Control > Lesion | 91 | not separately reported |
 | Lesion > Control | 86 | not separately reported |
 | k (k-FWER) | 9 | not reported |
-| Runtime | 29.0s | not reported |
+| Runtime | 31.9s | not reported |
 
 ## Timing Profile
 
 | Stage | Time (s) | % Total |
 |---|---|---|
-| build_count_matrix | 0.21 | 0.7% |
-| compute_test_stats | 0.00 | 0.0% |
-| bootstrap | 3.08 | 10.6% |
-| k_fwer | 25.71 | 88.6% |
-| **TOTAL** | **29.01** | |
+| build_count_matrix | 0.22 | 0.7% |
+| compute_test_stats | 0.01 | 0.0% |
+| bootstrap | 3.54 | 11.1% |
+| k_fwer | 28.14 | 88.2% |
+| **TOTAL** | **31.91** | |
 
 ## Figures
+
+### Ranked ζ-values
+![Ranked ζ-values](figures/ranked_gvalues.png)
 
 ### Manhattan Plot
 ![Manhattan Plot](figures/manhattan.png)
