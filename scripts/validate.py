@@ -163,7 +163,7 @@ def run_validation(params_override=None, n_ctrl_max=None, n_les_max=None):
           f"{len(valid_stats)} valid of {len(test_stats)}")
 
     t0 = time.perf_counter()
-    null_matrix = bootstrap_test_stats(count_matrix, group_indices, params)
+    null_matrix, _ = bootstrap_test_stats(count_matrix, group_indices, params)
     timings["bootstrap"] = time.perf_counter() - t0
     print(f"[{timings['bootstrap']:.2f}s] Bootstrap: {params.resample_number} resamples")
 

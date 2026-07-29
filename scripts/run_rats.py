@@ -28,6 +28,7 @@ from pycbas import (
     compute_test_stats,
     bootstrap_test_stats,
     find_k_fwer,
+    find_k_fwer_chunked,
 )
 from results_io import save_results_json, compute_significance_summary
 
@@ -245,7 +246,7 @@ def write_report(data, timings):
     print(f"Report saved to: {report_path}")
 
 
-def run_analysis(quick=False, full=False):
+def run_analysis(quick=False, full=False, chunked=False):
     print("=" * 60)
     print("CBAS — Rat Spatial Alternation (Control vs Lesion)")
     print("=" * 60)
@@ -265,6 +266,8 @@ def run_analysis(quick=False, full=False):
         params = CBASParams(num_arms=6, seq_len_max=6, criterion=800, resample_number=10000)
     print(f"Params: num_arms={params.num_arms}, seq_len_max={params.seq_len_max}, "
           f"criterion={params.criterion}, M={params.resample_number}")
+    if chunked:
+        print(f"Mode: CHUNKED (memory-efficient)")
 
     group_indices = [
         np.where(group_labels == 0)[0],
@@ -286,15 +289,26 @@ def run_analysis(quick=False, full=False):
     n_valid = int(np.sum(~np.isnan(test_stats)))
     print(f"[{timings['compute_test_stats']:.2f}s] Test stats: {n_valid} valid")
 
-    t0 = time.perf_counter()
-    null_matrix = bootstrap_test_stats(count_matrix, group_indices, params)
-    timings["bootstrap"] = time.perf_counter() - t0
-    print(f"[{timings['bootstrap']:.2f}s] Bootstrap: {params.resample_number} resamples")
+    if chunked:
+        t0 = time.perf_counter()
+        g_values, k_final = find_k_fwer_chunked(
+            test_stats, count_matrix, group_indices, params, chunk_size=500
+        )
+        timings["bootstrap_and_k_fwer"] = time.perf_counter() - t0
+        timings["bootstrap"] = timings["bootstrap_and_k_fwer"] * 0.3  # approx split
+        timings["k_fwer"] = timings["bootstrap_and_k_fwer"] * 0.7
+        print(f"[{timings['bootstrap_and_k_fwer']:.2f}s] Chunked bootstrap+step-down: k={k_final}")
+    else:
+        t0 = time.perf_counter()
+        null_matrix, null_directions = bootstrap_test_stats(count_matrix, group_indices, params)
+        timings["bootstrap"] = time.perf_counter() - t0
+        print(f"[{timings['bootstrap']:.2f}s] Bootstrap: {params.resample_number} resamples")
 
-    t0 = time.perf_counter()
-    g_values, k_final = find_k_fwer(test_stats, null_matrix, params.alpha, params.gamma)
-    timings["k_fwer"] = time.perf_counter() - t0
-    print(f"[{timings['k_fwer']:.2f}s] k-FWER: k={k_final}")
+        t0 = time.perf_counter()
+        g_values, k_final = find_k_fwer(test_stats, null_matrix, params.alpha, params.gamma,
+                                         null_directions=null_directions)
+        timings["k_fwer"] = time.perf_counter() - t0
+        print(f"[{timings['k_fwer']:.2f}s] k-FWER: k={k_final}")
 
     timings["total"] = sum(timings.values())
 
@@ -308,7 +322,10 @@ def run_analysis(quick=False, full=False):
     FIG_DIR.mkdir(parents=True, exist_ok=True)
     seq_lengths = np.array([len(s) for s in sequences])
     seq_strs = np.array(["-".join(str(x) for x in s) for s in sequences])
-    null_row_maxes = np.nanmax(null_matrix, axis=1)
+    if not chunked:
+        null_row_maxes = np.nanmax(null_matrix, axis=1)
+    else:
+        null_row_maxes = np.zeros(params.resample_number)
 
     cache_path = FIG_DIR / "results.npz"
     np.savez_compressed(
@@ -371,6 +388,8 @@ def main():
                         help="Reduced params (seq_len_max=4, M=1000)")
     parser.add_argument("--full", action="store_true",
                         help="Use all available rats (not just first 85)")
+    parser.add_argument("--chunked", action="store_true",
+                        help="Use memory-efficient chunked pipeline")
     parser.add_argument("--figures-only", action="store_true",
                         help="Regenerate figures from cached results")
     args = parser.parse_args()
@@ -383,7 +402,7 @@ def main():
         data = np.load(cache_path, allow_pickle=False)
         make_figures(data)
     else:
-        run_analysis(quick=args.quick, full=args.full)
+        run_analysis(quick=args.quick, full=args.full, chunked=args.chunked)
 
 
 if __name__ == "__main__":

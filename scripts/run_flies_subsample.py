@@ -66,7 +66,7 @@ def run_subsample(subjects_data, group_labels, n_per_group, params, rng):
 
     sequences, count_matrix = build_count_matrix(sub_data, params, contingency=1)
     test_stats = compute_test_stats(count_matrix, group_indices)
-    null_matrix = bootstrap_test_stats(count_matrix, group_indices, params)
+    null_matrix, _ = bootstrap_test_stats(count_matrix, group_indices, params)
     g_values, k_final = find_k_fwer(test_stats, null_matrix, params.alpha, params.gamma)
 
     n_sig = 0
@@ -117,7 +117,7 @@ def main():
     t0 = time.perf_counter()
     sequences, count_matrix = build_count_matrix(subjects_data, params, contingency=1)
     test_stats = compute_test_stats(count_matrix, group_indices)
-    null_matrix = bootstrap_test_stats(count_matrix, group_indices, params)
+    null_matrix, _ = bootstrap_test_stats(count_matrix, group_indices, params)
     g_values, k_final = find_k_fwer(test_stats, null_matrix, params.alpha, params.gamma)
     n_sig_full = 0
     for i in range(len(sequences)):

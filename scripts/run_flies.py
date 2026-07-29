@@ -273,12 +273,13 @@ def run_analysis(quick=False):
     print(f"[{timings['compute_test_stats']:.2f}s] Test stats: {n_valid} valid")
 
     t0 = time.perf_counter()
-    null_matrix = bootstrap_test_stats(count_matrix, group_indices, params)
+    null_matrix, null_directions = bootstrap_test_stats(count_matrix, group_indices, params)
     timings["bootstrap"] = time.perf_counter() - t0
     print(f"[{timings['bootstrap']:.2f}s] Bootstrap: {params.resample_number} resamples")
 
     t0 = time.perf_counter()
-    g_values, k_final = find_k_fwer(test_stats, null_matrix, params.alpha, params.gamma)
+    g_values, k_final = find_k_fwer(test_stats, null_matrix, params.alpha, params.gamma,
+                                     null_directions=null_directions)
     timings["k_fwer"] = time.perf_counter() - t0
     print(f"[{timings['k_fwer']:.2f}s] k-FWER: k={k_final}")
 

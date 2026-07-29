@@ -16,18 +16,18 @@
   "results": {
     "n_subjects": 1566,
     "n_sequences": 2046,
-    "n_significant": 1243,
-    "n_positive": 208,
-    "n_negative": 1035,
-    "fraction_significant": 0.6075268817204301,
-    "k_final": 63
+    "n_significant": 1594,
+    "n_positive": 286,
+    "n_negative": 1308,
+    "fraction_significant": 0.7790811339198436,
+    "k_final": 80
   },
   "timing": {
-    "build_count_matrix": 2.3758460419485345,
-    "compute_test_stats": 0.011281582992523909,
-    "bootstrap": 15.849155665957369,
-    "k_fwer": 9.272927082958631,
-    "total": 27.50921037385706
+    "build_count_matrix": 1.9039980419911444,
+    "compute_test_stats": 0.010257709072902799,
+    "bootstrap": 9.29317008308135,
+    "k_fwer": 275.0497563749086,
+    "total": 286.257182209054
   },
   "labels": {
     "positive_direction": "CA > w1118",

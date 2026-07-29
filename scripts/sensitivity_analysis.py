@@ -70,7 +70,7 @@ def run_at_sample_size(subjects_data, group_labels, n_per_group, params, rng):
 
     sequences, count_matrix = build_count_matrix(sub_data, params, contingency=1)
     test_stats = compute_test_stats(count_matrix, group_indices)
-    null_matrix = bootstrap_test_stats(count_matrix, group_indices, params)
+    null_matrix, _ = bootstrap_test_stats(count_matrix, group_indices, params)
 
     return sequences, test_stats, null_matrix
 
@@ -139,7 +139,7 @@ def main():
     ]
     sequences, count_matrix = build_count_matrix(subjects_data, params, contingency=1)
     test_stats = compute_test_stats(count_matrix, group_indices)
-    null_matrix = bootstrap_test_stats(count_matrix, group_indices, params)
+    null_matrix, _ = bootstrap_test_stats(count_matrix, group_indices, params)
     n_full = min(n_ca, n_w1118)
     results[n_full] = {
         "sequences": sequences,

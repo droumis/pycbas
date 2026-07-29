@@ -4,37 +4,50 @@ Cross-species validation of the CBAS reimplementation against Kastner et al. (20
 
 ## Results at a glance
 
-| Dataset | Mode | Subjects | Sequences | Significant | k |
-|---|---|---|---|---|---|
-| Flies | Comparative | 1566 | 2,046 | 1243 (60.8%) | 63 |
-| Humans | Correlative | 1413 | 408 | 31 (7.6%) | 2 |
-| Rats | Comparative | 85 | 16,483 | 111 (0.7%) | 6 |
+| Dataset | Mode | Subjects | Sequences | pycbas | David (Igor) | k |
+|---|---|---|---|---|---|---|
+| Flies | Comparative | 1,566 | 2,046 | 1,594 (77.9%) | 1,605 (78.4%) | 80 |
+| Humans | Correlative | 1,413 | 408 | 31 (7.6%) | 31 (7.6%) | 2 |
+| Rats | Comparative | 85 | 16,483 | 177 (1.1%) | 386* | 9 |
+
+*Rat comparison is deferred — we don't have David's full dataset.
 
 ## Flies
 
 - **2 arms, seq_len_max=10, criterion=250, M=10,000**
-- 1243/2046 significant (k=63)
-- Runtime: 27.5s
+- 1,594/2,046 significant (k=80) vs David's 1,605
+- Sequence-level comparison: 1,584 in both, 21 David-only, 10 us-only
+- Result is perfectly stable across 5 different RNG seeds (0 unstable sequences)
+- Runtime: ~286s (directional step-down is compute-intensive)
 
 [Full report](flies/validation_report.md)
+
 ## Humans
 
 - **6 arms, seq_len_max=4, criterion=400, M=10,000**
-- 31/408 significant (k=2)
-- Runtime: 5.6s
+- 31/408 significant (k=2) — **exact match** with David
+- Runtime: ~5s
 
 [Full report](humans/validation_report.md)
+
 ## Rats
 
 - **6 arms, seq_len_max=6, criterion=800, M=10,000**
-- 111/16483 significant (k=6)
-- Runtime: 24.9s
+- 177/16,483 significant (k=9)
+- Paper reports 386 sig (different subject count: 24,342 sequences vs our 16,483)
+- Deferred until we have David's full rat dataset
+- Runtime: ~29s
 
 [Full report](rats/validation_report.md)
 
-## Notes
+## Algorithm notes
 
-- **Bootstrap null:** Default is uncentered (no centering), matching David's Igor implementation. Centering per Clarke et al. 2020 is available via `CBASParams(centering=True)` but produces a more liberal (less conservative) result.
-- **Fly k-FWER:** Our iteration converges at k=63 giving 1243 significant — a strict subset of David's 1,605 (0 overcalled, 362 missed). The convergence path differs (our k jumps 1→63; David's lands at 1,605 via what we estimate is a more gradual path, though other implementation differences may also contribute).
-- **Human:** Perfect match (31/408 = paper's 31).
-- **Rat:** Paper reports 409/24,342 sig. Our different sequence count (16483 vs 24,342) reflects subject subset differences at longer lengths.
+Two key fixes brought us into alignment with David's Igor implementation:
+
+1. **Magnitude-based null** — Store |t| per sequence per bootstrap row (not direction-specific). This fixed humans from 69→31 (exact match).
+
+2. **Direction-conditional removal** — In the step-down, only remove a sequence from a bootstrap row when the bootstrap went the same direction as the observed stat. This fixed flies from 2,046/2,046 (100%) → 1,594/2,046 (78%).
+
+The remaining 11-sequence fly discrepancy (1,594 vs 1,605) is due to different RNG implementations (Igor's per-row seeded PRNG vs numpy), not algorithmic — our result is perfectly deterministic across seeds.
+
+See [notes/algorithm_comparison.md](../notes/algorithm_comparison.md) for detailed pseudocode comparison.

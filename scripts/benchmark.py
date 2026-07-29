@@ -93,7 +93,7 @@ def run_benchmark(quick=False):
 
     # --- Stage 3: Bootstrap ---
     t0 = time.perf_counter()
-    null_matrix = bootstrap_test_stats(count_matrix, group_indices, params)
+    null_matrix, _ = bootstrap_test_stats(count_matrix, group_indices, params)
     timings["bootstrap"] = time.perf_counter() - t0
     print(f"  Bootstrap ({params.resample_number} resamples): {timings['bootstrap']:.2f}s")
 

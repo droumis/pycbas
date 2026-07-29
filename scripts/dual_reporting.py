@@ -129,7 +129,7 @@ def main():
     test_stats = compute_test_stats(count_matrix, group_indices)
 
     print("Bootstrapping (M=1000)...")
-    null_matrix = bootstrap_test_stats(count_matrix, group_indices, params)
+    null_matrix, _ = bootstrap_test_stats(count_matrix, group_indices, params)
 
     # Adaptive k
     print("Running adaptive k-FWER...")

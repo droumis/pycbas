@@ -1,95 +1,73 @@
 # Rat CBAS Validation Report
 
-**Our reimplementation produces results consistent with the paper.**
-The core qualitative findings replicate:
-- Control rats favor sequences with neighboring arms in a consistent direction
-- Lesion rats show more scattered, non-directional sequences
-- The most significant control>lesion sequences are systematic progressions
-  (e.g., arm 2*->3*->4* = rewarded neighboring-arm traversal)
-
-> **Why the numbers differ:** The paper evaluates 24,342 sequences vs our
-> 16,483. Different subject subsets observe different sets of unique
-> sequences — particularly at longer lengths where the combinatorial space
-> is vast but each rat only traverses a small fraction of it.
-
 ## Summary
 
 | | pycbas | Paper (Kastner et al.) |
 |---|---|---|
-| Rats | 85 (46 ctrl, 39 les) | 85 (46 ctrl, 39 les) |
+| Rats | 85 (46 control, 39 lesion) | 85 (46 control, 39 lesion) |
 | Max seq length | 6 | 6 |
 | Criterion | 800 | 800 |
-| Resamples | 10,000 | 10,000 |
+| Resamples | 10000 | 10,000 |
 | Sequences evaluated | 16,483 | 24,342 |
-| Significant | 111 (0.7%) | 409 (1.7%) |
-| control > lesion | 56 | not separately reported |
-| lesion > control | 55 | not separately reported |
-| k (k-FWER) | 6 | not reported |
-| Runtime | 24.9s | not reported |
+| Significant | 177 (1.1%) | 409 (1.7%) |
+| Control > Lesion | 91 | not separately reported |
+| Lesion > Control | 86 | not separately reported |
+| k (k-FWER) | 9 | not reported |
+| Runtime | 29.0s | not reported |
 
 ## Timing Profile
 
 | Stage | Time (s) | % Total |
 |---|---|---|
-| build_count_matrix | 0.36 | 1.4% |
-| compute_test_stats | 0.01 | 0.0% |
-| bootstrap | 6.34 | 25.5% |
-| k_fwer | 18.15 | 73.0% |
-| **TOTAL** | **24.85** | |
+| build_count_matrix | 0.21 | 0.7% |
+| compute_test_stats | 0.00 | 0.0% |
+| bootstrap | 3.08 | 10.6% |
+| k_fwer | 25.71 | 88.6% |
+| **TOTAL** | **29.01** | |
 
 ## Figures
 
 ### Manhattan Plot
 ![Manhattan Plot](figures/manhattan.png)
 
-Each dot is one behavioral sequence. The y-axis shows statistical significance
-(higher = more different between groups). Sequences are grouped into vertical
-bands by length (1-symbol on the left, 6-symbol on the right). Dots above the
-dotted threshold are significantly different between control and lesion rats
-after correcting for the massive number of comparisons.
-
-> **Paper comparison (Fig 1c right panel):** Our plot reproduces the same
-> layout and overall pattern — many significant short sequences, with
-> significance tapering off at longer lengths. The paper's plot shows wider
-> horizontal spread within each band because more unique sequences are evaluated.
-
 ### Significant Sequences by Direction
 ![Direction Counts](figures/direction_counts.png)
-
-Breaks down significant sequences by which group uses them more: 'control > lesion'
-means control rats do it more often, 'lesion > control' means lesion rats do it
-more often. Seeing both directions confirms the groups genuinely behave
-differently — not just that one group is noisier.
-
-> **Paper comparison (Fig 5a):** The paper shows this split for 'complete'
-> sequences only (a subset). Our plot shows all significant sequences,
-> but the same pattern holds: both directions are well-represented.
 
 ### Null Distribution vs Observed
 ![Null vs Observed](figures/null_vs_observed.png)
 
-Blue: observed test statistics for all sequences — how different each sequence's
-usage is between control and lesion rats. Gray: null row-max per resample
-(strongest signal pure chance can produce). The red line (observed max) sitting
-clearly to the right of the null distribution confirms the group differences
-are genuine, not noise amplified by testing thousands of sequences.
-
 ### Sequence Space
 ![Sequence Space](figures/sequence_space.png)
-
-With 6 arms and reward encoding (12 symbols), the theoretical number of possible
-sequences grows exponentially (12^L). But rats only make 800 choices each, so they
-traverse a tiny fraction of the longer possibilities. This explains why shorter
-sequences dominate the analysis.
-
-> **Paper comparison:** The paper reports 24,342 unique sequences at seq_len_max=6
-> vs our 16,483. The difference comes from subject selection — more
-> subjects collectively explore more of the sequence space.
 
 ### g-value Distribution
 ![g-value Distribution](figures/gvalue_dist.png)
 
-The g-value is the adjusted p-value after multiple comparison correction. Values
-below 0.5 are significant. A clean bimodal distribution — most sequences either
-clearly significant or clearly not — means the correction procedure is working
-well and not leaving many ambiguous cases near the boundary.
+## Top Significant Sequences
+
+| Sequence | Direction | ζ-value | Decoded (arm, * = rewarded) |
+|---|---|---|---|
+| 4-3-8-7-8 | control>lesion | 0.0002 | 5 4 3* 2* 3* |
+| 8-1-8-1-8-1 | lesion>control | 0.0003 | 3* 2 3* 2 3* 2 |
+| 4-3-8-7-8-9 | control>lesion | 0.0003 | 5 4 3* 2* 3* 4* |
+| 0-1-8-9-8-3 | control>lesion | 0.0003 | 1 2 3* 4* 3* 4 |
+| 7-8-9-4-3 | control>lesion | 0.0003 | 2* 3* 4* 5 4 |
+| 8-7-8-9-4-3 | control>lesion | 0.0003 | 3* 2* 3* 4* 5 4 |
+| 9-4-3-8-7-8 | control>lesion | 0.0003 | 4* 5 4 3* 2* 3* |
+| 7-8-9-4-3-8 | control>lesion | 0.0003 | 2* 3* 4* 5 4 3* |
+| 3-8-7-8-9-4 | control>lesion | 0.0003 | 4 3* 2* 3* 4* 5 |
+| 7-8-1-0-1 | control>lesion | 0.0003 | 2* 3* 2 1 2 |
+| 8-7-8-1-0-1 | control>lesion | 0.0003 | 3* 2* 3* 2 1 2 |
+| 0-1 | control>lesion | 0.0004 | 1 2 |
+| 8-9-4-3 | control>lesion | 0.0004 | 3* 4* 5 4 |
+| 7-3-8-3 | lesion>control | 0.0004 | 2* 4 3* 4 |
+| 8-7-3-8-3 | lesion>control | 0.0004 | 3* 2* 4 3* 4 |
+| 3-8-7-8-9 | control>lesion | 0.0005 | 4 3* 2* 3* 4* |
+| 9-4-3 | control>lesion | 0.0005 | 4* 5 4 |
+| 8-3-8-7-3-8 | lesion>control | 0.0006 | 3* 4 3* 2* 4 3* |
+| 7-8-1-0-1-8 | control>lesion | 0.0006 | 2* 3* 2 1 2 3* |
+| 7-3-8 | lesion>control | 0.0007 | 2* 4 3* |
+| 1-8-9-8-3-4 | control>lesion | 0.0007 | 2 3* 4* 3* 4 5 |
+| 8-7-3-8 | lesion>control | 0.0008 | 3* 2* 4 3* |
+| 8-3-8-7-8-9 | control>lesion | 0.0012 | 3* 4 3* 2* 3* 4* |
+| 8-4-8 | lesion>control | 0.0012 | 3* 5 3* |
+| 0-1-8-9-8 | control>lesion | 0.0014 | 1 2 3* 4* 3* |

@@ -6,6 +6,14 @@ CBAS identifies behavioral sequences that differ significantly between experimen
 
 **Reference:** Kastner et al., "Choice-Wide Behavioral Association Study" [(2026 preprint)](https://www.biorxiv.org/content/10.1101/2024.02.26.582115v4)
 
+### Validation status
+
+| Dataset | pycbas | David (Igor) | Match |
+|---------|--------|--------------|-------|
+| Flies | 1,594/2,046 sig (k=80) | 1,605/2,046 sig | 98.7% overlap (1,584 shared) |
+| Humans | 31/408 sig (k=2) | 31/408 sig | **Exact** |
+| Rats | 177/16,483 sig (k=9) | 386* | Deferred (incomplete data) |
+
 ### Flies (CA vs w1118 — spontaneous alternation)
 ![Fly comparison](results/figures/comparison_flies.png)
 
@@ -49,12 +57,14 @@ result = run_cbas_comparative(subjects_data, group_labels, params)
 print(f"{result.n_significant} significant sequences (k={result.k_final})")
 ```
 
-### Bootstrap null centering
+### Bootstrap null
 
-The `centering` parameter controls whether the bootstrap null subtracts the observed delta (Clarke et al. 2020 eq 5):
+The bootstrap stores |t| magnitude per sequence per resample, with direction tracking
+for the step-down removal (matching David's Igor implementation). The `centering` parameter
+controls whether the bootstrap subtracts the observed delta (Clarke et al. 2020 eq 5):
 
-- `centering=False` (default): uncentered null, ~50% fill rate per column. More conservative — matches David Kastner's Igor implementation.
-- `centering=True`: centered null, ~5% fill rate. Less conservative — the step-down comparison distribution is weaker because fewer columns contribute to the row max.
+- `centering=False` (default): uncentered null, matches David's Igor implementation.
+- `centering=True`: centered null, more liberal.
 
 ```python
 params_centered = CBASParams(centering=True)  # more liberal
@@ -89,11 +99,11 @@ pixi run reports
 
 | Dataset | Subjects | Sequences | Runtime |
 |---|---|---|---|
-| Flies | 1,566 | 2,046 | ~28 s |
-| Humans | 1,413 | 408 | ~6 s |
-| Rats | 85 | 16,483 | ~25 s |
+| Flies | 1,566 | 2,046 | ~286 s |
+| Humans | 1,413 | 408 | ~5 s |
+| Rats | 85 | 16,483 | ~29 s |
 
-Bootstrap and step-down are parallelized with numba JIT + prange. Set `NUMBA_DISABLE_JIT=1` to disable for debugging.
+Bootstrap and step-down are parallelized with numba JIT + prange. The directional step-down uses per-row active masks which is more compute-intensive than the simpler shared-mask variant. Set `NUMBA_DISABLE_JIT=1` to disable for debugging.
 
 ## Validation results
 

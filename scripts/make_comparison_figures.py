@@ -22,7 +22,7 @@ SPECIES = [
         "paper_img": PAPER_DIR / "ppr_fig5cL-flies.png",
         "our_img": ROOT / "results" / "flies" / "figures" / "manhattan.png",
         "paper_title": "Paper — Fig 1c left\n(Kastner et al. 2026)",
-        "our_title": "pycbas — 1,243/2,046 significant (k=63)",
+        "our_title": "pycbas — 1,594/2,046 significant (k=80)",
         "out_name": "comparison_flies.png",
     },
     {
@@ -38,7 +38,7 @@ SPECIES = [
         "paper_img": PAPER_DIR / "ppr_fig5cR.png",
         "our_img": ROOT / "results" / "rats" / "figures" / "manhattan.png",
         "paper_title": "Paper — Fig 1c right\n(Kastner et al. 2026)",
-        "our_title": "pycbas — 111/16,483 significant (k=6)",
+        "our_title": "pycbas — 177/16,483 significant (k=9)",
         "out_name": "comparison_rats.png",
     },
 ]

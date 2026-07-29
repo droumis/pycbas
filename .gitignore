@@ -27,3 +27,7 @@ DanielStudentImplementation/
 utilities/
 notes/
 notes.md
+
+# Raw downloaded data (regenerable from source)
+data/noel_ibl_mice/raw/
+data/ibl_mice/raw/
