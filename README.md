@@ -97,13 +97,22 @@ pixi run reports
 
 ### Timing and memory (full paper-matched parameters, Apple M-series)
 
-| Dataset | Subjects | Sequences | Runtime | Peak RAM |
+| Dataset | Subjects | Sequences | Chunked (default) | Standard |
 |---|---|---|---|---|
-| Flies | 1,566 | 2,046 | ~300 s | ~350 MB |
-| Humans | 1,413 | 408 | ~3.5 s | ~160 MB |
-| Rats | 85 | 16,483 | ~32 s | ~1.7 GB |
+| Flies | 1,566 | 2,046 | ~26 s / 360 MB | ~18 s / 560 MB |
+| Humans | 1,413 | 408 | ~3 s / 155 MB | ~3 s / 155 MB |
+| Rats | 85 | 16,483 | ~4 s / 1.7 GB | ~6 s / 4.1 GB |
 
-The dominant cost is the directional step-down (per-row active masks, O(M × S) per k-iteration). The bootstrap itself is fast (~3s for flies). Peak memory comes from the null matrix (M × S float64), direction matrix (M × S int8), and the step-down active masks (M × n_valid bool).
+The chunked pipeline (default) generates the bootstrap directly into the sorted
+null submatrix, avoiding the full M × S intermediate allocation. Use
+`chunked=False` in `run_cbas_comparative()` for faster runtime when memory is
+not a constraint.
+
+The step-down uses selective recomputation: after each removal step, only rows
+where the direction matched AND the removed value was in the top-k are
+recomputed. This skips ~50-90% of work per step. Peak memory comes from the
+null matrix (M × S float64), direction matrix (M × S int8), and the cached
+comparison values (M float64).
 
 Bootstrap and step-down are parallelized with numba JIT + prange. Set `NUMBA_DISABLE_JIT=1` to disable for debugging.
 

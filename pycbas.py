@@ -523,44 +523,40 @@ def _stepdown_core_directional(sorted_stats, null_sub, dir_sub, obs_directions, 
     If the bootstrap went the other direction, that sequence's magnitude stays
     active for subsequent k-th largest computations.
 
-    Args:
-        sorted_stats: (n_valid,) test stats sorted descending
-        null_sub: (M, n_valid) null magnitudes, NaN replaced with -inf
-        dir_sub: (M, n_valid) bootstrap directions (0=pos, 1=neg, -1=none)
-        obs_directions: (n_valid,) observed direction for each sorted stat (0=pos, 1=neg)
-        k: k-FWER parameter
-        max_pval: stop when p >= this
+    Optimization: caches per-row comparison values. After each step, only rows
+    where the direction matched (and the active set changed) are recomputed.
+    Rows where the removed column wasn't in their top-k are skipped entirely.
     """
     n_valid = len(sorted_stats)
     M = null_sub.shape[0]
     p_values = np.empty(n_valid)
-    # Per-row active masks: True = this column still contributes to k-th largest for this row
     row_active = np.ones((M, n_valid), dtype=np.bool_)
+    comparison_val = np.empty(M)
     last_p = 0.0
 
-    for step in range(n_valid):
-        comparison_val = np.empty(M)
-        for m in prange(M):
-            buf = np.empty(k)
-            buf[:] = -np.inf
-            n_active_m = 0
-            for col in range(n_valid):
-                if not row_active[m, col]:
-                    continue
-                n_active_m += 1
-                val = null_sub[m, col]
-                if val > buf[k - 1]:
-                    buf[k - 1] = val
-                    for j in range(k - 2, -1, -1):
-                        if buf[j + 1] > buf[j]:
-                            buf[j], buf[j + 1] = buf[j + 1], buf[j]
-                        else:
-                            break
-            if n_active_m <= k - 1:
-                comparison_val[m] = -np.inf
-            else:
-                comparison_val[m] = buf[k - 1]
+    # First step: compute all rows from scratch
+    for m in prange(M):
+        buf = np.empty(k)
+        buf[:] = -np.inf
+        n_active_m = 0
+        for col in range(n_valid):
+            if not row_active[m, col]:
+                continue
+            n_active_m += 1
+            val = null_sub[m, col]
+            if val > buf[k - 1]:
+                buf[k - 1] = val
+                for j in range(k - 2, -1, -1):
+                    if buf[j + 1] > buf[j]:
+                        buf[j], buf[j + 1] = buf[j + 1], buf[j]
+                    else:
+                        break
+        if n_active_m <= k - 1:
+            comparison_val[m] = -np.inf
+        else:
+            comparison_val[m] = buf[k - 1]
 
+    for step in range(n_valid):
         current_stat = sorted_stats[step]
         count = 0
         for m in range(M):
@@ -573,18 +569,37 @@ def _stepdown_core_directional(sorted_stats, null_sub, dir_sub, obs_directions, 
         last_p = p_val
         p_values[step] = p_val
 
-        # Direction-conditional removal: only remove from rows where bootstrap
-        # direction matches the observed direction of this step's stat
-        obs_dir = obs_directions[step]
-        for m in prange(M):
-            if dir_sub[m, step] == obs_dir:
-                row_active[m, step] = False
-            # If directions don't match (or dir=-1), leave it active for this row
-
         if p_val >= max_pval:
             for remaining in range(step + 1, n_valid):
                 p_values[remaining] = max_pval
             break
+
+        # Direction-conditional removal and selective recomputation
+        obs_dir = obs_directions[step]
+        for m in prange(M):
+            if dir_sub[m, step] == obs_dir:
+                row_active[m, step] = False
+                # Only recompute if the removed value could have been in top-k
+                if null_sub[m, step] >= comparison_val[m]:
+                    buf = np.empty(k)
+                    buf[:] = -np.inf
+                    n_active_m = 0
+                    for col in range(n_valid):
+                        if not row_active[m, col]:
+                            continue
+                        n_active_m += 1
+                        val = null_sub[m, col]
+                        if val > buf[k - 1]:
+                            buf[k - 1] = val
+                            for j in range(k - 2, -1, -1):
+                                if buf[j + 1] > buf[j]:
+                                    buf[j], buf[j + 1] = buf[j + 1], buf[j]
+                                else:
+                                    break
+                    if n_active_m <= k - 1:
+                        comparison_val[m] = -np.inf
+                    else:
+                        comparison_val[m] = buf[k - 1]
 
     return p_values
 
@@ -709,12 +724,12 @@ def find_k_fwer_k1(test_stats, null_matrix, alpha=0.5, gamma=0.05, null_directio
 @njit(cache=True, parallel=True)
 def _bootstrap_chunk_into(count_matrix, boot_indices_0, boot_indices_1,
                           n0, n1, obs_delta, sorted_col_indices,
-                          chunk_start, chunk_end, out):
+                          chunk_start, chunk_end, out, out_dir):
     """Generate bootstrap null stats directly into a pre-allocated output array.
 
     Writes rows [chunk_start:chunk_end] of `out` (shape M × n_valid).
     Columns follow sorted_col_indices order (positions in 2S test_stats array).
-    Stores |t| magnitude per sequence — direction-independent.
+    Stores |t| magnitude and direction (0=pos, 1=neg, -1=none).
     """
     C = chunk_end - chunk_start
     n_valid = len(sorted_col_indices)
@@ -748,11 +763,17 @@ def _bootstrap_chunk_into(count_matrix, boot_indices_0, boot_indices_1,
             sigma = np.sqrt(sem0 * sem0 + sem1 * sem1)
 
             val = -np.inf
+            d = np.int8(-1)
             if sigma > 0.0:
                 delta_centered = (mean0 - mean1) - obs_delta[seq_idx]
-                if delta_centered != 0.0:
-                    val = abs(delta_centered / sigma)
+                if delta_centered > 0.0:
+                    val = delta_centered / sigma
+                    d = np.int8(0)
+                elif delta_centered < 0.0:
+                    val = -delta_centered / sigma
+                    d = np.int8(1)
             out[m, ci] = val
+            out_dir[m, ci] = d
 
 
 def find_k_fwer_chunked(test_stats, count_matrix, group_indices, params,
@@ -768,11 +789,9 @@ def find_k_fwer_chunked(test_stats, count_matrix, group_indices, params,
       Standard: M×2S (full null) + M×n_valid (null_sub) = M × (2S + n_valid) × 8 bytes
       Chunked:  M×n_valid (null_sub only) + chunk_size×n_valid (working) = M × n_valid × 8 bytes
 
-    For IBL (A=8, L=6): standard needs ~96 GB, chunked needs ~48 GB for null_sub.
-    Combined with max_memory_gb limit, large problems spill to disk via memmap.
-
-    Produces identical results to find_k_fwer. Uses the same fast _stepdown_core
-    with early stopping.
+    Produces identical results to find_k_fwer (including direction-conditional
+    step-down). The direction matrix (M × n_valid int8) adds only 1/8 the memory
+    of the null matrix.
 
     Args:
         test_stats: shape (2S,) observed test statistics
@@ -781,7 +800,6 @@ def find_k_fwer_chunked(test_stats, count_matrix, group_indices, params,
         params: CBASParams
         chunk_size: bootstrap rows generated per chunk (default 500)
         rng: numpy random Generator (default: seeded at 42)
-        max_memory_gb: if null_sub exceeds this, use memmap (default 8)
 
     Returns (g_values, k_final) — same as find_k_fwer.
     """
@@ -818,24 +836,29 @@ def find_k_fwer_chunked(test_stats, count_matrix, group_indices, params,
     count_matrix_f = np.ascontiguousarray(count_matrix, dtype=np.float64)
     obs_delta_f = np.ascontiguousarray(obs_delta, dtype=np.float64)
 
-    # Allocate null_sub directly (M × n_valid) — never allocate the full M × 2S
-    null_sub = np.full((M, n_valid), -np.inf, dtype=np.float64)
+    # Observed direction for each sorted stat: even index → 0 (positive), odd → 1 (negative)
+    obs_directions = np.array(sorted_indices % 2, dtype=np.int8)
 
-    # Generate bootstrap in chunks, writing directly into null_sub
+    # Allocate null_sub and direction matrix directly (M × n_valid)
+    null_sub = np.full((M, n_valid), -np.inf, dtype=np.float64)
+    dir_sub = np.full((M, n_valid), np.int8(-1), dtype=np.int8)
+
+    # Generate bootstrap in chunks, writing directly into null_sub and dir_sub
     for chunk_start in range(0, M, chunk_size):
         chunk_end = min(chunk_start + chunk_size, M)
         _bootstrap_chunk_into(
             count_matrix_f, boot_indices_0, boot_indices_1,
             n0, n1, obs_delta_f, sorted_col_indices,
-            chunk_start, chunk_end, null_sub
+            chunk_start, chunk_end, null_sub, dir_sub
         )
 
-    # Iterative k-FWER: find converged k
+    # Iterative k-FWER: find converged k (with directional step-down)
     k = 1
     alpha = params.alpha
     gamma = params.gamma
     for _ in range(100):  # safety cap
-        step_p_values = _stepdown_core(sorted_stats, null_sub, k, alpha)
+        step_p_values = _stepdown_core_directional(
+            sorted_stats, null_sub, dir_sub, obs_directions, k, alpha)
         rejections = int(np.sum(step_p_values < alpha))
         if rejections < (k / gamma) - 1:
             break
@@ -843,7 +866,8 @@ def find_k_fwer_chunked(test_stats, count_matrix, group_indices, params,
         k = k + 1 if new_k == k else new_k
 
     # Final full step-down at converged k
-    step_p_values = _stepdown_core(sorted_stats, null_sub, k, 1.0)
+    step_p_values = _stepdown_core_directional(
+        sorted_stats, null_sub, dir_sub, obs_directions, k, 1.0)
 
     # Map back to original positions
     p_values = np.full_like(test_stats, np.nan)

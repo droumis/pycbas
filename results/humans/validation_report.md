@@ -13,7 +13,7 @@
 | Positive correlation | 26 | not separately reported |
 | Negative correlation | 5 | not separately reported |
 | k (k-FWER) | 2 | not reported |
-| Runtime | 3.5s | not reported |
+| Runtime | ~3s | not reported |
 
 ## Notes
 
@@ -28,11 +28,11 @@
 
 | Stage | Time (s) | % Total |
 |---|---|---|
-| build_count_matrix | 0.63 | 17.9% |
-| compute_test_stats | 0.01 | 0.2% |
-| bootstrap | 2.68 | 76.4% |
-| k_fwer | 0.19 | 5.5% |
-| **TOTAL** | **3.52** | |
+| build_count_matrix | ~0.6 | ~20% |
+| compute_test_stats | <0.1 | <1% |
+| bootstrap | ~2.4 | ~77% |
+| k_fwer | <0.1 | <1% |
+| **TOTAL** | **~3** | |
 
 ## Figures
 

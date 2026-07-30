@@ -13,17 +13,17 @@
 | Control > Lesion | 91 | not separately reported |
 | Lesion > Control | 86 | not separately reported |
 | k (k-FWER) | 9 | not reported |
-| Runtime | 31.9s | not reported |
+| Runtime | ~6s | not reported |
 
 ## Timing Profile
 
 | Stage | Time (s) | % Total |
 |---|---|---|
-| build_count_matrix | 0.22 | 0.7% |
-| compute_test_stats | 0.01 | 0.0% |
-| bootstrap | 3.54 | 11.1% |
-| k_fwer | 28.14 | 88.2% |
-| **TOTAL** | **31.91** | |
+| build_count_matrix | ~0.2 | ~3% |
+| compute_test_stats | <0.1 | <1% |
+| bootstrap | ~3 | ~50% |
+| k_fwer | ~3 | ~50% |
+| **TOTAL** | **~6** | |
 
 ## Figures
 

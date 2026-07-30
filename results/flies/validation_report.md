@@ -13,17 +13,17 @@
 | CA > w1118 | 286 | not separately reported |
 | w1118 > CA | 1308 | not separately reported |
 | k (k-FWER) | 80 | not reported |
-| Runtime | 299.8s | not reported |
+| Runtime | ~18s | not reported |
 
 ## Timing Profile
 
 | Stage | Time (s) | % Total |
 |---|---|---|
-| build_count_matrix | 2.01 | 0.7% |
-| compute_test_stats | 0.01 | 0.0% |
-| bootstrap | 8.54 | 2.8% |
-| k_fwer | 289.22 | 96.5% |
-| **TOTAL** | **299.78** | |
+| build_count_matrix | ~2 | ~11% |
+| compute_test_stats | <0.1 | <1% |
+| bootstrap | ~8 | ~44% |
+| k_fwer | ~8 | ~44% |
+| **TOTAL** | **~18** | |
 
 ## Igor Comparison
 
