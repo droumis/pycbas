@@ -85,9 +85,11 @@ See [results/validation_summary.md](results/validation_summary.md) for details, 
 
 ## Documentation
 
-- [User Guide](docs/guide.md) - data format, parameter selection, working with results
-- [Algorithm](docs/algorithm.md) - the step-down and k-FWER procedure in detail
-- [API Reference](docs/api.md) - all public functions and classes
+Full docs at **[droumis.github.io/pycbas](https://droumis.github.io/pycbas/)**
+
+- [User Guide](https://droumis.github.io/pycbas/guide/) - data format, parameter selection, working with results
+- [Algorithm](https://droumis.github.io/pycbas/algorithm/) - the step-down and k-FWER procedure in detail
+- [API Reference](https://droumis.github.io/pycbas/api/) - all public functions and classes
 
 ## Development
 
