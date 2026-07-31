@@ -19,11 +19,11 @@
     "k_final": 2
   },
   "timing": {
-    "build_count_matrix": 0.6090527500491589,
-    "compute_test_stats": 0.006809499813243747,
-    "bootstrap": 2.4414769168943167,
-    "k_fwer": 0.046479708049446344,
-    "total": 3.1038188748061657
+    "build_count_matrix": 0.6278184580150992,
+    "compute_test_stats": 0.0068606671411544085,
+    "bootstrap": 2.7937169580254704,
+    "k_fwer": 0.04982562502846122,
+    "total": 3.478221708210185
   },
   "labels": {
     "positive_direction": "Positive correlation (\u2191 CBIT \u2192 \u2191 usage)",

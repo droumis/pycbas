@@ -10,14 +10,12 @@ Usage:
     pixi run python scripts/plot_ranked_gvalues.py
 """
 
-import sys
 import numpy as np
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
 from scripts.compare_with_david import parse_david_file, load_our_results
 
 ROOT_DIR = Path(__file__).parent.parent

@@ -1,0 +1,35 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "pycbas"
+version = "0.1.0"
+description = "Choice-Wide Behavioral Association Study — identify behavioral sequences that differ between groups or correlate with continuous measures"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.11"
+authors = [
+    { name = "Demetris Roumis" },
+]
+dependencies = [
+    "numpy>=1.24",
+    "numba>=0.59",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7",
+    "matplotlib>=3.7",
+    "pandas>=2.0",
+    "scipy>=1.11",
+]
+
+[project.urls]
+Repository = "https://github.com/droumis/pycbas"
+
+[tool.hatch.build.targets.wheel]
+packages = ["pycbas"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

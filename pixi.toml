@@ -16,9 +16,12 @@ scipy = ">=1.11"
 hvplot = ">=0.9"
 jupyterlab = ">=4.6.2,<5"
 pip = ">=26.1.2,<27"
+hatchling = ">=1.21"
 
 [tasks]
-test = "python -m pytest tests/test_cbas.py -v"
+install = "pip install -e . --no-deps --no-build-isolation"
+test = { cmd = "python -m pytest tests/test_cbas.py -v", depends-on = ["install"] }
+
 validate = "python scripts/validate.py"
 figures = "python scripts/validate.py --figures-only"
 validate-paper = "python scripts/validate.py --paper-params"

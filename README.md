@@ -1,43 +1,28 @@
-# pycbas — Choice-Wide Behavioral Association Study
+# pycbas
 
-Python reimplementation of the [core CBAS algorithm](https://github.com/dbkastner/CBAS) originally written in Igor Pro by David Kastner.
+Python implementation of the [CBAS algorithm](https://github.com/dbkastner/CBAS) (Choice-Wide Behavioral Association Study) for identifying behavioral sequences that differ significantly between experimental groups or correlate with a continuous measure.
 
-CBAS identifies behavioral sequences that differ significantly between experimental groups (comparative mode) or correlate with a continuous measure (correlative mode). It uses Romano-Wolf step-down for multiple comparison correction and k-FWER iteration for false discovery proportion control.
+Uses Romano-Wolf step-down for multiple comparison correction and k-FWER iteration for false discovery proportion control.
 
 **Reference:** Kastner et al., "Choice-Wide Behavioral Association Study" [(2026 preprint)](https://www.biorxiv.org/content/10.1101/2024.02.26.582115v4)
 
-### Validation status
+## Installation
 
-| Dataset | pycbas | David (Igor) | Match |
-|---------|--------|--------------|-------|
-| Flies | 1,605/2,046 sig (k=81) | 1,605/2,046 sig | **Exact** |
-| Humans | 31/408 sig (k=2) | 31/408 sig | **Exact** |
-| Rats | 177/16,483 sig (k=9) | 386* | Deferred (incomplete data) |
+```bash
+pip install pycbas
+```
 
-### Flies (CA vs w1118 — spontaneous alternation)
-![Fly comparison](results/figures/comparison_flies.png)
-
-### Humans (two-step task — correlative with CBIT)
-![Human comparison](results/figures/comparison_humans.png)
-
-### Rats (control vs hippocampal lesion — spatial alternation)
-![Rat comparison](results/figures/comparison_rats.png)
-
-## Setup
+Or for development:
 
 ```bash
 git clone https://github.com/droumis/pycbas.git
 cd pycbas
-pixi install
+pip install -e ".[dev]"
 ```
 
-For the rat validation, also clone the original CBAS repo (contains rat data):
+## Quick start
 
-```bash
-git clone https://github.com/dbkastner/CBAS.git igor_cbas
-```
-
-## Usage
+### Comparative mode (group differences)
 
 ```python
 from pycbas import CBASParams, load_subject_data, run_cbas_comparative
@@ -50,83 +35,70 @@ params = CBASParams(
     seq_len_max=6,
     criterion=800,
     resample_number=10000,
-    centering=False,  # default: uncentered null (matches Igor implementation)
 )
 
 result = run_cbas_comparative(subjects_data, group_labels, params)
 print(f"{result.n_significant} significant sequences (k={result.k_final})")
 ```
 
-### Bootstrap null
-
-The bootstrap stores |t| magnitude per sequence per resample, with direction tracking
-for the step-down removal (matching David's Igor implementation). The `centering` parameter
-controls whether the bootstrap subtracts the observed delta (Clarke et al. 2020 eq 5):
-
-- `centering=False` (default): uncentered null, matches David's Igor implementation.
-- `centering=True`: centered null, more liberal.
+### Correlative mode (continuous covariate)
 
 ```python
-params_centered = CBASParams(centering=True)  # more liberal
-params_default = CBASParams()                 # conservative (no centering)
+from pycbas import run_cbas_correlative
+
+result = run_cbas_correlative(subjects_data, cbit_scores, params)
 ```
 
-## Running analyses
+### Resource estimation
 
-Each species has its own analysis script producing `results.json` and figures:
+```python
+from pycbas import estimate_resources, print_resource_estimate
 
-```bash
-pixi run flies            # fly spontaneous alternation (CA vs w1118)
-pixi run human            # human two-step task (correlative with CBIT)
-pixi run rats             # rat spatial alternation (control vs lesion)
+est = estimate_resources(num_arms=12, seq_len_max=8, n_observed=5000)
+print_resource_estimate(est)
 ```
 
-Quick versions (reduced parameters, ~1-2s each):
+## Parameters
 
-```bash
-pixi run flies-quick
-pixi run human-quick
-pixi run rats-quick
-```
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `num_arms` | 6 | Number of base symbols (choices) |
+| `seq_len_max` | 6 | Maximum sequence length L |
+| `criterion` | 800 | Number of trials used per subject |
+| `resample_number` | 10,000 | Bootstrap resamples M |
+| `alpha` | 0.5 | Significance threshold for FDP control |
+| `gamma` | 0.05 | FDP tolerance |
+| `centering` | False | Center bootstrap null (False matches Igor) |
 
-Regenerate reports from existing results (no recomputation):
+## Performance
 
-```bash
-pixi run reports
-```
-
-### Timing and memory (full paper-matched parameters, Apple M-series)
-
-| Dataset | Subjects | Sequences | Chunked (default) | Standard |
+| Dataset | Subjects | Sequences | Time | Peak RAM |
 |---|---|---|---|---|
-| Flies | 1,566 | 2,046 | ~26 s / 360 MB | ~21 s / 560 MB |
-| Humans | 1,413 | 408 | ~3 s / 155 MB | ~3 s / 155 MB |
-| Rats | 85 | 16,483 | ~4 s / 1.7 GB | ~6 s / 4.1 GB |
+| Flies (2-arm, L=10) | 1,566 | 2,046 | ~21s | ~560 MB |
+| Humans (6-arm, L=4) | 1,413 | 408 | ~3s | ~155 MB |
+| Rats (6-arm, L=6) | 85 | 16,483 | ~6s | ~4.1 GB |
 
-The chunked pipeline (default) generates the bootstrap directly into the sorted
-null submatrix, avoiding the full M × S intermediate allocation. Use
-`chunked=False` in `run_cbas_comparative()` for faster runtime when memory is
-not a constraint.
+Timings on Apple M-series. The chunked pipeline (`chunked=True`, default) trades ~30% more time for ~40% less memory. Bootstrap and step-down are parallelized via numba. Set `NUMBA_DISABLE_JIT=1` to disable for debugging.
 
-The step-down uses selective recomputation: after each removal step, only rows
-where the direction matched AND the removed value was in the top-k are
-recomputed. This skips ~50-90% of work per step. Peak memory comes from the
-null matrix (M × S float64), direction matrix (M × S int8), and the cached
-comparison values (M float64).
+## Validation
 
-Bootstrap and step-down are parallelized with numba JIT + prange. Set `NUMBA_DISABLE_JIT=1` to disable for debugging.
+Exact match with the original Igor implementation on flies (1,605/2,046, k=81) and humans (31/408, k=2). Test statistics match to floating-point precision.
 
-## Validation results
+See [results/validation_summary.md](results/validation_summary.md) for details, or per-dataset reports:
+- [Flies](results/flies/validation_report.md)
+- [Humans](results/humans/validation_report.md)
+- [Rats](results/rats/validation_report.md)
 
-See the full cross-species summary: [results/validation_summary.md](results/validation_summary.md)
-
-Per-dataset reports with figures:
-- [Flies](results/flies/validation_report.md) — 2-arm, seq_len_max=10, M=10,000, 1,566 subjects
-- [Humans](results/humans/validation_report.md) — 6-arm, seq_len_max=4, M=10,000, 1,413 subjects (correlative)
-- [Rats](results/rats/validation_report.md) — 6-arm, seq_len_max=6, M=10,000, 85 subjects
-
-## Tests
+## Development
 
 ```bash
-pixi run test
+pixi install          # set up environment
+pixi run test         # run tests
+pixi run flies        # run fly analysis (paper params)
+pixi run human        # run human analysis
+pixi run rats         # run rat analysis
 ```
+
+## License
+
+MIT

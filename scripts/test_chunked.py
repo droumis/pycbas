@@ -3,12 +3,10 @@ Verify that find_k_fwer_chunked produces identical results to find_k_fwer,
 then benchmark memory and time.
 """
 
-import sys
 import time
 import numpy as np
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
 from pycbas import (
     CBASParams,
     load_subject_data,

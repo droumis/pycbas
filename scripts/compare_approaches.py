@@ -12,12 +12,10 @@ bootstrap null that converges at a different k in the k-FWER iteration.
 With our RNG at k=17, we get R=1602 — essentially matching David's 1605.
 """
 
-import sys
 import time
 import numpy as np
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
 from pycbas import (
     CBASParams, load_subject_data, build_count_matrix,
     compute_test_stats, bootstrap_test_stats, _prepare_null_sub,

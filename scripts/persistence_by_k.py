@@ -7,12 +7,10 @@ the interpretation is solid. If it changes, the choice of k matters
 for scientific conclusions.
 """
 
-import sys
 import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
 from pycbas import (
     CBASParams,
     load_subject_data,

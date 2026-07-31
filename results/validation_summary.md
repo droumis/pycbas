@@ -8,7 +8,7 @@ Cross-species validation of the CBAS reimplementation against Kastner et al. (20
 |---|---|---|---|---|---|---|
 | Flies | Comparative | 1,566 | 2,046 | 1,605 (78.4%) | 1,605 (78.4%) | 81 |
 | Humans | Correlative | 1,413 | 408 | 31 (7.6%) | 31 (7.6%) | 2 |
-| Rats | Comparative | 85 | 16,483 | 177 (1.1%) | 386* | 9 |
+| Rats | Comparative | 85 | 16,500 | 178 (1.1%) | 386* | 9 |
 
 *Rat comparison is deferred — we don't have David's full dataset.
 
@@ -32,10 +32,10 @@ Cross-species validation of the CBAS reimplementation against Kastner et al. (20
 ## Rats
 
 - **6 arms, seq_len_max=6, criterion=800, M=10,000**
-- 177/16,483 significant (k=9)
-- Paper reports 386 sig (different subject count: 24,342 sequences vs our 16,483)
+- 178/16,500 significant (k=9)
+- Paper reports 386 sig (different subject count: 24,342 sequences vs our 16,500)
 - Deferred until we have David's full rat dataset
-- Runtime: ~6s | Peak RAM: ~1.7 GB
+- Runtime: ~8s | Peak RAM: ~4.1 GB
 
 [Full report](rats/validation_report.md)
 

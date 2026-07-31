@@ -1,11 +1,9 @@
 """Tests for the core CBAS implementation."""
 
-import sys
 import numpy as np
 import pytest
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
 from pycbas import (
     CBASParams,
     load_subject_data,

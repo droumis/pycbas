@@ -8,12 +8,10 @@ Produces a figure showing:
 This is the concrete implementation of the suggestion for David.
 """
 
-import sys
 import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
 from pycbas import (
     CBASParams,
     load_subject_data,

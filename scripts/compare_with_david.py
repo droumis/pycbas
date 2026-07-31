@@ -5,11 +5,8 @@ Parses David's exported sig sequence files (notes/flyCBASsigSeq.txt,
 notes/humanCBASsigSeq.txt) and compares against our results.
 """
 
-import sys
 import numpy as np
 from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).parent.parent))
 
 ROOT_DIR = Path(__file__).parent.parent
 NOTES_DIR = ROOT_DIR / "notes"

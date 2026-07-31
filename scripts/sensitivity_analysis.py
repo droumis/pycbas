@@ -10,13 +10,11 @@ This is designed to convey to David how the adaptive k-FWER behaves
 in the high-power regime (large N, pervasive effect).
 """
 
-import sys
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.colors import LinearSegmentedColormap
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
 from pycbas import (
     CBASParams,
     load_subject_data,
