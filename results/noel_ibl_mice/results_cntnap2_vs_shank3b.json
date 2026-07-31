@@ -1,0 +1,34 @@
+{
+  "dataset": "noel_ibl_mice",
+  "mode": "comparative",
+  "comparison": "Cntnap2_vs_Shank3B",
+  "groups": {
+    "Cntnap2": 19,
+    "Shank3B": 18
+  },
+  "params": {
+    "num_arms": 4,
+    "seq_len_max": 8,
+    "encode_reward": false,
+    "resample_number": 10000,
+    "alpha": 0.5,
+    "gamma": 0.05
+  },
+  "results": {
+    "n_subjects": 37,
+    "n_sequences": 34380,
+    "n_valid": 34376,
+    "n_significant": 6,
+    "n_positive": 6,
+    "n_negative": 0,
+    "fraction_significant": 0.00017452006980802793,
+    "k_final": 1
+  },
+  "timing": {
+    "total": 50.63375520892441
+  },
+  "labels": {
+    "positive_direction": "Cntnap2 > Shank3B",
+    "negative_direction": "Shank3B > Cntnap2"
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "dataset": "noel_ibl_mice_zero_contrast",
+  "mode": "comparative",
+  "comparison": "WT_vs_Fmr1",
+  "filter": "0% contrast, biased blocks only",
+  "groups": {
+    "WT": 15,
+    "Fmr1": 15
+  },
+  "params": {
+    "num_arms": 4,
+    "seq_len_max": 4,
+    "criterion": 600,
+    "encode_reward": false,
+    "resample_number": 10000,
+    "alpha": 0.5,
+    "gamma": 0.05
+  },
+  "results": {
+    "n_subjects": 30,
+    "n_sequences": 254,
+    "n_significant": 6,
+    "n_positive": 0,
+    "n_negative": 6,
+    "fraction_significant": 0.023622047244094488,
+    "k_final": 1
+  },
+  "timing": {
+    "total": 0.09524241695180535
+  }
+}

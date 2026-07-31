@@ -9,38 +9,35 @@
 | Criterion | 250 | 250 |
 | Resamples | 10000 | 10,000 |
 | Sequences evaluated | 2,046 | 2,046 |
-| Significant | 1594 (77.9%) | 1,605 (78.4%) |
-| CA > w1118 | 286 | not separately reported |
-| w1118 > CA | 1308 | not separately reported |
-| k (k-FWER) | 80 | not reported |
-| Runtime | ~18s | not reported |
+| Significant | 1605 (78.4%) | 1,605 (78.4%) |
+| CA > w1118 | 289 | not separately reported |
+| w1118 > CA | 1316 | not separately reported |
+| k (k-FWER) | 81 | not reported |
+| Runtime | 20.7s | not reported |
 
 ## Timing Profile
 
 | Stage | Time (s) | % Total |
 |---|---|---|
-| build_count_matrix | ~2 | ~11% |
-| compute_test_stats | <0.1 | <1% |
-| bootstrap | ~8 | ~44% |
-| k_fwer | ~8 | ~44% |
-| **TOTAL** | **~18** | |
+| build_count_matrix | 1.98 | 9.6% |
+| compute_test_stats | 0.01 | 0.1% |
+| bootstrap | 8.34 | 40.3% |
+| k_fwer | 10.34 | 50.0% |
+| **TOTAL** | **20.66** | |
 
 ## Igor Comparison
 
 | | pycbas | David |
 |---|---|---|
-| Significant | 1,594 | 1,605 |
-| In both | 1,584 | 1,584 |
-| Only pycbas | 10 | — |
-| Only David | — | 21 |
-| RNG stability | 5/5 seeds identical | N/A |
+| Significant | 1,605 | 1,605 |
+| Test stat max diff | 1.2e-06 | — |
+| Rank ordering | 2044/2046 exact | — |
+
+The 2 rank mismatches are at positions 899-900 where both sequences have
+t ≈ 4.168849 (diff = 1.5e-07, floating point tie-breaking).
 
 ### Ranked ζ-values (Igor comparison)
 ![Ranked ζ-values](figures/ranked_gvalues.png)
-
-The 31 disagreeing sequences (21 + 10) are due to different RNG implementations
-(Igor's per-row seeded PRNG vs numpy), not algorithmic differences — our result
-is perfectly deterministic across 5 different seeds.
 
 ## Figures
 

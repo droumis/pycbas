@@ -90,12 +90,15 @@ def extract_choice_stream(subject_data, contingency=2, num_arms=6, encode_reward
 
 
 def enumerate_sequences(choice_stream, seq_len, criterion):
-    """Find all subsequences of given length within the first `criterion` choices.
-    Returns a dict mapping sequence tuple -> count."""
-    stream = choice_stream[:criterion]
+    """Find all subsequences of given length with start position <= criterion.
+
+    Matches Igor's counting: sequences starting at positions 0..criterion
+    (inclusive) are counted, using elements up to position criterion+seq_len-1.
+    """
+    max_start = min(criterion, len(choice_stream) - seq_len)
     counts = {}
-    for i in range(len(stream) - seq_len + 1):
-        seq = tuple(stream[i:i + seq_len].tolist())
+    for i in range(max_start + 1):
+        seq = tuple(choice_stream[i:i + seq_len].tolist())
         counts[seq] = counts.get(seq, 0) + 1
     return counts
 

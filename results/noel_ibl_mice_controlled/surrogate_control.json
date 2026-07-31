@@ -1,0 +1,24 @@
+{
+  "n_runs": 10,
+  "method": "per-animal iid, matched accuracy + side bias",
+  "results": {
+    "WT_vs_Cntnap2": {
+      "real": 6,
+      "surrogate_mean": 3.9,
+      "surrogate_max": 6,
+      "exceeds": false
+    },
+    "WT_vs_Fmr1": {
+      "real": 5,
+      "surrogate_mean": 2.6,
+      "surrogate_max": 5,
+      "exceeds": false
+    },
+    "WT_vs_Shank3B": {
+      "real": 3,
+      "surrogate_mean": 2.5,
+      "surrogate_max": 5,
+      "exceeds": false
+    }
+  }
+}

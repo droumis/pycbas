@@ -22,7 +22,7 @@ SPECIES = [
         "paper_img": PAPER_DIR / "ppr_fig5cL-flies.png",
         "our_img": ROOT / "results" / "flies" / "figures" / "manhattan.png",
         "paper_title": "Paper — Fig 1c left\n(Kastner et al. 2026)",
-        "our_title": "pycbas — 1,594/2,046 significant (k=80)",
+        "our_title": "pycbas — 1,605/2,046 significant (k=81)",
         "out_name": "comparison_flies.png",
     },
     {

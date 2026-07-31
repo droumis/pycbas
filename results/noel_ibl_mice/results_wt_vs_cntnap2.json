@@ -1,0 +1,37 @@
+{
+  "dataset": "noel_ibl_mice",
+  "mode": "comparative",
+  "comparison": "WT_vs_Cntnap2",
+  "groups": {
+    "WT": 15,
+    "Cntnap2": 19
+  },
+  "params": {
+    "num_arms": 4,
+    "seq_len_max": 8,
+    "encode_reward": false,
+    "resample_number": 10000,
+    "alpha": 0.5,
+    "gamma": 0.05
+  },
+  "results": {
+    "n_subjects": 34,
+    "n_sequences": 34883,
+    "n_valid": 34868,
+    "n_significant": 1,
+    "n_positive": 0,
+    "n_negative": 1,
+    "fraction_significant": 2.8667259123355218e-05,
+    "k_final": 1
+  },
+  "timing": {
+    "build_count_matrix": 0.8740639581810683,
+    "compute_test_stats": 0.0054841251112520695,
+    "bootstrap_and_stepdown": 54.85511745815165,
+    "total": 55.734665541443974
+  },
+  "labels": {
+    "positive_direction": "WT > Cntnap2",
+    "negative_direction": "Cntnap2 > WT"
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "dataset": "noel_ibl_mice_zero_contrast",
+  "mode": "comparative",
+  "comparison": "WT_vs_Shank3B",
+  "filter": "0% contrast, biased blocks only",
+  "groups": {
+    "WT": 15,
+    "Shank3B": 15
+  },
+  "params": {
+    "num_arms": 4,
+    "seq_len_max": 4,
+    "criterion": 600,
+    "encode_reward": false,
+    "resample_number": 10000,
+    "alpha": 0.5,
+    "gamma": 0.05
+  },
+  "results": {
+    "n_subjects": 30,
+    "n_sequences": 257,
+    "n_significant": 0,
+    "n_positive": 0,
+    "n_negative": 0,
+    "fraction_significant": 0.0,
+    "k_final": 1
+  },
+  "timing": {
+    "total": 0.09163674991577864
+  }
+}

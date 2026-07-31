@@ -6,7 +6,7 @@ Cross-species validation of the CBAS reimplementation against Kastner et al. (20
 
 | Dataset | Mode | Subjects | Sequences | pycbas | David (Igor) | k |
 |---|---|---|---|---|---|---|
-| Flies | Comparative | 1,566 | 2,046 | 1,594 (77.9%) | 1,605 (78.4%) | 80 |
+| Flies | Comparative | 1,566 | 2,046 | 1,605 (78.4%) | 1,605 (78.4%) | 81 |
 | Humans | Correlative | 1,413 | 408 | 31 (7.6%) | 31 (7.6%) | 2 |
 | Rats | Comparative | 85 | 16,483 | 177 (1.1%) | 386* | 9 |
 
@@ -15,10 +15,9 @@ Cross-species validation of the CBAS reimplementation against Kastner et al. (20
 ## Flies
 
 - **2 arms, seq_len_max=10, criterion=250, M=10,000**
-- 1,594/2,046 significant (k=80) vs David's 1,605
-- Sequence-level comparison: 1,584 in both, 21 David-only, 10 us-only
-- Result is perfectly stable across 5 different RNG seeds (0 unstable sequences)
-- Runtime: ~18s | Peak RAM: ~360 MB
+- 1,605/2,046 significant (k=81) — **exact match** with David
+- Test statistics match to 1.2e-06; rank ordering matches 2044/2046 (2 ties at floating point precision)
+- Runtime: ~21s | Peak RAM: ~560 MB
 
 [Full report](flies/validation_report.md)
 
@@ -42,12 +41,12 @@ Cross-species validation of the CBAS reimplementation against Kastner et al. (20
 
 ## Algorithm notes
 
-Two key fixes brought us into alignment with David's Igor implementation:
+Three key fixes brought us into exact alignment with David's Igor implementation:
 
 1. **Magnitude-based null** — Store |t| per sequence per bootstrap row (not direction-specific). This fixed humans from 69→31 (exact match).
 
 2. **Direction-conditional removal** — In the step-down, only remove a sequence from a bootstrap row when the bootstrap went the same direction as the observed stat. This fixed flies from 2,046/2,046 (100%) → 1,594/2,046 (78%).
 
-The remaining 11-sequence fly discrepancy (1,594 vs 1,605) is due to different RNG implementations (Igor's per-row seeded PRNG vs numpy), not algorithmic — our result is perfectly deterministic across seeds.
+3. **Criterion boundary (inclusive)** — Igor checks `start_position <= criterion` (inclusive, 0-based), giving 251 counting windows per subject. We were using `stream[:criterion]` which gave only 250 elements (250−L+1 windows). This missed L counting windows per subject per sequence length and caused the 11-sequence discrepancy: 1,594 → 1,605 (exact match).
 
 See [notes/algorithm_comparison.md](../notes/algorithm_comparison.md) for detailed pseudocode comparison.

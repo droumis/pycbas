@@ -1,0 +1,37 @@
+{
+  "dataset": "noel_ibl_mice",
+  "mode": "comparative",
+  "comparison": "WT_vs_Fmr1",
+  "groups": {
+    "WT": 15,
+    "Fmr1": 17
+  },
+  "params": {
+    "num_arms": 4,
+    "seq_len_max": 8,
+    "encode_reward": false,
+    "resample_number": 10000,
+    "alpha": 0.5,
+    "gamma": 0.05
+  },
+  "results": {
+    "n_subjects": 32,
+    "n_sequences": 31856,
+    "n_valid": 31848,
+    "n_significant": 21,
+    "n_positive": 21,
+    "n_negative": 0,
+    "fraction_significant": 0.0006592164741336012,
+    "k_final": 2
+  },
+  "timing": {
+    "build_count_matrix": 0.7438560831360519,
+    "compute_test_stats": 0.003671000013127923,
+    "bootstrap_and_stepdown": 52.665371750015765,
+    "total": 53.412898833164945
+  },
+  "labels": {
+    "positive_direction": "WT > Fmr1",
+    "negative_direction": "Fmr1 > WT"
+  }
+}

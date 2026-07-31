@@ -10,7 +10,7 @@ CBAS identifies behavioral sequences that differ significantly between experimen
 
 | Dataset | pycbas | David (Igor) | Match |
 |---------|--------|--------------|-------|
-| Flies | 1,594/2,046 sig (k=80) | 1,605/2,046 sig | 98.7% overlap (1,584 shared) |
+| Flies | 1,605/2,046 sig (k=81) | 1,605/2,046 sig | **Exact** |
 | Humans | 31/408 sig (k=2) | 31/408 sig | **Exact** |
 | Rats | 177/16,483 sig (k=9) | 386* | Deferred (incomplete data) |
 
@@ -99,7 +99,7 @@ pixi run reports
 
 | Dataset | Subjects | Sequences | Chunked (default) | Standard |
 |---|---|---|---|---|
-| Flies | 1,566 | 2,046 | ~26 s / 360 MB | ~18 s / 560 MB |
+| Flies | 1,566 | 2,046 | ~26 s / 360 MB | ~21 s / 560 MB |
 | Humans | 1,413 | 408 | ~3 s / 155 MB | ~3 s / 155 MB |
 | Rats | 85 | 16,483 | ~4 s / 1.7 GB | ~6 s / 4.1 GB |
 

@@ -41,9 +41,11 @@ class TestEnumerateSequences:
 
     def test_criterion_truncates(self):
         stream = np.array([0, 1, 2, 3, 4, 5, 6, 7])
+        # criterion=4 allows start positions 0..4 (5 windows for seq_len=2)
         counts = enumerate_sequences(stream, seq_len=2, criterion=4)
-        assert (4, 5) not in counts
-        assert len(counts) == 3
+        assert (4, 5) in counts
+        assert (5, 6) not in counts
+        assert len(counts) == 5
 
     def test_length_3(self):
         stream = np.array([1, 2, 3, 1, 2, 3])
