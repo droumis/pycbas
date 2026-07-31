@@ -373,7 +373,19 @@ code {
   </div>
 </div>
 
-<p>The blue bars are observed test statistics (sorted largest to smallest). The red dashed line is the threshold. Notice how the threshold drops after each removal, making it progressively easier for the next sequence. Pink bars have been declared significant.</p>
+<p>The blue bars are observed test statistics (sorted largest to smallest). The red dashed line is the threshold at each step, computed as the median of the null row-maximums over the remaining active set. Watch the threshold drop as rejected sequences are removed from the null comparison. The annotation shows how many sequences remain in the active set.</p>
+
+<h3>Where does the threshold come from?</h3>
+
+<p>The threshold is not arbitrary. It comes directly from the bootstrap null you built in step 3. Here's how:</p>
+
+<ol>
+<li>You have 10,000 bootstrap rows. Each row contains a null t-value for every sequence.</li>
+<li>At step j of the step-down, some sequences have already been rejected and removed. For each bootstrap row, find the <strong>maximum</strong> of the remaining sequences in that row. This gives you 10,000 "row-maximums-over-remaining."</li>
+<li>Sort those 10,000 values. The threshold is the value at position 10,000 &times; (1 &minus; &alpha;). With &alpha; = 0.5, that's the median (position 5,000). Your observed statistic must beat at least half of the null row-maximums to be declared significant.</li>
+</ol>
+
+<div class="insight">Why does removing a sequence lower the threshold? Because the maximum over 1,999 values tends to be smaller than the maximum over 2,000 values. Every time you peel off a rejected sequence, each row's maximum is computed over a smaller set, pulling the whole distribution of row-maximums downward. The (1&minus;&alpha;) quantile of that distribution then drops too.</div>
 
 <h3>Why this is more powerful than Bonferroni</h3>
 
@@ -858,7 +870,7 @@ code {
 })();
 
 // ============================================================
-// STEP 4: Step-down visualization
+// STEP 4: Step-down visualization (bootstrap-based thresholds)
 // ============================================================
 (function() {
   const svg = d3.select("#vis-stepdown svg");
@@ -869,19 +881,40 @@ code {
   const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
 
   const nSeq = 30;
-  // Generate realistic-looking observed stats (exponential decay + noise)
-  const observedStats = Array.from({ length: nSeq }, (_, i) =>
-    4.8 * Math.exp(-i * 0.07) + (Math.random() - 0.5) * 0.3
-  ).sort((a, b) => b - a);
+  const nBoot = 500; // bootstrap rows (smaller than 10k for demo speed)
+  const alpha = 0.5; // significance level (median of null distribution)
 
-  // Threshold decreases as sequences are removed
-  function getThreshold(step) {
-    return 3.0 - step * 0.04 + (Math.random() - 0.5) * 0.15;
+  // Generate observed stats: mix of "real" effects and null
+  const nReal = 12;
+  const observedStats = Array.from({ length: nSeq }, (_, i) => {
+    if (i < nReal) return 3.5 + (nReal - i) * 0.15 + (Math.random() - 0.5) * 0.2;
+    return 1.5 + Math.random() * 0.8;
+  }).sort((a, b) => b - a);
+
+  // Generate bootstrap null matrix: nBoot rows x nSeq columns
+  // Each value is what that sequence's |t| would be under the null
+  const bootMatrix = Array.from({ length: nBoot }, () =>
+    Array.from({ length: nSeq }, () => Math.abs(d3.randomNormal(0, 1)()) * 1.8)
+  );
+
+  // Compute threshold: (1-alpha) quantile of row-maximums over active set
+  function computeThreshold(activeIndices) {
+    const rowMaxes = bootMatrix.map(row => {
+      let mx = -Infinity;
+      for (const idx of activeIndices) {
+        if (row[idx] > mx) mx = row[idx];
+      }
+      return mx;
+    });
+    rowMaxes.sort((a, b) => a - b);
+    const quantilePos = Math.floor(nBoot * (1 - alpha));
+    return rowMaxes[quantilePos];
   }
 
   let currentStep = 0;
   let rejected = [];
   let thresholds = [];
+  let activeSet = Array.from({ length: nSeq }, (_, i) => i);
 
   const xScale = d3.scaleLinear().domain([0, nSeq - 1]).range([0, w]);
   const yScale = d3.scaleLinear().domain([0, 5.5]).range([h, 0]);
@@ -898,7 +931,7 @@ code {
     .attr("x", w / 2).attr("y", h + 40)
     .attr("text-anchor", "middle")
     .attr("font-size", "12px").attr("fill", "#666")
-    .text("Sequence rank (sorted largest → smallest)");
+    .text("Sequence rank (sorted largest to smallest)");
   g.append("text")
     .attr("transform", "rotate(-90)")
     .attr("x", -h / 2).attr("y", -45)
@@ -922,10 +955,16 @@ code {
       .attr("height", d => h - yScale(d))
       .attr("fill", (d, i) => {
         if (rejected.includes(i)) return "#f72585";
+        if (i === currentStep) return "#4361ee";
         if (i < currentStep) return "#ccc";
         return "#4361ee";
       })
-      .attr("opacity", (d, i) => i === currentStep ? 1 : 0.7)
+      .attr("opacity", (d, i) => {
+        if (rejected.includes(i)) return 0.85;
+        if (i === currentStep) return 1;
+        if (i < currentStep) return 0.4;
+        return 0.6;
+      })
       .attr("rx", 2);
 
     // Threshold line
@@ -938,11 +977,13 @@ code {
         .attr("stroke", "#e63946")
         .attr("stroke-width", 2)
         .attr("stroke-dasharray", "5,3");
+      // Label at the end
+      const last = lineData[lineData.length - 1];
       threshG.append("text")
-        .attr("x", lineData[lineData.length - 1][0] + 8)
-        .attr("y", lineData[lineData.length - 1][1] + 4)
+        .attr("x", last[0] + 8)
+        .attr("y", last[1] + 4)
         .attr("font-size", "11px").attr("fill", "#e63946")
-        .text("threshold");
+        .text(`median of null row-max (α=${alpha})`);
     }
 
     // Annotation
@@ -956,15 +997,20 @@ code {
       .attr("x", w).attr("y", 18)
       .attr("text-anchor", "end")
       .attr("font-size", "11px").attr("fill", "#999")
-      .text(`step ${currentStep} / ${nSeq}`);
+      .text(`step ${currentStep} / ${nSeq} | ${activeSet.length} sequences in null`);
   }
 
   function stepOnce() {
     if (currentStep >= nSeq) return;
-    const thresh = getThreshold(currentStep);
+
+    // Compute threshold from row-max of the ACTIVE set
+    const thresh = computeThreshold(activeSet);
     thresholds.push(thresh);
+
     if (observedStats[currentStep] > thresh) {
       rejected.push(currentStep);
+      // Remove this sequence from the active set for future thresholds
+      activeSet = activeSet.filter(idx => idx !== currentStep);
     }
     currentStep++;
     draw();
@@ -974,6 +1020,7 @@ code {
     currentStep = 0;
     rejected = [];
     thresholds = [];
+    activeSet = Array.from({ length: nSeq }, (_, i) => i);
     draw();
   }
 
@@ -984,7 +1031,7 @@ code {
     function step() {
       stepOnce();
       i++;
-      if (i < nSeq) setTimeout(step, 120);
+      if (i < nSeq) setTimeout(step, 150);
     }
     step();
   });
