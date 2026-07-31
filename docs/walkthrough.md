@@ -4,4 +4,4 @@
 This is an interactive explanation of the CBAS algorithm with visualizations you can manipulate. Use the sliders and buttons to explore how each step works.
 </div>
 
-<iframe src="../walkthrough.html" style="width: 100%; height: 3200px; border: none; margin-top: 16px;"></iframe>
+<iframe src="../walkthrough.html" style="width: 100%; height: 4400px; border: none; margin-top: 16px;"></iframe>
