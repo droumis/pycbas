@@ -1,0 +1,932 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CBAS Algorithm Walkthrough</title>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<style>
+:root {
+  --bg: #fafafa;
+  --fg: #1a1a1a;
+  --muted: #666;
+  --accent: #4361ee;
+  --accent2: #f72585;
+  --border: #e0e0e0;
+  --code-bg: #f0f0f0;
+  --card-bg: #fff;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--fg);
+  line-height: 1.7;
+  padding: 0;
+}
+
+.container {
+  max-width: 840px;
+  margin: 0 auto;
+  padding: 60px 24px;
+}
+
+h1 {
+  font-size: 2.2em;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+h1 + p {
+  color: var(--muted);
+  font-size: 1.1em;
+  margin-bottom: 48px;
+}
+
+h2 {
+  font-size: 1.5em;
+  font-weight: 600;
+  margin-top: 64px;
+  margin-bottom: 16px;
+  padding-top: 24px;
+  border-top: 1px solid var(--border);
+}
+
+h2:first-of-type { border-top: none; margin-top: 0; }
+
+p { margin-bottom: 16px; }
+
+.step-number {
+  display: inline-block;
+  width: 28px;
+  height: 28px;
+  line-height: 28px;
+  text-align: center;
+  border-radius: 50%;
+  background: var(--accent);
+  color: white;
+  font-size: 0.85em;
+  font-weight: 600;
+  margin-right: 8px;
+  vertical-align: middle;
+}
+
+.vis-container {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 24px;
+  margin: 24px 0;
+  overflow: hidden;
+}
+
+.vis-container svg {
+  display: block;
+  margin: 0 auto;
+}
+
+.controls {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  margin-top: 16px;
+  flex-wrap: wrap;
+}
+
+.controls label {
+  font-size: 0.9em;
+  color: var(--muted);
+}
+
+.controls input[type="range"] {
+  width: 180px;
+  cursor: pointer;
+}
+
+.controls button {
+  padding: 6px 16px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--card-bg);
+  cursor: pointer;
+  font-size: 0.9em;
+}
+
+.controls button:hover {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+}
+
+.controls .value {
+  font-weight: 600;
+  min-width: 30px;
+  text-align: center;
+}
+
+code {
+  background: var(--code-bg);
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-size: 0.9em;
+}
+
+.formula {
+  text-align: center;
+  font-size: 1.1em;
+  margin: 20px 0;
+  padding: 16px;
+  background: var(--code-bg);
+  border-radius: 6px;
+  font-family: "Times New Roman", serif;
+  font-style: italic;
+}
+
+.insight {
+  background: #eef2ff;
+  border-left: 4px solid var(--accent);
+  padding: 12px 16px;
+  margin: 16px 0;
+  border-radius: 0 6px 6px 0;
+  font-size: 0.95em;
+}
+
+.stream-cell {
+  display: inline-block;
+  width: 32px;
+  height: 32px;
+  line-height: 32px;
+  text-align: center;
+  margin: 2px;
+  border-radius: 4px;
+  font-weight: 600;
+  font-size: 0.9em;
+}
+
+.nav-link {
+  display: inline-block;
+  margin-top: 48px;
+  color: var(--accent);
+  text-decoration: none;
+  font-size: 0.95em;
+}
+
+.nav-link:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+<div class="container">
+
+<h1>How CBAS Works</h1>
+<p>An interactive walkthrough of the Choice-Wide Behavioral Association Study algorithm.</p>
+
+<!-- ============ STEP 1: SEQUENCES ============ -->
+<h2><span class="step-number">1</span> Counting Sequences</h2>
+
+<p>Imagine you're watching an animal make choices in a maze. At each decision point it goes Left (L) or Right (R). Over hundreds of trials you get a long stream of choices.</p>
+
+<p>CBAS asks: do certain patterns appear more in one group than another? To answer that, it first needs to count every possible short pattern in each subject's stream.</p>
+
+<div class="vis-container" id="vis-sequences">
+  <svg width="780" height="200"></svg>
+  <div class="controls">
+    <label>Sequence length:</label>
+    <input type="range" id="seqlen-slider" min="2" max="5" value="3" step="1">
+    <span class="value" id="seqlen-val">3</span>
+    <button id="seq-animate">Slide window</button>
+  </div>
+</div>
+
+<p>The sliding window moves across the stream and extracts every subsequence of the chosen length. Each unique pattern gets a count. With 2 symbols and length 3, there are 8 possible patterns (LLL, LLR, LRL, ...). With longer sequences or more symbols, the space grows exponentially.</p>
+
+<div class="insight">The <code>criterion</code> parameter limits how much of the stream to use. Only windows starting at positions 0 through criterion (inclusive) are counted.</div>
+
+<!-- ============ STEP 2: TEST STATS ============ -->
+<h2><span class="step-number">2</span> Measuring Group Differences</h2>
+
+<p>Now you have a count for every sequence for every subject. You split subjects into two groups (e.g. control vs experimental) and ask: for each sequence, do the groups use it at different rates?</p>
+
+<p>The test statistic is a studentized difference: how far apart are the group means, relative to the noise?</p>
+
+<div class="formula">t = (mean₀ − mean₁) / √(sem₀² + sem₁²)</div>
+
+<div class="vis-container" id="vis-teststats">
+  <svg width="780" height="260"></svg>
+  <div class="controls">
+    <label>Effect size:</label>
+    <input type="range" id="effect-slider" min="0" max="100" value="50" step="1">
+    <span class="value" id="effect-val">t = 3.2</span>
+  </div>
+</div>
+
+<p>When the groups overlap heavily, t is small. When they're well separated, t is large. CBAS runs two one-sided tests per sequence (group 0 > group 1, and group 1 > group 0) so it can detect differences in either direction.</p>
+
+<div class="insight">A sequence only gets a test statistic in the direction that was actually observed. The other direction is set to NaN. This doubles the hypothesis count but handles directionality cleanly.</div>
+
+<!-- ============ STEP 3: BOOTSTRAP ============ -->
+<h2><span class="step-number">3</span> Building the Null Distribution</h2>
+
+<p>You have a large t-value for some sequence. But is it large enough? With thousands of sequences, some will have big t-values just by chance. You need to know what "big by chance" looks like.</p>
+
+<p>The bootstrap builds this reference. It shuffles the group labels (pooling all subjects together and redrawing two groups at random), then recomputes the test statistic. Repeat 10,000 times. The distribution of these shuffled statistics tells you what random group splits produce.</p>
+
+<div class="vis-container" id="vis-bootstrap">
+  <svg width="780" height="280"></svg>
+  <div class="controls">
+    <button id="boot-step">Draw one resample</button>
+    <button id="boot-run">Run 200 resamples</button>
+    <button id="boot-reset">Reset</button>
+    <span class="value" id="boot-count">0 / 10,000</span>
+  </div>
+</div>
+
+<p>The histogram shows the null distribution forming. Your observed statistic (red line) sits somewhere in this distribution. If very few null values reach it, that's evidence of a real effect.</p>
+
+<div class="insight">All sequences share the same resampled group assignments on each draw. This preserves the correlation structure between sequences, which matters for the step-down procedure next.</div>
+
+<!-- ============ STEP 4: STEP-DOWN ============ -->
+<h2><span class="step-number">4</span> The Step-Down Procedure</h2>
+
+<p>With thousands of sequences tested simultaneously, you need to correct for multiple comparisons. CBAS uses the Romano-Wolf step-down, which is more powerful than simple Bonferroni because it accounts for dependencies between tests.</p>
+
+<p>The idea: start with the largest observed statistic. Compare it against the distribution of the row-maximum across all bootstrap rows. If it's extreme enough, reject it and remove it from the active set. Then look at the next largest, but now compare against the maximum of the remaining (smaller) set. Each step uses a less extreme comparison, so later sequences have an easier threshold to beat.</p>
+
+<div class="vis-container" id="vis-stepdown">
+  <svg width="780" height="320"></svg>
+  <div class="controls">
+    <button id="sd-step">Next step</button>
+    <button id="sd-run">Run all</button>
+    <button id="sd-reset">Reset</button>
+    <label>k:</label>
+    <input type="range" id="k-slider" min="1" max="5" value="1" step="1">
+    <span class="value" id="k-val">1</span>
+  </div>
+</div>
+
+<p>With k=1, you compare against the row maximum (strictest). With k>1, you compare against the k-th largest, which is more lenient. This is where the k-FWER relaxation comes in.</p>
+
+<div class="insight">Direction-conditional removal: when a sequence is "removed" from a bootstrap row, it only actually gets removed if the bootstrap went the same direction as the observed stat. This subtlety matches the original Igor implementation and slightly increases conservatism.</div>
+
+<!-- ============ STEP 5: k-FWER ============ -->
+<h2><span class="step-number">5</span> Finding the Right k</h2>
+
+<p>Using k=1 controls the probability of even one false positive (family-wise error rate). That's very strict when you have thousands of tests. The k-FWER procedure relaxes this by tolerating k false positives, where k is chosen to control the false discovery proportion.</p>
+
+<p>The algorithm iterates:</p>
+<ol style="margin: 12px 0 12px 24px; line-height: 2;">
+  <li>Start with k=1, run the step-down, count how many sequences are rejected (R)</li>
+  <li>Check: is R small enough that k false positives among R rejections keeps FDP below gamma?</li>
+  <li>If not, increase k and repeat</li>
+  <li>When it converges, run the final step-down at the converged k</li>
+</ol>
+
+<div class="vis-container" id="vis-kfwer">
+  <svg width="780" height="240"></svg>
+  <div class="controls">
+    <button id="kfwer-iterate">Next iteration</button>
+    <button id="kfwer-reset">Reset</button>
+    <label>γ (FDP tolerance):</label>
+    <input type="range" id="gamma-slider" min="1" max="20" value="5" step="1">
+    <span class="value" id="gamma-val">0.05</span>
+  </div>
+</div>
+
+<div class="insight">The convergence criterion: stop when R < k/γ − 1. At that point, having k false positives among R total rejections gives a false discovery proportion below γ.</div>
+
+<!-- ============ PUTTING IT TOGETHER ============ -->
+<h2><span class="step-number">6</span> The Full Picture</h2>
+
+<p>CBAS takes a collection of behavioral streams, tests every short pattern for group differences, and returns adjusted p-values (called ζ-values) that account for the massive multiple testing burden. Sequences with ζ < 0.5 are declared significant under median FDP control at the 5% level.</p>
+
+<p>The power of the approach comes from three things working together: the step-down gains power by removing already-rejected sequences, the k-FWER relaxation tolerates a controlled number of false positives, and the shared bootstrap preserves dependencies so the correction isn't overly conservative.</p>
+
+<a class="nav-link" href="algorithm/">← Back to the technical algorithm description</a>
+
+</div>
+
+<script>
+// ============================================================
+// STEP 1: Sequence enumeration visualization
+// ============================================================
+(function() {
+  const svg = d3.select("#vis-sequences svg");
+  const stream = "LRLRRLLRLRLRRLL".split("");
+  const colors = { L: "#4361ee", R: "#f72585" };
+
+  const cellSize = 36;
+  const startX = 40;
+  const startY = 40;
+
+  // Draw stream
+  const cells = svg.selectAll(".stream-g")
+    .data(stream)
+    .join("g")
+    .attr("class", "stream-g")
+    .attr("transform", (d, i) => `translate(${startX + i * cellSize}, ${startY})`);
+
+  cells.append("rect")
+    .attr("width", cellSize - 4)
+    .attr("height", cellSize - 4)
+    .attr("rx", 4)
+    .attr("fill", d => colors[d])
+    .attr("opacity", 0.15);
+
+  cells.append("text")
+    .attr("x", (cellSize - 4) / 2)
+    .attr("y", (cellSize - 4) / 2 + 1)
+    .attr("text-anchor", "middle")
+    .attr("dominant-baseline", "middle")
+    .attr("font-size", "14px")
+    .attr("font-weight", "600")
+    .attr("fill", d => colors[d])
+    .text(d => d);
+
+  // Position labels
+  svg.selectAll(".pos-label")
+    .data(stream)
+    .join("text")
+    .attr("class", "pos-label")
+    .attr("x", (d, i) => startX + i * cellSize + (cellSize - 4) / 2)
+    .attr("y", startY - 10)
+    .attr("text-anchor", "middle")
+    .attr("font-size", "10px")
+    .attr("fill", "#999")
+    .text((d, i) => i);
+
+  // Window highlight
+  const windowRect = svg.append("rect")
+    .attr("class", "window")
+    .attr("y", startY - 4)
+    .attr("height", cellSize + 4)
+    .attr("rx", 6)
+    .attr("fill", "none")
+    .attr("stroke", "#333")
+    .attr("stroke-width", 2)
+    .attr("stroke-dasharray", "4,2");
+
+  // Counts display
+  const countsG = svg.append("g").attr("transform", `translate(${startX}, 110)`);
+
+  let seqLen = 3;
+  let windowPos = 0;
+  let animating = false;
+
+  function updateWindow(pos) {
+    windowPos = pos;
+    windowRect
+      .attr("x", startX + pos * cellSize - 3)
+      .attr("width", seqLen * cellSize + 2);
+
+    // Highlight active cells
+    cells.select("rect")
+      .attr("opacity", (d, i) => (i >= pos && i < pos + seqLen) ? 0.4 : 0.15);
+  }
+
+  function countSequences() {
+    const counts = {};
+    const maxStart = stream.length - seqLen;
+    for (let i = 0; i <= maxStart; i++) {
+      const seq = stream.slice(i, i + seqLen).join("");
+      counts[seq] = (counts[seq] || 0) + 1;
+    }
+    return Object.entries(counts).sort((a, b) => b[1] - a[1]);
+  }
+
+  function updateCounts() {
+    const counts = countSequences();
+    const items = countsG.selectAll(".count-item")
+      .data(counts, d => d[0]);
+
+    const enter = items.enter().append("g").attr("class", "count-item");
+    enter.append("text");
+    enter.append("rect");
+
+    const merged = enter.merge(items);
+    merged.attr("transform", (d, i) => `translate(${(i % 8) * 95}, ${Math.floor(i / 8) * 28})`);
+    merged.select("text")
+      .attr("x", 0).attr("y", 14)
+      .attr("font-size", "13px")
+      .attr("font-family", "monospace")
+      .text(d => `${d[0]}: ${d[1]}`);
+
+    items.exit().remove();
+  }
+
+  function animate() {
+    if (animating) return;
+    animating = true;
+    let pos = 0;
+    const maxPos = stream.length - seqLen;
+
+    function step() {
+      updateWindow(pos);
+      pos++;
+      if (pos <= maxPos) {
+        setTimeout(step, 300);
+      } else {
+        animating = false;
+      }
+    }
+    step();
+  }
+
+  d3.select("#seqlen-slider").on("input", function() {
+    seqLen = +this.value;
+    d3.select("#seqlen-val").text(seqLen);
+    updateWindow(0);
+    updateCounts();
+  });
+
+  d3.select("#seq-animate").on("click", animate);
+
+  updateWindow(0);
+  updateCounts();
+})();
+
+// ============================================================
+// STEP 2: Test statistics visualization
+// ============================================================
+(function() {
+  const svg = d3.select("#vis-teststats svg");
+  const width = 780, height = 260;
+  const margin = { top: 30, right: 40, bottom: 40, left: 50 };
+  const w = width - margin.left - margin.right;
+  const h = height - margin.top - margin.bottom;
+
+  const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
+
+  const rng = d3.randomNormal(0, 1);
+  const n0 = 20, n1 = 20;
+  let effect = 1.6;
+
+  function generateData() {
+    const grp0 = Array.from({ length: n0 }, () => rng() + effect);
+    const grp1 = Array.from({ length: n1 }, () => rng());
+    return { grp0, grp1 };
+  }
+
+  function computeT(grp0, grp1) {
+    const mean0 = d3.mean(grp0);
+    const mean1 = d3.mean(grp1);
+    const sem0 = d3.deviation(grp0) / Math.sqrt(grp0.length);
+    const sem1 = d3.deviation(grp1) / Math.sqrt(grp1.length);
+    const sigma = Math.sqrt(sem0 * sem0 + sem1 * sem1);
+    return sigma > 0 ? (mean0 - mean1) / sigma : 0;
+  }
+
+  function draw() {
+    const data = generateData();
+    const all = [...data.grp0, ...data.grp1];
+    const xScale = d3.scaleLinear()
+      .domain([d3.min(all) - 0.5, d3.max(all) + 0.5])
+      .range([0, w]);
+    const t = computeT(data.grp0, data.grp1);
+
+    d3.select("#effect-val").text(`t = ${t.toFixed(1)}`);
+
+    g.selectAll("*").remove();
+
+    // Axis
+    g.append("g")
+      .attr("transform", `translate(0,${h})`)
+      .call(d3.axisBottom(xScale).ticks(8))
+      .selectAll("text").attr("font-size", "11px");
+
+    g.append("text")
+      .attr("x", w / 2).attr("y", h + 35)
+      .attr("text-anchor", "middle")
+      .attr("font-size", "12px")
+      .attr("fill", "#666")
+      .text("Sequence usage count");
+
+    // Jittered dots
+    const jitter = () => Math.random() * 30 - 15;
+    const y0 = h * 0.35, y1 = h * 0.7;
+
+    g.selectAll(".dot0")
+      .data(data.grp0)
+      .join("circle")
+      .attr("cx", d => xScale(d))
+      .attr("cy", () => y0 + jitter())
+      .attr("r", 5)
+      .attr("fill", "#4361ee")
+      .attr("opacity", 0.6);
+
+    g.selectAll(".dot1")
+      .data(data.grp1)
+      .join("circle")
+      .attr("cx", d => xScale(d))
+      .attr("cy", () => y1 + jitter())
+      .attr("r", 5)
+      .attr("fill", "#f72585")
+      .attr("opacity", 0.6);
+
+    // Group means
+    const mean0 = d3.mean(data.grp0);
+    const mean1 = d3.mean(data.grp1);
+
+    g.append("line")
+      .attr("x1", xScale(mean0)).attr("x2", xScale(mean0))
+      .attr("y1", y0 - 20).attr("y2", y0 + 20)
+      .attr("stroke", "#4361ee").attr("stroke-width", 3);
+
+    g.append("line")
+      .attr("x1", xScale(mean1)).attr("x2", xScale(mean1))
+      .attr("y1", y1 - 20).attr("y2", y1 + 20)
+      .attr("stroke", "#f72585").attr("stroke-width", 3);
+
+    // Labels
+    g.append("text").attr("x", -5).attr("y", y0)
+      .attr("text-anchor", "end").attr("dominant-baseline", "middle")
+      .attr("font-size", "12px").attr("fill", "#4361ee").text("Group 0");
+    g.append("text").attr("x", -5).attr("y", y1)
+      .attr("text-anchor", "end").attr("dominant-baseline", "middle")
+      .attr("font-size", "12px").attr("fill", "#f72585").text("Group 1");
+
+    // Delta arrow
+    if (Math.abs(mean0 - mean1) > 0.1) {
+      g.append("line")
+        .attr("x1", xScale(mean1)).attr("x2", xScale(mean0))
+        .attr("y1", 15).attr("y2", 15)
+        .attr("stroke", "#333").attr("stroke-width", 1.5)
+        .attr("marker-end", "url(#arrow)");
+      g.append("text")
+        .attr("x", xScale((mean0 + mean1) / 2)).attr("y", 10)
+        .attr("text-anchor", "middle")
+        .attr("font-size", "11px").attr("fill", "#333")
+        .text(`Δ = ${(mean0 - mean1).toFixed(2)}`);
+    }
+  }
+
+  // Arrow marker
+  svg.append("defs").append("marker")
+    .attr("id", "arrow").attr("viewBox", "0 0 10 10")
+    .attr("refX", 9).attr("refY", 5)
+    .attr("markerWidth", 6).attr("markerHeight", 6)
+    .attr("orient", "auto")
+    .append("path").attr("d", "M 0 0 L 10 5 L 0 10 z").attr("fill", "#333");
+
+  d3.select("#effect-slider").on("input", function() {
+    effect = +this.value / 30;
+    draw();
+  });
+
+  draw();
+})();
+
+// ============================================================
+// STEP 3: Bootstrap null visualization
+// ============================================================
+(function() {
+  const svg = d3.select("#vis-bootstrap svg");
+  const width = 780, height = 280;
+  const margin = { top: 20, right: 30, bottom: 40, left: 50 };
+  const w = width - margin.left - margin.right;
+  const h = height - margin.top - margin.bottom;
+  const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
+
+  const observedT = 3.2;
+  let nullValues = [];
+  const nBins = 40;
+
+  const xScale = d3.scaleLinear().domain([0, 5]).range([0, w]);
+  const yScale = d3.scaleLinear().domain([0, 50]).range([h, 0]);
+
+  // Axis
+  g.append("g")
+    .attr("transform", `translate(0,${h})`)
+    .call(d3.axisBottom(xScale).ticks(10))
+    .selectAll("text").attr("font-size", "11px");
+
+  g.append("text")
+    .attr("x", w / 2).attr("y", h + 35)
+    .attr("text-anchor", "middle")
+    .attr("font-size", "12px").attr("fill", "#666")
+    .text("Bootstrap null |t| values (row maximum)");
+
+  const yAxisG = g.append("g");
+
+  // Observed line
+  g.append("line")
+    .attr("x1", xScale(observedT)).attr("x2", xScale(observedT))
+    .attr("y1", 0).attr("y2", h)
+    .attr("stroke", "#f72585").attr("stroke-width", 2)
+    .attr("stroke-dasharray", "6,3");
+
+  g.append("text")
+    .attr("x", xScale(observedT) + 6).attr("y", 14)
+    .attr("font-size", "12px").attr("fill", "#f72585")
+    .text("observed t");
+
+  const barsG = g.append("g");
+
+  function generateNull() {
+    // Simulate: max of ~20 normal draws (approximating row-max of null)
+    const vals = Array.from({ length: 20 }, () => Math.abs(d3.randomNormal(0, 1)()));
+    return d3.max(vals);
+  }
+
+  function drawHist() {
+    if (nullValues.length === 0) {
+      barsG.selectAll("rect").remove();
+      return;
+    }
+
+    const bins = d3.bin()
+      .domain(xScale.domain())
+      .thresholds(nBins)(nullValues);
+
+    const maxCount = d3.max(bins, d => d.length);
+    yScale.domain([0, Math.max(maxCount, 5)]);
+    yAxisG.call(d3.axisLeft(yScale).ticks(5))
+      .selectAll("text").attr("font-size", "11px");
+
+    barsG.selectAll("rect")
+      .data(bins)
+      .join("rect")
+      .attr("x", d => xScale(d.x0) + 1)
+      .attr("width", d => Math.max(0, xScale(d.x1) - xScale(d.x0) - 1))
+      .attr("y", d => yScale(d.length))
+      .attr("height", d => h - yScale(d.length))
+      .attr("fill", "#4361ee")
+      .attr("opacity", 0.6);
+
+    d3.select("#boot-count").text(`${nullValues.length} / 10,000`);
+  }
+
+  d3.select("#boot-step").on("click", function() {
+    nullValues.push(generateNull());
+    drawHist();
+  });
+
+  d3.select("#boot-run").on("click", function() {
+    let i = 0;
+    function step() {
+      for (let j = 0; j < 10; j++) nullValues.push(generateNull());
+      drawHist();
+      i += 10;
+      if (i < 200) requestAnimationFrame(step);
+    }
+    step();
+  });
+
+  d3.select("#boot-reset").on("click", function() {
+    nullValues = [];
+    drawHist();
+  });
+
+  drawHist();
+})();
+
+// ============================================================
+// STEP 4: Step-down visualization
+// ============================================================
+(function() {
+  const svg = d3.select("#vis-stepdown svg");
+  const width = 780, height = 320;
+  const margin = { top: 30, right: 30, bottom: 50, left: 50 };
+  const w = width - margin.left - margin.right;
+  const h = height - margin.top - margin.bottom;
+  const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
+
+  const nSeq = 30;
+  const observedStats = Array.from({ length: nSeq }, (_, i) =>
+    4.5 * Math.exp(-i * 0.08) + d3.randomNormal(0, 0.2)()
+  ).sort((a, b) => b - a);
+
+  // Simulated comparison values (k-th largest of null) that decrease as sequences are removed
+  function getThreshold(step, k) {
+    const base = 2.8 - step * 0.02;
+    const kBonus = -0.3 * (k - 1);
+    return Math.max(base + kBonus + d3.randomNormal(0, 0.1)(), 0.5);
+  }
+
+  let currentStep = 0;
+  let k = 1;
+  let rejected = [];
+  let thresholds = [];
+
+  const xScale = d3.scaleLinear().domain([0, nSeq - 1]).range([0, w]);
+  const yScale = d3.scaleLinear().domain([0, 5.5]).range([h, 0]);
+
+  g.append("g")
+    .attr("transform", `translate(0,${h})`)
+    .call(d3.axisBottom(xScale).ticks(10))
+    .selectAll("text").attr("font-size", "11px");
+
+  g.append("g")
+    .call(d3.axisLeft(yScale).ticks(6))
+    .selectAll("text").attr("font-size", "11px");
+
+  g.append("text")
+    .attr("x", w / 2).attr("y", h + 40)
+    .attr("text-anchor", "middle")
+    .attr("font-size", "12px").attr("fill", "#666")
+    .text("Sequence rank (sorted by test statistic)");
+
+  g.append("text")
+    .attr("transform", "rotate(-90)")
+    .attr("x", -h / 2).attr("y", -38)
+    .attr("text-anchor", "middle")
+    .attr("font-size", "12px").attr("fill", "#666")
+    .text("Statistic value");
+
+  const barsG = g.append("g");
+  const threshG = g.append("g");
+
+  function draw() {
+    barsG.selectAll("rect")
+      .data(observedStats)
+      .join("rect")
+      .attr("x", (d, i) => xScale(i) - 8)
+      .attr("width", 16)
+      .attr("y", d => yScale(d))
+      .attr("height", d => h - yScale(d))
+      .attr("fill", (d, i) => rejected.includes(i) ? "#f72585" : "#4361ee")
+      .attr("opacity", (d, i) => i < currentStep ? 0.8 : 0.3)
+      .attr("rx", 2);
+
+    // Draw threshold line
+    threshG.selectAll("*").remove();
+    if (thresholds.length > 1) {
+      const line = d3.line()
+        .x((d, i) => xScale(i))
+        .y(d => yScale(d))
+        .curve(d3.curveMonotoneX);
+      threshG.append("path")
+        .datum(thresholds)
+        .attr("d", line)
+        .attr("fill", "none")
+        .attr("stroke", "#e63946")
+        .attr("stroke-width", 2)
+        .attr("stroke-dasharray", "4,3");
+      threshG.append("text")
+        .attr("x", xScale(thresholds.length - 1) + 5)
+        .attr("y", yScale(thresholds[thresholds.length - 1]))
+        .attr("font-size", "11px")
+        .attr("fill", "#e63946")
+        .text("threshold");
+    }
+  }
+
+  function stepOnce() {
+    if (currentStep >= nSeq) return;
+    const thresh = getThreshold(currentStep, k);
+    thresholds.push(thresh);
+    if (observedStats[currentStep] > thresh) {
+      rejected.push(currentStep);
+    }
+    currentStep++;
+    draw();
+  }
+
+  function reset() {
+    currentStep = 0;
+    rejected = [];
+    thresholds = [];
+    draw();
+  }
+
+  d3.select("#sd-step").on("click", stepOnce);
+  d3.select("#sd-run").on("click", function() {
+    reset();
+    let i = 0;
+    function step() {
+      stepOnce();
+      i++;
+      if (i < nSeq) setTimeout(step, 80);
+    }
+    step();
+  });
+  d3.select("#sd-reset").on("click", reset);
+  d3.select("#k-slider").on("input", function() {
+    k = +this.value;
+    d3.select("#k-val").text(k);
+    reset();
+  });
+
+  draw();
+})();
+
+// ============================================================
+// STEP 5: k-FWER iteration visualization
+// ============================================================
+(function() {
+  const svg = d3.select("#vis-kfwer svg");
+  const width = 780, height = 240;
+  const margin = { top: 30, right: 30, bottom: 40, left: 50 };
+  const w = width - margin.left - margin.right;
+  const h = height - margin.top - margin.bottom;
+  const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
+
+  let gamma = 0.05;
+  let iterations = [];
+
+  // Simulated: at k=1 we get ~400 rejections, at k=5 we get ~800, etc.
+  function simulateRejections(k) {
+    const base = 300 + k * 120 + Math.round(d3.randomNormal(0, 20)());
+    return Math.max(base, k + 1);
+  }
+
+  function converged(R, k) {
+    return R < k / gamma - 1;
+  }
+
+  const xScale = d3.scaleLinear().domain([0, 10]).range([0, w]);
+  const yScale = d3.scaleLinear().domain([0, 1200]).range([h, 0]);
+
+  g.append("g")
+    .attr("transform", `translate(0,${h})`)
+    .call(d3.axisBottom(xScale).ticks(10).tickFormat(d => d))
+    .selectAll("text").attr("font-size", "11px");
+
+  const yAxisG = g.append("g");
+  yAxisG.call(d3.axisLeft(yScale).ticks(6))
+    .selectAll("text").attr("font-size", "11px");
+
+  g.append("text")
+    .attr("x", w / 2).attr("y", h + 35)
+    .attr("text-anchor", "middle")
+    .attr("font-size", "12px").attr("fill", "#666")
+    .text("k value");
+
+  g.append("text")
+    .attr("transform", "rotate(-90)")
+    .attr("x", -h / 2).attr("y", -38)
+    .attr("text-anchor", "middle")
+    .attr("font-size", "12px").attr("fill", "#666")
+    .text("Rejections (R)");
+
+  const dotsG = g.append("g");
+  const lineG = g.append("g");
+
+  function draw() {
+    dotsG.selectAll("circle")
+      .data(iterations)
+      .join("circle")
+      .attr("cx", d => xScale(d.k))
+      .attr("cy", d => yScale(d.R))
+      .attr("r", 7)
+      .attr("fill", d => d.converged ? "#2a9d8f" : "#4361ee")
+      .attr("stroke", d => d.converged ? "#2a9d8f" : "none")
+      .attr("stroke-width", 3)
+      .attr("opacity", 0.8);
+
+    dotsG.selectAll("text")
+      .data(iterations)
+      .join("text")
+      .attr("x", d => xScale(d.k))
+      .attr("y", d => yScale(d.R) - 12)
+      .attr("text-anchor", "middle")
+      .attr("font-size", "11px")
+      .attr("fill", "#333")
+      .text(d => `R=${d.R}`);
+
+    // Convergence line: R = k/gamma - 1
+    lineG.selectAll("*").remove();
+    const lineData = d3.range(0.5, 10, 0.5).map(k => ({ k, R: k / gamma - 1 }));
+    const line = d3.line().x(d => xScale(d.k)).y(d => yScale(d.R));
+    lineG.append("path")
+      .datum(lineData)
+      .attr("d", line)
+      .attr("fill", "none")
+      .attr("stroke", "#e63946")
+      .attr("stroke-width", 1.5)
+      .attr("stroke-dasharray", "5,3");
+    lineG.append("text")
+      .attr("x", xScale(8)).attr("y", yScale(8 / gamma - 1) - 8)
+      .attr("font-size", "11px").attr("fill", "#e63946")
+      .text("convergence boundary");
+  }
+
+  function iterate() {
+    const k = iterations.length === 0 ? 1 : iterations[iterations.length - 1].nextK;
+    if (k === undefined) return;
+    const R = simulateRejections(k);
+    const conv = converged(R, k);
+    const nextK = conv ? undefined : Math.max(k + 1, Math.ceil((R + 1) * gamma));
+    iterations.push({ k, R, converged: conv, nextK });
+    draw();
+  }
+
+  function reset() {
+    iterations = [];
+    dotsG.selectAll("*").remove();
+    draw();
+  }
+
+  d3.select("#kfwer-iterate").on("click", iterate);
+  d3.select("#kfwer-reset").on("click", reset);
+  d3.select("#gamma-slider").on("input", function() {
+    gamma = +this.value / 100;
+    d3.select("#gamma-val").text(gamma.toFixed(2));
+    reset();
+  });
+
+  draw();
+})();
+</script>
+</body>
+</html>
