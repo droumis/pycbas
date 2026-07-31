@@ -9,6 +9,9 @@ build/
 # Pixi
 .pixi/
 
+# MkDocs build output
+site/
+
 # Pytest
 .pytest_cache/
 
