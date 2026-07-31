@@ -98,7 +98,8 @@ li { margin-bottom: 6px; }
 
 .vis-container svg {
   display: block;
-  margin: 0 auto;
+  width: 100%;
+  height: auto;
 }
 
 .controls {
@@ -192,27 +193,6 @@ code {
 
 .breakdown p { margin-bottom: 8px; font-size: 0.95em; }
 
-.calc-table {
-  width: 100%;
-  border-collapse: collapse;
-  margin: 12px 0;
-  font-size: 0.9em;
-}
-
-.calc-table th, .calc-table td {
-  padding: 8px 12px;
-  border: 1px solid var(--border);
-  text-align: center;
-}
-
-.calc-table th {
-  background: var(--code-bg);
-  font-weight: 600;
-}
-
-.calc-table .grp0 { color: var(--grp0); }
-.calc-table .grp1 { color: var(--grp1); }
-
 .analogy {
   background: #fff8e1;
   border-left: 4px solid #f9a825;
@@ -247,7 +227,7 @@ code {
 <p>CBAS asks: do certain patterns appear more often in one group of subjects than another? To answer that, it first needs to count every possible short pattern in each subject's stream.</p>
 
 <div class="vis-container" id="vis-sequences">
-  <svg width="780" height="200"></svg>
+  <svg viewBox="0 0 780 200"></svg>
   <div class="controls">
     <label>Sequence length:</label>
     <input type="range" id="seqlen-slider" min="2" max="5" value="3" step="1">
@@ -283,19 +263,19 @@ code {
 <p>The SEM tells you how precisely you know the group mean. It's the standard deviation divided by the square root of the sample size. A larger group or less variable group gives you a smaller SEM (more precision).</p>
 
 <h4>3. Combine the SEMs</h4>
-<p>Because you're comparing two uncertain quantities (both group means have noise), you combine their uncertainties: √(SEM₀² + SEM₁²). This is like error propagation in physics.</p>
+<p>Because you're comparing two uncertain quantities (both group means have noise), you combine their uncertainties: &radic;(SEM&#8320;&sup2; + SEM&#8321;&sup2;). This is like error propagation in physics.</p>
 
 <h4>4. Divide the difference by the combined uncertainty</h4>
 <p>The final statistic: how many "combined standard errors" apart are the groups?</p>
 </div>
 
 <div class="formula">
-  t = (mean<sub>group 0</sub> − mean<sub>group 1</sub>) / √(SEM<sub>0</sub>² + SEM<sub>1</sub>²)
+  t = (mean<sub>group 0</sub> &minus; mean<sub>group 1</sub>) / &radic;(SEM<sub>0</sub>&sup2; + SEM<sub>1</sub>&sup2;)
   <span class="explain">A t of 1 means the groups are 1 combined-SEM apart. A t of 4 means they're 4 apart. Bigger = more evidence of a real difference.</span>
 </div>
 
 <div class="vis-container" id="vis-teststats">
-  <svg width="780" height="340"></svg>
+  <svg viewBox="0 0 780 340"></svg>
   <div class="controls">
     <label>Separation:</label>
     <input type="range" id="effect-slider" min="0" max="100" value="50" step="1">
@@ -324,10 +304,24 @@ code {
 
 <p>The bootstrap answers: "If there were truly no difference between the groups, what would the test statistics look like?" It finds out by erasing the group labels, pooling everyone together, randomly assigning subjects to fake groups, and recomputing the statistics.</p>
 
-<p>Each time you shuffle and recompute, you get one "null" draw. Do this 10,000 times and you build up a distribution of what random group splits produce.</p>
+<p>Each time you shuffle and recompute, you get one "null" draw for <em>every</em> sequence simultaneously. Do this 10,000 times and you get a matrix of null values.</p>
+
+<h3>The bootstrap matrix</h3>
+
+<p>This matrix is the central data structure for everything that follows. It has 10,000 rows (one per resample) and as many columns as there are sequences being tested. Each cell contains "what this sequence's t-value would have been under random group assignment number B."</p>
+
+<div class="vis-container" id="vis-bootmatrix">
+  <svg viewBox="0 0 780 280"></svg>
+</div>
+
+<p>The columns are sequences (the same ones you computed real t-values for). The rows are resamples (each one a different random shuffling of group labels). When we talk about "a row" later, we mean one complete set of null t-values from one shuffling. When we talk about "a column," we mean one sequence's null distribution across all shuffles.</p>
+
+<h3>From the matrix to a p-value for one sequence</h3>
+
+<p>For a single sequence, you could get its p-value by looking down its column and asking "what fraction of null values are bigger than my observed value?" But that ignores the multiple testing problem. The step-down procedure (step 4) uses the matrix differently, looking <em>across</em> rows rather than down columns.</p>
 
 <div class="vis-container" id="vis-bootstrap">
-  <svg width="780" height="300"></svg>
+  <svg viewBox="0 0 780 280"></svg>
   <div class="controls">
     <button id="boot-step">Draw one resample</button>
     <button id="boot-run">Run 200 resamples</button>
@@ -336,9 +330,9 @@ code {
   </div>
 </div>
 
-<p>Watch the histogram form. The red dashed line is your real observed statistic. The fraction of null values that land to the right of it is essentially your p-value: "how often would chance alone produce something this extreme?"</p>
+<p>This histogram shows the distribution of <em>row maximums</em> (the biggest null t-value in each row). The red dashed line is your real observed statistic. The fraction of row-maximums that exceed it is the adjusted p-value. This is much stricter than looking at just one column because the row-maximum represents "what the most extreme random noise across all sequences would look like."</p>
 
-<div class="insight">Crucially, all sequences share the same shuffled groups on each draw. This preserves correlations between sequences (e.g. if LLL goes up, LLLL probably goes up too). Preserving this structure matters for the step-down correction next.</div>
+<div class="insight">All sequences share the same shuffled groups on each draw. This preserves correlations between sequences (e.g. if LLL goes up, LLLL probably goes up too). Preserving this structure matters for the step-down correction next.</div>
 
 <!-- ============ STEP 4: STEP-DOWN ============ -->
 <h2><span class="step-number">4</span> Correcting for Multiple Comparisons</h2>
@@ -347,7 +341,7 @@ code {
 
 <h3>The naive approach (Bonferroni)</h3>
 
-<p>The simplest fix: divide your significance threshold by the number of tests. With 2,000 tests and alpha = 0.05, you'd need p < 0.000025 to declare significance. This works but is extremely conservative. Real effects with moderate strength get missed because the bar is so high.</p>
+<p>The simplest fix: divide your significance threshold by the number of tests. With 2,000 tests and alpha = 0.05, you'd need p &lt; 0.000025 to declare significance. This works but is extremely conservative. Real effects with moderate strength get missed because the bar is so high.</p>
 
 <h3>The step-down idea</h3>
 
@@ -357,35 +351,38 @@ code {
 
 <ol>
 <li><strong>Sort</strong> all your observed test statistics from largest to smallest.</li>
-<li><strong>Start with the biggest one.</strong> Ask: "Is this larger than what I'd expect from pure chance?" To answer, look at each of the 10,000 bootstrap rows. In each row, find the maximum value across all sequences. You now have 10,000 "chance maximums." If your observed statistic beats most of them, it's significant.</li>
-<li><strong>Remove it and move on.</strong> Now look at the second-largest statistic. But this time, the sequence you just declared significant has been removed from the bootstrap rows. So the "chance maximum" in each row is computed from the remaining sequences only. This makes the comparison slightly easier.</li>
+<li><strong>Start with the biggest one.</strong> Ask: "Is this larger than what I'd expect from pure chance?" To answer, look at each row in the bootstrap matrix. In each row, find the maximum value across <em>all</em> columns (sequences). You now have 10,000 "row maximums." If your observed statistic beats most of them, it's significant.</li>
+<li><strong>Remove it and move on.</strong> Now look at the second-largest statistic. But this time, the column for the sequence you just declared significant is ignored when computing row maximums. So the maximum in each row is computed over the remaining columns only. This makes the comparison slightly easier.</li>
 <li><strong>Repeat</strong> until a statistic fails to beat its threshold. Everything from that point down also fails (monotonicity).</li>
 </ol>
+
+<h3>Where does the threshold come from?</h3>
+
+<p>The threshold at each step is calculated from the bootstrap matrix:</p>
+
+<ol>
+<li>Take all 10,000 rows. For each row, find the maximum across the <em>remaining</em> columns (sequences not yet rejected).</li>
+<li>Sort those 10,000 row-maximums from smallest to largest.</li>
+<li>Pick the value at position 10,000 &times; (1 &minus; &alpha;). With &alpha; = 0.5, that's the median (position 5,000).</li>
+</ol>
+
+<p>Your observed statistic must beat this quantile to be declared significant at this step.</p>
+
+<div class="insight">Why does removing a column lower the threshold? Because the maximum over 1,999 columns tends to be smaller than the maximum over 2,000 columns. Every time you peel off a rejected sequence's column, each row's maximum is computed over a smaller set, pulling the whole distribution of row-maximums downward. The quantile of that distribution drops too.</div>
 
 <div class="analogy">Imagine a spelling bee. In each round, the best speller is tested against the hardest word. If they get it right, they're declared "exceptional" and removed. The next round uses slightly easier words because the exceptional speller is gone. Each round, the threshold adapts to who's left.</div>
 
 <div class="vis-container" id="vis-stepdown">
-  <svg width="780" height="360"></svg>
+  <svg viewBox="0 0 780 360"></svg>
   <div class="controls">
     <button id="sd-step">Next step</button>
     <button id="sd-run">Run all</button>
     <button id="sd-reset">Reset</button>
+    <span class="value" id="sd-info"></span>
   </div>
 </div>
 
-<p>The blue bars are observed test statistics (sorted largest to smallest). The red dashed line is the threshold at each step, computed as the median of the null row-maximums over the remaining active set. Watch the threshold drop as rejected sequences are removed from the null comparison. The annotation shows how many sequences remain in the active set.</p>
-
-<h3>Where does the threshold come from?</h3>
-
-<p>The threshold is not arbitrary. It comes directly from the bootstrap null you built in step 3. Here's how:</p>
-
-<ol>
-<li>You have 10,000 bootstrap rows. Each row contains a null t-value for every sequence.</li>
-<li>At step j of the step-down, some sequences have already been rejected and removed. For each bootstrap row, find the <strong>maximum</strong> of the remaining sequences in that row. This gives you 10,000 "row-maximums-over-remaining."</li>
-<li>Sort those 10,000 values. The threshold is the value at position 10,000 &times; (1 &minus; &alpha;). With &alpha; = 0.5, that's the median (position 5,000). Your observed statistic must beat at least half of the null row-maximums to be declared significant.</li>
-</ol>
-
-<div class="insight">Why does removing a sequence lower the threshold? Because the maximum over 1,999 values tends to be smaller than the maximum over 2,000 values. Every time you peel off a rejected sequence, each row's maximum is computed over a smaller set, pulling the whole distribution of row-maximums downward. The (1&minus;&alpha;) quantile of that distribution then drops too.</div>
+<p>The blue bars are observed test statistics (sorted largest to smallest). The red dashed line is the threshold at each step, computed as the median row-maximum over the remaining columns. Watch how it drops as rejected sequences (pink) have their columns removed. Grey bars failed to beat the threshold.</p>
 
 <h3>Why this is more powerful than Bonferroni</h3>
 
@@ -393,12 +390,12 @@ code {
 
 <h3>Direction-conditional removal</h3>
 
-<p>One subtlety: when a sequence is "removed" from a bootstrap row, it only actually disappears if the bootstrap happened to go the same direction as the real observation. If the bootstrap went the opposite direction for that sequence in that row, the value stays. This is a conservative choice that prevents the procedure from being too generous.</p>
+<p>One subtlety: when a sequence's column is "removed" from a bootstrap row, it only actually disappears if the bootstrap happened to go the same direction as the real observation. If the bootstrap went the opposite direction for that sequence in that row, the value stays. This is a conservative choice that prevents the procedure from being too generous.</p>
 
 <!-- ============ STEP 5: k-FWER ============ -->
 <h2><span class="step-number">5</span> Allowing Some False Positives (k-FWER)</h2>
 
-<p>The step-down procedure as described above controls the "family-wise error rate." That means: the probability of even one false positive is kept below alpha. With k=1, you're comparing against the row <em>maximum</em>. This is very strict.</p>
+<p>The step-down procedure as described above controls the "family-wise error rate" at k=1. That means: the probability of even <em>one</em> false positive is kept below alpha. This is very strict.</p>
 
 <h3>Why strictness hurts</h3>
 
@@ -406,42 +403,50 @@ code {
 
 <h3>The k-FWER relaxation</h3>
 
-<p>Instead of comparing against the row maximum (the single largest null value), compare against the k-th largest. With k=5, you're asking: "Is my observed statistic bigger than what the 5th-biggest null value would be?" That's a lower bar, so more sequences pass, but you're now tolerating up to k false positives among your rejections.</p>
+<p>The fix is simple: instead of computing the row <strong>maximum</strong> (the single biggest null value in each row), compute the <strong>k-th largest</strong> value. With k=1, you get the maximum. With k=5, you get the 5th largest. A higher k means a lower threshold, which means more sequences pass.</p>
 
-<div class="vis-container" id="vis-k-explain">
-  <svg width="780" height="200"></svg>
+<p>The tradeoff: you're now tolerating up to k false positives among your rejections. The threshold is lower because you're essentially saying "I'm okay if up to k of my rejections are wrong."</p>
+
+<div class="vis-container" id="vis-kfwer-demo">
+  <svg viewBox="0 0 780 340"></svg>
   <div class="controls">
     <label>k:</label>
-    <input type="range" id="k-explain-slider" min="1" max="8" value="1" step="1">
-    <span class="value" id="k-explain-val">k = 1 (row maximum)</span>
+    <input type="range" id="k-demo-slider" min="1" max="15" value="1" step="1">
+    <span class="value" id="k-demo-val">k = 1</span>
+    <span class="value" id="k-demo-rejections"></span>
   </div>
 </div>
 
-<p>The sorted dots are null values from one bootstrap row. The highlighted dot is the k-th largest, which becomes the comparison threshold. As k increases, the threshold drops and more sequences can pass.</p>
+<p>The bars are the same observed test statistics from before. The threshold (red line) is now the quantile of the k-th largest per row instead of the row maximum. Drag k higher and watch the threshold drop and more bars turn pink (significant). The number of rejections increases as you relax the standard.</p>
 
 <h3>Finding the right k automatically</h3>
 
-<p>You don't choose k arbitrarily. The algorithm finds it through iteration:</p>
+<p>You don't pick k by hand. The algorithm finds the k where the expected fraction of false positives among your rejections is controlled at level &gamma; (default 0.05, meaning at most 5% false).</p>
+
+<p>The logic is iterative:</p>
 
 <ol>
-<li>Start with k=1. Run the step-down. Count rejections R.</li>
-<li>Ask: "If I have R rejections and k of them are false, is my false discovery proportion (k/R) acceptable?"</li>
-<li>If R is too large relative to k (specifically, if R &ge; k/&gamma; - 1), increase k and try again.</li>
-<li>When k and R are in balance, stop. Run the final step-down at this converged k.</li>
+<li><strong>Start with k=1.</strong> Run the full step-down. Count how many rejections R you get.</li>
+<li><strong>Check the balance.</strong> If R rejections and at most k of them are false, the false discovery proportion is k/R. Is k/R &le; &gamma;? In other words, is R &le; k/&gamma;?</li>
+<li><strong>If R is too large</strong> (meaning k/R &lt; &gamma;, so you have too many rejections relative to your tolerance), increase k. Specifically, set the new k to the smallest value where k/R &ge; &gamma; would hold.</li>
+<li><strong>Repeat.</strong> A larger k gives a lower threshold, which gives more rejections R, which might require an even larger k. The process converges when R and k come into balance.</li>
 </ol>
 
-<div class="vis-container" id="vis-kfwer">
-  <svg width="780" height="260"></svg>
+<div class="analogy">Think of it like finding the right net size for fishing. A very fine net (k=1) catches very few fish but guarantees no trash. A coarser net catches more fish but lets some trash through. You keep loosening the net until the ratio of trash to total catch stabilizes at your tolerance level (5%).</div>
+
+<div class="vis-container" id="vis-kfwer-iter">
+  <svg viewBox="0 0 780 320"></svg>
   <div class="controls">
     <button id="kfwer-iterate">Next iteration</button>
+    <button id="kfwer-run">Run to convergence</button>
     <button id="kfwer-reset">Reset</button>
     <label>&gamma;:</label>
     <input type="range" id="gamma-slider" min="1" max="20" value="5" step="1">
-    <span class="value" id="gamma-val">0.05</span>
+    <span class="value" id="gamma-val">&gamma; = 0.05</span>
   </div>
 </div>
 
-<p>Each dot is one iteration. The red line is the convergence boundary. Below it, the procedure has found a k where the expected false discovery proportion is below &gamma;. The algorithm stops at the first dot that falls below the line.</p>
+<p>The left panel shows each iteration as a row: the k tried, how many rejections resulted, the false discovery proportion k/R, and whether that's below &gamma;. The right panel plots the trajectory: each iteration moves to a new (k, R) point. The green region is where k/R &le; &gamma; (acceptable). The algorithm stops at the first point that lands in the green region.</p>
 
 <div class="breakdown">
 <h4>What &gamma; means in practice</h4>
@@ -456,14 +461,14 @@ code {
 <p>The power of the approach comes from three things working together:</p>
 
 <ul>
-<li>The <strong>step-down</strong> gains power by removing already-rejected sequences, lowering the bar for subsequent ones.</li>
+<li>The <strong>step-down</strong> gains power by removing already-rejected sequences' columns from the bootstrap matrix, lowering the bar for subsequent ones.</li>
 <li>The <strong>k-FWER relaxation</strong> tolerates a controlled number of false positives, dramatically increasing how many true effects you recover.</li>
 <li>The <strong>shared bootstrap</strong> preserves correlations between sequences, so the correction isn't overly conservative for correlated tests.</li>
 </ul>
 
 <p>A sequence is declared significant if its &zeta;-value is below &alpha; (default 0.5). The final output includes the direction of the effect, letting you say not just "these groups differ on this pattern" but "group 0 uses this pattern more than group 1."</p>
 
-<a class="nav-link" href="algorithm/">← Technical algorithm description</a>
+<a class="nav-link" href="algorithm/">&#8592; Technical algorithm description</a>
 
 </div>
 
@@ -473,6 +478,7 @@ code {
 // ============================================================
 (function() {
   const svg = d3.select("#vis-sequences svg");
+  const width = 780, height = 200;
   const stream = "LRLRRLLRLRLRRLL".split("");
   const colors = { L: "#4361ee", R: "#f72585" };
 
@@ -623,7 +629,6 @@ code {
     return { mean0, mean1, std0, std1, sem0, sem1, sigma, t };
   }
 
-  // Arrow marker
   svg.append("defs").append("marker")
     .attr("id", "arrow").attr("viewBox", "0 0 10 10")
     .attr("refX", 9).attr("refY", 5)
@@ -644,7 +649,6 @@ code {
 
     g.selectAll("*").remove();
 
-    // X axis
     g.append("g")
       .attr("transform", `translate(0,${h})`)
       .call(d3.axisBottom(xScale).ticks(8))
@@ -656,8 +660,6 @@ code {
       .text("Sequence count per subject");
 
     const y0 = h * 0.3, y1 = h * 0.7;
-
-    // Jittered dots
     const jitter = () => (Math.random() - 0.5) * 28;
 
     g.selectAll(".dot0").data(data.grp0).join("circle")
@@ -670,7 +672,6 @@ code {
       .attr("cy", () => y1 + jitter())
       .attr("r", 5).attr("fill", "#f72585").attr("opacity", 0.5);
 
-    // Group labels
     g.append("text").attr("x", -8).attr("y", y0)
       .attr("text-anchor", "end").attr("dominant-baseline", "middle")
       .attr("font-size", "12px").attr("fill", "#4361ee").text("Group 0");
@@ -678,7 +679,6 @@ code {
       .attr("text-anchor", "end").attr("dominant-baseline", "middle")
       .attr("font-size", "12px").attr("fill", "#f72585").text("Group 1");
 
-    // Mean lines with labels
     g.append("line")
       .attr("x1", xScale(stats.mean0)).attr("x2", xScale(stats.mean0))
       .attr("y1", y0 - 22).attr("y2", y0 + 22)
@@ -697,7 +697,6 @@ code {
       .attr("text-anchor", "middle").attr("font-size", "10px").attr("fill", "#f72585")
       .text(`mean = ${stats.mean1.toFixed(2)}`);
 
-    // SEM brackets
     const semY = y0 - 38;
     g.append("line")
       .attr("x1", xScale(stats.mean0 - stats.sem0)).attr("x2", xScale(stats.mean0 + stats.sem0))
@@ -706,7 +705,7 @@ code {
     g.append("text")
       .attr("x", xScale(stats.mean0 + stats.sem0) + 4).attr("y", semY + 4)
       .attr("font-size", "9px").attr("fill", "#4361ee")
-      .text(`SEM₀ = ${stats.sem0.toFixed(2)}`);
+      .text(`SEM = ${stats.sem0.toFixed(2)}`);
 
     const semY1 = y1 + 44;
     g.append("line")
@@ -716,9 +715,8 @@ code {
     g.append("text")
       .attr("x", xScale(stats.mean1 + stats.sem1) + 4).attr("y", semY1 + 4)
       .attr("font-size", "9px").attr("fill", "#f72585")
-      .text(`SEM₁ = ${stats.sem1.toFixed(2)}`);
+      .text(`SEM = ${stats.sem1.toFixed(2)}`);
 
-    // Delta arrow between means
     const arrowY = (y0 + y1) / 2;
     if (Math.abs(stats.mean0 - stats.mean1) > 0.05) {
       g.append("line")
@@ -733,7 +731,6 @@ code {
         .text(`Δ = ${(stats.mean0 - stats.mean1).toFixed(2)}`);
     }
 
-    // T-value annotation
     g.append("text")
       .attr("x", w - 5).attr("y", 0)
       .attr("text-anchor", "end")
@@ -760,11 +757,114 @@ code {
 })();
 
 // ============================================================
-// STEP 3: Bootstrap null
+// STEP 3a: Bootstrap matrix visualization
+// ============================================================
+(function() {
+  const svg = d3.select("#vis-bootmatrix svg");
+  const width = 780, height = 280;
+  const margin = { top: 50, right: 30, bottom: 40, left: 80 };
+  const w = width - margin.left - margin.right;
+  const h = height - margin.top - margin.bottom;
+  const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
+
+  const nRows = 8;
+  const nCols = 12;
+  const cellW = Math.min(45, w / nCols);
+  const cellH = Math.min(22, h / nRows);
+  const gridW = cellW * nCols;
+  const gridH = cellH * nRows;
+
+  // Generate random null t-values for the grid
+  const matrix = Array.from({ length: nRows }, () =>
+    Array.from({ length: nCols }, () => (Math.abs(d3.randomNormal(0, 1)()) * 1.5).toFixed(1))
+  );
+
+  // Color scale for cell values
+  const colorScale = d3.scaleSequential(d3.interpolateBlues).domain([0, 4]);
+
+  // Draw cells
+  for (let r = 0; r < nRows; r++) {
+    for (let c = 0; c < nCols; c++) {
+      const val = +matrix[r][c];
+      g.append("rect")
+        .attr("x", c * cellW).attr("y", r * cellH)
+        .attr("width", cellW - 1).attr("height", cellH - 1)
+        .attr("fill", colorScale(val))
+        .attr("rx", 2);
+      g.append("text")
+        .attr("x", c * cellW + cellW / 2).attr("y", r * cellH + cellH / 2 + 1)
+        .attr("text-anchor", "middle").attr("dominant-baseline", "middle")
+        .attr("font-size", "10px").attr("fill", val > 2.5 ? "#fff" : "#333")
+        .text(val);
+    }
+  }
+
+  // Column labels
+  const seqNames = ["LLL","LLR","LRL","LRR","RLL","RLR","RRL","RRR","LLRL","LLRR","LRLL","LRLR"];
+  for (let c = 0; c < nCols; c++) {
+    g.append("text")
+      .attr("x", c * cellW + cellW / 2).attr("y", -8)
+      .attr("text-anchor", "middle")
+      .attr("font-size", "9px").attr("fill", "#666")
+      .attr("transform", `rotate(-30, ${c * cellW + cellW / 2}, -8)`)
+      .text(seqNames[c] || `seq${c}`);
+  }
+  g.append("text")
+    .attr("x", gridW / 2).attr("y", -35)
+    .attr("text-anchor", "middle")
+    .attr("font-size", "12px").attr("font-weight", "600").attr("fill", "#333")
+    .text("Columns = sequences");
+
+  // Row labels
+  for (let r = 0; r < nRows; r++) {
+    g.append("text")
+      .attr("x", -8).attr("y", r * cellH + cellH / 2 + 1)
+      .attr("text-anchor", "end").attr("dominant-baseline", "middle")
+      .attr("font-size", "10px").attr("fill", "#666")
+      .text(`shuffle ${r + 1}`);
+  }
+  g.append("text")
+    .attr("transform", "rotate(-90)")
+    .attr("x", -gridH / 2).attr("y", -55)
+    .attr("text-anchor", "middle")
+    .attr("font-size", "12px").attr("font-weight", "600").attr("fill", "#333")
+    .text("Rows = resamples");
+
+  // Ellipsis indicators
+  g.append("text")
+    .attr("x", gridW + 10).attr("y", gridH / 2)
+    .attr("dominant-baseline", "middle")
+    .attr("font-size", "14px").attr("fill", "#999")
+    .text("...");
+  g.append("text")
+    .attr("x", gridW / 2).attr("y", gridH + 18)
+    .attr("text-anchor", "middle")
+    .attr("font-size", "11px").attr("fill", "#999")
+    .text("(10,000 rows × 2,000+ columns in practice)");
+
+  // Highlight row-max in row 0
+  let maxCol = 0;
+  let maxVal = 0;
+  for (let c = 0; c < nCols; c++) {
+    if (+matrix[0][c] > maxVal) { maxVal = +matrix[0][c]; maxCol = c; }
+  }
+  g.append("rect")
+    .attr("x", maxCol * cellW - 2).attr("y", -2)
+    .attr("width", cellW + 2).attr("height", cellH + 2)
+    .attr("fill", "none").attr("stroke", "#e63946").attr("stroke-width", 2).attr("rx", 3);
+  g.append("text")
+    .attr("x", maxCol * cellW + cellW / 2).attr("y", cellH + 14)
+    .attr("text-anchor", "middle")
+    .attr("font-size", "9px").attr("fill", "#e63946").attr("font-weight", "600")
+    .text("↑ row max");
+})();
+
+// ============================================================
+// STEP 3b: Bootstrap histogram (row-maximums)
 // ============================================================
 (function() {
   const svg = d3.select("#vis-bootstrap svg");
-  const width = 780, height = 300;
+  const width = 780, height = 280;
   const margin = { top: 20, right: 30, bottom: 50, left: 50 };
   const w = width - margin.left - margin.right;
   const h = height - margin.top - margin.bottom;
@@ -785,7 +885,7 @@ code {
     .attr("x", w / 2).attr("y", h + 40)
     .attr("text-anchor", "middle")
     .attr("font-size", "12px").attr("fill", "#666")
-    .text("Null |t| values (row maximum across all sequences)");
+    .text("Row maximum (max null |t| across all columns in one row)");
 
   const yAxisG = g.append("g");
 
@@ -830,7 +930,6 @@ code {
       .attr("fill", d => d.x0 >= observedT ? "#f72585" : "#4361ee")
       .attr("opacity", d => d.x0 >= observedT ? 0.4 : 0.6);
 
-    // p-value annotation
     const exceed = nullValues.filter(v => v >= observedT).length;
     const pval = (exceed + 1) / (nullValues.length + 1);
     pvalG.selectAll("*").remove();
@@ -843,7 +942,7 @@ code {
       .attr("x", w - 5).attr("y", 38)
       .attr("text-anchor", "end")
       .attr("font-size", "10px").attr("fill", "#999")
-      .text(`(${exceed} of ${nullValues.length} exceed observed)`);
+      .text(`(${exceed} of ${nullValues.length} row-maxes exceed observed)`);
 
     d3.select("#boot-count").text(`${nullValues.length} / 10,000`);
   }
@@ -881,23 +980,19 @@ code {
   const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
 
   const nSeq = 30;
-  const nBoot = 500; // bootstrap rows (smaller than 10k for demo speed)
-  const alpha = 0.5; // significance level (median of null distribution)
+  const nBoot = 500;
+  const alpha = 0.5;
 
-  // Generate observed stats: mix of "real" effects and null
   const nReal = 12;
   const observedStats = Array.from({ length: nSeq }, (_, i) => {
     if (i < nReal) return 3.5 + (nReal - i) * 0.15 + (Math.random() - 0.5) * 0.2;
     return 1.5 + Math.random() * 0.8;
   }).sort((a, b) => b - a);
 
-  // Generate bootstrap null matrix: nBoot rows x nSeq columns
-  // Each value is what that sequence's |t| would be under the null
   const bootMatrix = Array.from({ length: nBoot }, () =>
     Array.from({ length: nSeq }, () => Math.abs(d3.randomNormal(0, 1)()) * 1.8)
   );
 
-  // Compute threshold: (1-alpha) quantile of row-maximums over active set
   function computeThreshold(activeIndices) {
     const rowMaxes = bootMatrix.map(row => {
       let mx = -Infinity;
@@ -913,6 +1008,7 @@ code {
 
   let currentStep = 0;
   let rejected = [];
+  let failed = false;
   let thresholds = [];
   let activeSet = Array.from({ length: nSeq }, (_, i) => i);
 
@@ -955,19 +1051,19 @@ code {
       .attr("height", d => h - yScale(d))
       .attr("fill", (d, i) => {
         if (rejected.includes(i)) return "#f72585";
-        if (i === currentStep) return "#4361ee";
-        if (i < currentStep) return "#ccc";
+        if (failed && i >= currentStep) return "#bbb";
+        if (i === currentStep && !failed) return "#4361ee";
+        if (i < currentStep && !rejected.includes(i)) return "#bbb";
         return "#4361ee";
       })
       .attr("opacity", (d, i) => {
         if (rejected.includes(i)) return 0.85;
-        if (i === currentStep) return 1;
-        if (i < currentStep) return 0.4;
+        if (i === currentStep && !failed) return 1;
+        if (i < currentStep || failed) return 0.5;
         return 0.6;
       })
       .attr("rx", 2);
 
-    // Threshold line
     threshG.selectAll("*").remove();
     if (thresholds.length > 0) {
       const lineData = thresholds.map((t, i) => [xScale(i), yScale(t)]);
@@ -977,40 +1073,32 @@ code {
         .attr("stroke", "#e63946")
         .attr("stroke-width", 2)
         .attr("stroke-dasharray", "5,3");
-      // Label at the end
       const last = lineData[lineData.length - 1];
       threshG.append("text")
         .attr("x", last[0] + 8)
-        .attr("y", last[1] + 4)
-        .attr("font-size", "11px").attr("fill", "#e63946")
-        .text(`median of null row-max (α=${alpha})`);
+        .attr("y", Math.max(last[1] - 6, 14))
+        .attr("font-size", "10px").attr("fill", "#e63946")
+        .text("threshold (median row-max)");
     }
 
-    // Annotation
     annotG.selectAll("*").remove();
     annotG.append("text")
       .attr("x", w).attr("y", 0)
       .attr("text-anchor", "end")
       .attr("font-size", "13px").attr("fill", "#333")
-      .text(`${rejected.length} significant`);
-    annotG.append("text")
-      .attr("x", w).attr("y", 18)
-      .attr("text-anchor", "end")
-      .attr("font-size", "11px").attr("fill", "#999")
-      .text(`step ${currentStep} / ${nSeq} | ${activeSet.length} sequences in null`);
+      .text(`${rejected.length} rejected`);
+    d3.select("#sd-info").text(`${activeSet.length} columns remain in null`);
   }
 
   function stepOnce() {
-    if (currentStep >= nSeq) return;
-
-    // Compute threshold from row-max of the ACTIVE set
+    if (currentStep >= nSeq || failed) return;
     const thresh = computeThreshold(activeSet);
     thresholds.push(thresh);
-
     if (observedStats[currentStep] > thresh) {
       rejected.push(currentStep);
-      // Remove this sequence from the active set for future thresholds
       activeSet = activeSet.filter(idx => idx !== currentStep);
+    } else {
+      failed = true;
     }
     currentStep++;
     draw();
@@ -1019,6 +1107,7 @@ code {
   function reset() {
     currentStep = 0;
     rejected = [];
+    failed = false;
     thresholds = [];
     activeSet = Array.from({ length: nSeq }, (_, i) => i);
     draw();
@@ -1031,7 +1120,7 @@ code {
     function step() {
       stepOnce();
       i++;
-      if (i < nSeq) setTimeout(step, 150);
+      if (i < nSeq && !failed) setTimeout(step, 150);
     }
     step();
   });
@@ -1040,213 +1129,306 @@ code {
 })();
 
 // ============================================================
-// STEP 5a: k explanation (sorted null row)
+// STEP 5a: k-FWER demo (same bars, adjustable k)
 // ============================================================
 (function() {
-  const svg = d3.select("#vis-k-explain svg");
-  const width = 780, height = 200;
-  const margin = { top: 30, right: 30, bottom: 40, left: 50 };
+  const svg = d3.select("#vis-kfwer-demo svg");
+  const width = 780, height = 340;
+  const margin = { top: 30, right: 30, bottom: 50, left: 60 };
   const w = width - margin.left - margin.right;
   const h = height - margin.top - margin.bottom;
   const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
 
-  // Generate a sorted row of null values
-  const nVals = 25;
-  const nullRow = Array.from({ length: nVals }, () =>
-    Math.abs(d3.randomNormal(0, 1)()) + Math.random() * 0.5
-  ).sort((a, b) => b - a);
+  const nSeq = 40;
+  const nBoot = 500;
+  const alpha = 0.5;
 
-  const xScale = d3.scaleLinear().domain([0, nVals - 1]).range([0, w]);
-  const yScale = d3.scaleLinear().domain([0, d3.max(nullRow) + 0.5]).range([h, 0]);
+  // Mix of real and null
+  const nReal = 18;
+  const observedStats = Array.from({ length: nSeq }, (_, i) => {
+    if (i < nReal) return 3.2 + (nReal - i) * 0.1 + (Math.random() - 0.5) * 0.15;
+    return 1.0 + Math.random() * 1.2;
+  }).sort((a, b) => b - a);
+
+  const bootMatrix = Array.from({ length: nBoot }, () =>
+    Array.from({ length: nSeq }, () => Math.abs(d3.randomNormal(0, 1)()) * 1.6)
+  );
+
+  function computeThresholdK(k) {
+    // For each row, get the k-th largest value, then take the (1-alpha) quantile
+    const kthValues = bootMatrix.map(row => {
+      const sorted = [...row].sort((a, b) => b - a);
+      return sorted[Math.min(k - 1, sorted.length - 1)];
+    });
+    kthValues.sort((a, b) => a - b);
+    return kthValues[Math.floor(nBoot * (1 - alpha))];
+  }
+
+  const xScale = d3.scaleLinear().domain([0, nSeq - 1]).range([0, w]);
+  const yScale = d3.scaleLinear().domain([0, 5.5]).range([h, 0]);
 
   g.append("g")
     .attr("transform", `translate(0,${h})`)
-    .call(d3.axisBottom(xScale).ticks(5).tickFormat(d => d + 1))
+    .call(d3.axisBottom(xScale).ticks(10).tickFormat(d => d + 1))
     .selectAll("text").attr("font-size", "11px");
-  g.append("text")
-    .attr("x", w / 2).attr("y", h + 32)
-    .attr("text-anchor", "middle")
-    .attr("font-size", "11px").attr("fill", "#666")
-    .text("Rank within this bootstrap row (sorted)");
-
   g.append("g")
-    .call(d3.axisLeft(yScale).ticks(4))
+    .call(d3.axisLeft(yScale).ticks(6))
     .selectAll("text").attr("font-size", "11px");
 
-  const dotsG = g.append("g");
-  const lineG = g.append("g");
-  const labelG = g.append("g");
+  g.append("text")
+    .attr("x", w / 2).attr("y", h + 40)
+    .attr("text-anchor", "middle")
+    .attr("font-size", "12px").attr("fill", "#666")
+    .text("Sequence rank");
+  g.append("text")
+    .attr("transform", "rotate(-90)")
+    .attr("x", -h / 2).attr("y", -45)
+    .attr("text-anchor", "middle")
+    .attr("font-size", "12px").attr("fill", "#666")
+    .text("Test statistic");
+
+  const barsG = g.append("g");
+  const threshG = g.append("g");
+  const annotG = g.append("g");
 
   function draw(k) {
-    dotsG.selectAll("circle")
-      .data(nullRow)
-      .join("circle")
-      .attr("cx", (d, i) => xScale(i))
-      .attr("cy", d => yScale(d))
-      .attr("r", (d, i) => i === k - 1 ? 9 : 5)
-      .attr("fill", (d, i) => i === k - 1 ? "#f72585" : "#4361ee")
-      .attr("opacity", (d, i) => i < k ? 0.9 : 0.3)
-      .attr("stroke", (d, i) => i === k - 1 ? "#f72585" : "none")
-      .attr("stroke-width", 2);
+    const thresh = computeThresholdK(k);
+    const barWidth = Math.min(14, w / nSeq * 0.8);
 
-    // Threshold line
-    lineG.selectAll("*").remove();
-    const threshVal = nullRow[k - 1];
-    lineG.append("line")
+    const rejCount = observedStats.filter(s => s > thresh).length;
+
+    barsG.selectAll("rect")
+      .data(observedStats)
+      .join("rect")
+      .attr("x", (d, i) => xScale(i) - barWidth / 2)
+      .attr("width", barWidth)
+      .attr("y", d => yScale(d))
+      .attr("height", d => h - yScale(d))
+      .attr("fill", d => d > thresh ? "#f72585" : "#4361ee")
+      .attr("opacity", d => d > thresh ? 0.85 : 0.5)
+      .attr("rx", 2);
+
+    threshG.selectAll("*").remove();
+    threshG.append("line")
       .attr("x1", 0).attr("x2", w)
-      .attr("y1", yScale(threshVal)).attr("y2", yScale(threshVal))
-      .attr("stroke", "#f72585").attr("stroke-width", 1.5)
-      .attr("stroke-dasharray", "4,3").attr("opacity", 0.7);
-
-    labelG.selectAll("*").remove();
-    labelG.append("text")
-      .attr("x", w).attr("y", yScale(threshVal) - 8)
+      .attr("y1", yScale(thresh)).attr("y2", yScale(thresh))
+      .attr("stroke", "#e63946").attr("stroke-width", 2)
+      .attr("stroke-dasharray", "5,3");
+    threshG.append("text")
+      .attr("x", w).attr("y", yScale(thresh) - 8)
       .attr("text-anchor", "end")
-      .attr("font-size", "12px").attr("fill", "#f72585").attr("font-weight", "600")
-      .text(`threshold = ${threshVal.toFixed(2)} (${k}${k===1?'st':k===2?'nd':k===3?'rd':'th'} largest)`);
+      .attr("font-size", "11px").attr("fill", "#e63946")
+      .text(`threshold = ${thresh.toFixed(2)} (${k === 1 ? 'row max' : k + 'th largest per row'})`);
 
-    d3.select("#k-explain-val").text(
-      k === 1 ? "k = 1 (row maximum)" : `k = ${k} (${k}${k===2?'nd':k===3?'rd':'th'} largest)`
-    );
+    annotG.selectAll("*").remove();
+    annotG.append("text")
+      .attr("x", w).attr("y", 14)
+      .attr("text-anchor", "end")
+      .attr("font-size", "13px").attr("fill", "#333")
+      .text(`${rejCount} rejections`);
+    if (k > 1) {
+      annotG.append("text")
+        .attr("x", w).attr("y", 32)
+        .attr("text-anchor", "end")
+        .attr("font-size", "11px").attr("fill", "#999")
+        .text(`tolerating up to ${k} false positives`);
+    }
+
+    d3.select("#k-demo-val").text(`k = ${k}`);
+    d3.select("#k-demo-rejections").text(`${rejCount} pass`);
   }
 
-  d3.select("#k-explain-slider").on("input", function() {
+  d3.select("#k-demo-slider").on("input", function() {
     draw(+this.value);
   });
   draw(1);
 })();
 
 // ============================================================
-// STEP 5b: k-FWER iteration
+// STEP 5b: k-FWER iteration (table + trajectory plot)
 // ============================================================
 (function() {
-  const svg = d3.select("#vis-kfwer svg");
-  const width = 780, height = 260;
-  const margin = { top: 30, right: 30, bottom: 50, left: 60 };
+  const svg = d3.select("#vis-kfwer-iter svg");
+  const width = 780, height = 320;
+  const margin = { top: 30, right: 30, bottom: 50, left: 50 };
+  const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
   const w = width - margin.left - margin.right;
   const h = height - margin.top - margin.bottom;
-  const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
+
+  // Left: table area, Right: plot area
+  const tableW = 320;
+  const plotX = tableW + 60;
+  const plotW = w - plotX;
 
   let gamma = 0.05;
   let iterations = [];
 
+  // Simulate: larger k -> more rejections (roughly linear with noise)
   function simulateRejections(k) {
-    return Math.max(k + 1, Math.round(300 + k * 120 + (Math.random() - 0.5) * 40));
+    const base = 200 + k * 100;
+    return Math.round(base + (Math.random() - 0.5) * 30);
   }
 
-  function converged(R, k) {
-    return R < k / gamma - 1;
-  }
+  // Table headers
+  const tableG = g.append("g");
+  const plotG = g.append("g").attr("transform", `translate(${plotX}, 0)`);
 
-  const xScale = d3.scaleLinear().domain([0, 12]).range([0, w]);
-  const yScale = d3.scaleLinear().domain([0, 1600]).range([h, 0]);
+  function drawTable() {
+    tableG.selectAll("*").remove();
 
-  g.append("g")
-    .attr("transform", `translate(0,${h})`)
-    .call(d3.axisBottom(xScale).ticks(12).tickFormat(d => d))
-    .selectAll("text").attr("font-size", "11px");
-  g.append("text")
-    .attr("x", w / 2).attr("y", h + 40)
-    .attr("text-anchor", "middle")
-    .attr("font-size", "12px").attr("fill", "#666")
-    .text("k (number of tolerated false positives)");
-
-  const yAxisG = g.append("g");
-  yAxisG.call(d3.axisLeft(yScale).ticks(6))
-    .selectAll("text").attr("font-size", "11px");
-  g.append("text")
-    .attr("transform", "rotate(-90)")
-    .attr("x", -h / 2).attr("y", -45)
-    .attr("text-anchor", "middle")
-    .attr("font-size", "12px").attr("fill", "#666")
-    .text("Rejections (R)");
-
-  const lineG = g.append("g");
-  const dotsG = g.append("g");
-
-  function drawConvergenceLine() {
-    lineG.selectAll("*").remove();
-    const pts = d3.range(0.5, 12, 0.3).map(k => ({ k, R: k / gamma - 1 }));
-    lineG.append("path")
-      .datum(pts)
-      .attr("d", d3.line().x(d => xScale(d.k)).y(d => yScale(d.R)))
-      .attr("fill", "none")
-      .attr("stroke", "#e63946")
-      .attr("stroke-width", 1.5)
-      .attr("stroke-dasharray", "5,3");
-    lineG.append("text")
-      .attr("x", xScale(9)).attr("y", yScale(9 / gamma - 1) - 10)
-      .attr("font-size", "11px").attr("fill", "#e63946")
-      .text("R = k/γ − 1 (convergence)");
-  }
-
-  function draw() {
-    drawConvergenceLine();
-
-    dotsG.selectAll("*").remove();
-    iterations.forEach((d, i) => {
-      const dotG = dotsG.append("g");
-      dotG.append("circle")
-        .attr("cx", xScale(d.k)).attr("cy", yScale(d.R))
-        .attr("r", 8)
-        .attr("fill", d.converged ? "#2a9d8f" : "#4361ee")
-        .attr("opacity", 0.85);
-      dotG.append("text")
-        .attr("x", xScale(d.k)).attr("y", yScale(d.R) - 14)
+    const rowH = 28;
+    const headers = ["k", "Rejections (R)", "k/R", "< γ?"];
+    const colW = [40, 100, 70, 60];
+    let x = 0;
+    headers.forEach((h, i) => {
+      tableG.append("text")
+        .attr("x", x + colW[i] / 2).attr("y", 14)
         .attr("text-anchor", "middle")
-        .attr("font-size", "10px").attr("fill", "#333")
-        .text(`R=${d.R}`);
-      if (d.converged) {
-        dotG.append("text")
-          .attr("x", xScale(d.k) + 14).attr("y", yScale(d.R) + 5)
-          .attr("font-size", "11px").attr("fill", "#2a9d8f").attr("font-weight", "600")
-          .text("✓ converged");
-      }
-      // Arrow to next
-      if (i < iterations.length - 1) {
-        const next = iterations[i + 1];
-        dotsG.append("line")
-          .attr("x1", xScale(d.k) + 10).attr("x2", xScale(next.k) - 10)
-          .attr("y1", yScale(d.R)).attr("y2", yScale(next.R))
-          .attr("stroke", "#999").attr("stroke-width", 1)
-          .attr("marker-end", "url(#arrow2)");
+        .attr("font-size", "11px").attr("font-weight", "600").attr("fill", "#333")
+        .text(h);
+      x += colW[i];
+    });
+    tableG.append("line")
+      .attr("x1", 0).attr("x2", tableW)
+      .attr("y1", 22).attr("y2", 22)
+      .attr("stroke", "#ccc");
+
+    iterations.forEach((d, i) => {
+      const y = 22 + (i + 1) * rowH;
+      let x = 0;
+      const fdp = (d.R > 0 ? d.k / d.R : 0).toFixed(3);
+      const ok = d.R > 0 && d.k / d.R >= gamma;
+      const vals = [d.k, d.R, fdp, ok ? "✓ yes" : "✗ no"];
+      vals.forEach((v, ci) => {
+        tableG.append("text")
+          .attr("x", x + colW[ci] / 2).attr("y", y)
+          .attr("text-anchor", "middle")
+          .attr("font-size", "11px")
+          .attr("fill", ci === 3 ? (ok ? "#2a9d8f" : "#e63946") : "#333")
+          .attr("font-weight", ci === 3 ? "600" : "normal")
+          .text(v);
+        x += colW[ci];
+      });
+      if (ok && (i === iterations.length - 1)) {
+        tableG.append("rect")
+          .attr("x", 0).attr("y", y - 12)
+          .attr("width", tableW).attr("height", rowH - 4)
+          .attr("fill", "#2a9d8f").attr("opacity", 0.08).attr("rx", 3);
       }
     });
   }
 
-  // Arrow marker
-  svg.append("defs").append("marker")
-    .attr("id", "arrow2").attr("viewBox", "0 0 10 10")
-    .attr("refX", 9).attr("refY", 5)
-    .attr("markerWidth", 5).attr("markerHeight", 5)
-    .attr("orient", "auto")
-    .append("path").attr("d", "M 0 0 L 10 5 L 0 10 z").attr("fill", "#999");
+  function drawPlot() {
+    plotG.selectAll("*").remove();
+
+    const maxK = Math.max(15, ...iterations.map(d => d.k + 2));
+    const maxR = Math.max(1600, ...iterations.map(d => d.R + 100));
+
+    const xScale = d3.scaleLinear().domain([0, maxK]).range([0, plotW]);
+    const yScale = d3.scaleLinear().domain([0, maxR]).range([h, 0]);
+
+    plotG.append("g")
+      .attr("transform", `translate(0,${h})`)
+      .call(d3.axisBottom(xScale).ticks(6))
+      .selectAll("text").attr("font-size", "10px");
+    plotG.append("text")
+      .attr("x", plotW / 2).attr("y", h + 35)
+      .attr("text-anchor", "middle")
+      .attr("font-size", "11px").attr("fill", "#666")
+      .text("k");
+
+    plotG.append("g")
+      .call(d3.axisLeft(yScale).ticks(5))
+      .selectAll("text").attr("font-size", "10px");
+    plotG.append("text")
+      .attr("transform", "rotate(-90)")
+      .attr("x", -h / 2).attr("y", -35)
+      .attr("text-anchor", "middle")
+      .attr("font-size", "11px").attr("fill", "#666")
+      .text("R (rejections)");
+
+    // Green region: R <= k/gamma (i.e. k/R >= gamma)
+    const boundaryPts = d3.range(0, maxK + 1, 0.5).map(k => [xScale(k), yScale(k / gamma)]);
+    const areaBelow = [...boundaryPts, [xScale(maxK), yScale(0)], [xScale(0), yScale(0)]];
+    plotG.append("path")
+      .attr("d", d3.line()(areaBelow))
+      .attr("fill", "#2a9d8f").attr("opacity", 0.1);
+    plotG.append("path")
+      .attr("d", d3.line()(boundaryPts))
+      .attr("fill", "none").attr("stroke", "#2a9d8f")
+      .attr("stroke-width", 1.5).attr("stroke-dasharray", "4,3");
+    plotG.append("text")
+      .attr("x", xScale(maxK * 0.7)).attr("y", yScale(maxK * 0.7 / gamma) + 14)
+      .attr("font-size", "10px").attr("fill", "#2a9d8f")
+      .text("R = k/γ (boundary)");
+
+    // Plot points and arrows
+    iterations.forEach((d, i) => {
+      const ok = d.R > 0 && d.k / d.R >= gamma;
+      plotG.append("circle")
+        .attr("cx", xScale(d.k)).attr("cy", yScale(d.R))
+        .attr("r", 6)
+        .attr("fill", ok ? "#2a9d8f" : "#4361ee")
+        .attr("stroke", "#fff").attr("stroke-width", 1.5);
+      plotG.append("text")
+        .attr("x", xScale(d.k) + 9).attr("y", yScale(d.R) + 4)
+        .attr("font-size", "9px").attr("fill", "#333")
+        .text(`(${d.k}, ${d.R})`);
+
+      if (i < iterations.length - 1) {
+        const next = iterations[i + 1];
+        plotG.append("line")
+          .attr("x1", xScale(d.k) + 7).attr("x2", xScale(next.k) - 7)
+          .attr("y1", yScale(d.R)).attr("y2", yScale(next.R))
+          .attr("stroke", "#999").attr("stroke-width", 1)
+          .attr("stroke-dasharray", "2,2");
+      }
+    });
+  }
 
   function iterate() {
-    if (iterations.length > 0 && iterations[iterations.length - 1].converged) return;
-    const k = iterations.length === 0 ? 1 : iterations[iterations.length - 1].nextK;
-    if (k === undefined) return;
+    if (iterations.length > 0) {
+      const last = iterations[iterations.length - 1];
+      if (last.R > 0 && last.k / last.R >= gamma) return; // already converged
+    }
+    const k = iterations.length === 0 ? 1 : Math.max(iterations[iterations.length - 1].k + 1,
+      Math.ceil((iterations[iterations.length - 1].R + 1) * gamma));
     const R = simulateRejections(k);
-    const conv = converged(R, k);
-    const nextK = conv ? undefined : Math.max(k + 1, Math.ceil((R + 1) * gamma));
-    iterations.push({ k, R, converged: conv, nextK });
-    draw();
+    iterations.push({ k, R });
+    drawTable();
+    drawPlot();
+  }
+
+  function runAll() {
+    reset();
+    let i = 0;
+    function step() {
+      iterate();
+      const last = iterations[iterations.length - 1];
+      if (last.R > 0 && last.k / last.R >= gamma) return;
+      i++;
+      if (i < 20) setTimeout(step, 400);
+    }
+    step();
   }
 
   function reset() {
     iterations = [];
-    draw();
+    drawTable();
+    drawPlot();
   }
 
   d3.select("#kfwer-iterate").on("click", iterate);
+  d3.select("#kfwer-run").on("click", runAll);
   d3.select("#kfwer-reset").on("click", reset);
   d3.select("#gamma-slider").on("input", function() {
     gamma = +this.value / 100;
-    d3.select("#gamma-val").text(gamma.toFixed(2));
+    d3.select("#gamma-val").text(`γ = ${gamma.toFixed(2)}`);
     reset();
   });
 
-  draw();
+  drawTable();
+  drawPlot();
 })();
 </script>
 </body>
