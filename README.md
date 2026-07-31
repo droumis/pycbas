@@ -83,6 +83,12 @@ See [results/validation_summary.md](results/validation_summary.md) for details, 
 - [Humans](results/humans/validation_report.md)
 - [Rats](results/rats/validation_report.md)
 
+## Documentation
+
+- [User Guide](docs/guide.md) - data format, parameter selection, working with results
+- [Algorithm](docs/algorithm.md) - the step-down and k-FWER procedure in detail
+- [API Reference](docs/api.md) - all public functions and classes
+
 ## Development
 
 ```bash
