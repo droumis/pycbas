@@ -24,7 +24,8 @@ theme:
 
 nav:
   - Home: index.md
-  - Interactive Walkthrough: walkthrough.md
+  - Walkthrough (Comparative): walkthrough.md
+  - Walkthrough (Correlative): walkthrough-correlative.md
   - User Guide: guide.md
   - Algorithm: algorithm.md
   - API Reference: api.md
