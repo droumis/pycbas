@@ -9,12 +9,6 @@ Uses Romano-Wolf step-down for multiple comparison correction and k-FWER iterati
 ## Installation
 
 ```bash
-pip install pycbas
-```
-
-Or for development:
-
-```bash
 git clone https://github.com/droumis/pycbas.git
 cd pycbas
 pip install -e ".[dev]"
