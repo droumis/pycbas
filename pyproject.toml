@@ -40,8 +40,5 @@ Repository = "https://github.com/droumis/pycbas"
 [tool.hatch.build.targets.wheel]
 packages = ["pycbas"]
 
-[tool.hatch.build.targets.wheel.force-include]
-"app.py" = "pycbas/_app.py"
-
 [tool.pytest.ini_options]
 testpaths = ["tests"]

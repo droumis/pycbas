@@ -40,12 +40,9 @@ def launch_gui(args):
         print("  # or: pipx install pycbas[gui]")
         sys.exit(1)
 
-    app_path = Path(__file__).parent.parent / "app.py"
+    app_path = Path(__file__).parent / "_app.py"
     if not app_path.exists():
-        # Installed via pip/pipx — app.py is in package data
-        app_path = Path(__file__).parent / "_app.py"
-    if not app_path.exists():
-        print(f"Cannot find app.py. Looked at:\n  {Path(__file__).parent.parent / 'app.py'}\n  {Path(__file__).parent / '_app.py'}")
+        print(f"Cannot find GUI app at: {app_path}")
         sys.exit(1)
 
     cmd = ["panel", "serve", str(app_path), "--autoreload", "--port", str(args.port)]
