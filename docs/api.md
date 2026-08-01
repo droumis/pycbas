@@ -6,7 +6,8 @@
 
 ```python
 run_cbas_comparative(subjects_data, group_labels, params=None,
-                     contingency=2, encode_reward=True, chunked=True)
+                     contingency=2, encode_reward=True, chunked=True,
+                     block_aware=False)
 ```
 
 Run the full comparative CBAS pipeline from raw data to significant sequences.
@@ -16,9 +17,10 @@ Run the full comparative CBAS pipeline from raw data to significant sequences.
 - `subjects_data` (list of ndarray) - One array per subject from `load_subject_data`.
 - `group_labels` (array-like of int) - 0 or 1 per subject indicating group membership.
 - `params` (CBASParams, optional) - Analysis parameters. Uses defaults if None.
-- `contingency` (int or None) - Block type to filter on. None uses all trials.
+- `contingency` (int or None) - Trial condition to filter on. None uses all trials.
 - `encode_reward` (bool) - If True, symbol = choice + reward * num_arms (doubles alphabet). Set False for tasks where choice already encodes the outcome.
 - `chunked` (bool) - If True, use the memory-efficient chunked pipeline.
+- `block_aware` (bool) - If True, sequences cannot span block/session boundaries. Enable for multi-session experiments.
 
 **Returns** `CBASResult`
 
@@ -27,7 +29,8 @@ Run the full comparative CBAS pipeline from raw data to significant sequences.
 ### `run_cbas_correlative`
 
 ```python
-run_cbas_correlative(subjects_data, covariate, params=None)
+run_cbas_correlative(subjects_data, covariate, params=None,
+                     contingency=2, encode_reward=True, block_aware=False)
 ```
 
 Run the full correlative CBAS pipeline.
@@ -37,6 +40,9 @@ Run the full correlative CBAS pipeline.
 - `subjects_data` (list of ndarray) - One array per subject from `load_subject_data`.
 - `covariate` (array-like of float) - One continuous value per subject (e.g. a behavioral score).
 - `params` (CBASParams, optional) - Analysis parameters.
+- `contingency` (int or None) - Trial condition to filter on. None uses all trials.
+- `encode_reward` (bool) - If True, symbol = choice + reward * num_arms (doubles alphabet).
+- `block_aware` (bool) - If True, sequences cannot span block/session boundaries.
 
 **Returns** `CBASResult`
 
@@ -99,6 +105,18 @@ Extract the choice stream from a subject's data array, filtering by contingency 
 
 ---
 
+### `extract_choice_streams_by_block`
+
+```python
+extract_choice_streams_by_block(subject_data, contingency=2, num_arms=6, encode_reward=True)
+```
+
+Extract choice streams split by block/session boundaries. Used internally when `block_aware=True`.
+
+**Returns** list of 1D ndarrays, one per block.
+
+---
+
 ### `enumerate_sequences`
 
 ```python
@@ -111,15 +129,36 @@ Count all subsequences of a given length with start position <= criterion.
 
 ---
 
+### `enumerate_sequences_block_aware`
+
+```python
+enumerate_sequences_block_aware(block_streams, seq_len, criterion)
+```
+
+Count sequences within blocks, never crossing block boundaries. The criterion limits the total number of positions counted across all blocks.
+
+**Returns** dict mapping sequence tuple to count.
+
+---
+
 ## Core computation
 
 ### `build_count_matrix`
 
 ```python
-build_count_matrix(subjects_data, params, contingency=2, encode_reward=True)
+build_count_matrix(subjects_data, params, contingency=2, encode_reward=True,
+                   block_aware=False)
 ```
 
 Build the full sequence count matrix across all subjects and all sequence lengths 1 through `params.seq_len_max`.
+
+**Arguments**
+
+- `subjects_data` (list of ndarray) - One array per subject.
+- `params` (CBASParams) - Analysis parameters.
+- `contingency` (int or None) - Trial condition to filter on. None uses all trials.
+- `encode_reward` (bool) - If True, symbol = choice + reward * num_arms.
+- `block_aware` (bool) - If True, sequences cannot span block/session boundaries.
 
 **Returns** `(sequences, count_matrix)` where sequences is a list of tuples and count_matrix is ndarray of shape (n_subjects, n_sequences).
 
