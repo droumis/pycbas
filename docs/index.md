@@ -4,10 +4,6 @@ Python implementation of the [CBAS algorithm](https://github.com/dbkastner/CBAS)
 
 Uses Romano-Wolf step-down for multiple comparison correction and k-FWER iteration for false discovery proportion control.
 
-## Interactive GUI
-
-A no-code interface for running CBAS analyses. Load data, auto-detect parameters and mode, run the pipeline, and explore results visually.
-
 ## Install
 
 We recommend installing in a dedicated environment (conda, mamba, or pixi) rather than your base environment.
@@ -25,18 +21,7 @@ conda activate pycbas
 pip install -e ".[dev]"
 ```
 
-To run the GUI:
-
-```bash
-# pixi
-pixi run gui
-
-# pip
-pip install -e ".[gui]"
-pycbas gui
-```
-
-## Minimal example
+## Quick example
 
 ```python
 from pycbas import CBASParams, load_subject_data, run_cbas_comparative
@@ -55,6 +40,8 @@ result = run_cbas_comparative(subjects_data, group_labels, params)
 print(f"{result.n_significant} significant sequences (k={result.k_final})")
 ```
 
+See the [User Guide](guide.md) for data format details, parameter selection, and working with results.
+
 ## Performance
 
 | Dataset | Subjects | Sequences | Time | Peak RAM |
@@ -64,6 +51,17 @@ print(f"{result.n_significant} significant sequences (k={result.k_final})")
 | Rats (6-arm, L=6) | 111 | 19,013 | ~8s | ~4.1 GB |
 
 Timings on Apple M-series. Bootstrap and step-down are parallelized via numba.
+
+## Interactive GUI
+
+For a no-code alternative, pyCBAS includes an interactive GUI that handles data loading, parameter detection, and result visualization. Install the GUI extras and launch:
+
+```bash
+pip install -e ".[gui]"
+pycbas gui
+```
+
+See the [Interactive App](app.md) docs for details.
 
 ## Reference
 
