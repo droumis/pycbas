@@ -27,7 +27,7 @@ jobs:
       # Build WASM demo app (runs in browser via Pyodide)
       - run: |
           panel convert app.py --to pyodide-worker --out site/demo \
-            --requirements numpy pandas \
+            --requirements numpy pandas holoviews param bokeh \
             --resources pycbas/__init__.py pycbas/params.py pycbas/io.py \
               pycbas/core.py pycbas/bootstrap.py pycbas/stepdown.py \
               pycbas/pipeline.py pycbas/resources.py pycbas/_numba.py
