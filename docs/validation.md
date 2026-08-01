@@ -34,10 +34,3 @@ Three behaviors in the Igor code were non-obvious and required careful matching:
 
 **3. Criterion boundary (inclusive start position).** Igor checks `start_position <= criterion` (0-based inclusive), giving `criterion + 1` valid start positions. A boundary error here (using strict less-than, giving `criterion` start positions) caused an 11-sequence discrepancy in flies (1,594 instead of 1,605).
 
-## Running validation
-
-```bash
-pixi run flies    # reproduces fly result (1,605 sig, ~21s)
-pixi run human    # reproduces human result (31 sig, ~3s)
-pixi run rats     # runs rat analysis (178 sig, ~8s)
-```
