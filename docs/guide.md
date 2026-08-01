@@ -12,24 +12,88 @@ The output is a set of significant sequences with adjusted p-values (called g-va
 
 **Correlative** tests whether sequences correlate with a continuous covariate (e.g. a compulsivity score). The test statistic is a studentized Pearson correlation.
 
+## What the algorithm needs
+
+At its core, CBAS needs two things per subject:
+
+1. **A choice stream** — a 1D array of integers representing the sequence of choices (or symbols) that subject made. Each integer is in the range `[0, alphabet_size)`.
+2. **A grouping variable** — either a binary group label (comparative mode) or a continuous score (correlative mode).
+
+Everything else (file format, reward encoding, session filtering) is about getting your raw experimental data into that shape.
+
 ## Data format
 
-Each subject's data is a comma-separated text file with four columns per row:
+### Option A: bring your own arrays
+
+If you already have choice streams as numpy arrays (e.g. from your own preprocessing pipeline), you can skip `load_subject_data` entirely and pass data directly to `build_count_matrix`. Each element in `subjects_data` should be a 2D array with columns `(session, choice, reward, contingency)`. If you don't use session filtering or reward encoding, you can fill those columns with zeros:
+
+```python
+import numpy as np
+from pycbas import CBASParams, run_cbas_comparative
+
+# Suppose you have a list of 1D choice arrays
+choice_streams = [np.array([0, 1, 1, 0, 1, ...]), ...]  # one per subject
+
+# Wrap each into the expected 4-column format
+subjects_data = []
+for stream in choice_streams:
+    n = len(stream)
+    arr = np.zeros((n, 4), dtype=np.int32)
+    arr[:, 1] = stream       # column 1 = choice
+    arr[:, 3] = 1            # column 3 = contingency (set to match your filter)
+    subjects_data.append(arr)
+
+group_labels = [0] * 20 + [1] * 20  # e.g. 20 per group
+
+params = CBASParams(
+    num_arms=2,           # size of your choice alphabet
+    seq_len_max=4,        # max pattern length to test
+    criterion=200,        # use first 200 choices per subject
+    resample_number=10000,
+)
+
+result = run_cbas_comparative(
+    subjects_data, group_labels, params,
+    contingency=1,        # must match the value you put in column 3
+    encode_reward=False,  # no reward encoding since column 2 is zeros
+)
+```
+
+For correlative mode, replace `group_labels` with a numpy array of continuous scores (one per subject) and call `run_cbas_correlative`.
+
+### Option B: the CSV loader
+
+If your data is stored as one CSV per subject with columns `session, choice, reward, contingency`, you can use the built-in loader:
 
 ```
-session, choice, reward, contingency
 0,3,1,2
 0,2,0,2
 0,5,1,2
 1,1,0,2
 ```
 
-- `session` is an integer session ID (unused by the algorithm but required in the format)
-- `choice` is the arm/symbol chosen (0-indexed, must be < num_arms)
-- `reward` is 0 or 1
-- `contingency` is the block type (used to filter trials)
+- `session` — integer session ID (used only if you want to filter by session)
+- `choice` — the arm/symbol chosen (0-indexed integer, must be < `num_arms`)
+- `reward` — 0 or 1 (used when `encode_reward=True` to double the alphabet)
+- `contingency` — block type integer (used to filter trials by condition)
 
-For binary tasks like the fly spontaneous alternation, there are 2 arms and no reward encoding. For tasks like the rat 8-arm maze, there are 6 arms with reward encoding (doubling the effective alphabet to 12 symbols).
+```python
+from pycbas import load_subject_data
+
+subjects_data = [load_subject_data(f) for f in my_file_list]
+```
+
+### Reward encoding
+
+When `encode_reward=True`, each trial's symbol becomes `choice + reward * num_arms`. This doubles the effective alphabet. Use this when the same physical choice can lead to different outcomes and that distinction matters (e.g. a 6-arm bandit where getting reward vs not changes the behavioral meaning of the choice). Set `encode_reward=False` for deterministic tasks where reward is fully predicted by the choice (like a two-alternative forced choice task).
+
+### How many symbols?
+
+Set `num_arms` to the number of distinct choices your task offers. With `encode_reward=True`, the effective alphabet becomes `num_arms * 2`. Examples:
+
+- Binary maze (left/right, no reward): `num_arms=2`, `encode_reward=False` → 2 symbols
+- 6-arm bandit with reward: `num_arms=6`, `encode_reward=True` → 12 symbols
+- 4-symbol task (choice × side): `num_arms=4`, `encode_reward=False` → 4 symbols
 
 ## Running a comparative analysis
 
@@ -62,12 +126,17 @@ print(f"{result.n_significant} significant sequences (k={result.k_final})")
 
 ## Running a correlative analysis
 
+Use correlative mode when each subject has a continuous measure (a clinical score, age, reaction time, performance metric, etc.) and you want to find sequences whose usage tracks with that measure across subjects.
+
 ```python
 from pycbas import CBASParams, load_subject_data, run_cbas_correlative
 import numpy as np
 
 subjects_data = [load_subject_data(f) for f in subject_files]
-scores = np.array([...])  # one continuous value per subject
+
+# One score per subject, in the same order as subjects_data.
+# This can be any continuous measure: clinical scores, ages, performance, etc.
+scores = np.array([72.1, 58.3, 85.0, ...])  # length must equal len(subjects_data)
 
 params = CBASParams(
     num_arms=6,
@@ -78,6 +147,8 @@ params = CBASParams(
 
 result = run_cbas_correlative(subjects_data, scores, params)
 ```
+
+The `scores` array is the covariate. CBAS will test, for every sequence in the count matrix, whether that sequence's usage (across subjects) correlates with these scores. The order must match `subjects_data` — `scores[i]` is the score for `subjects_data[i]`.
 
 ## Working with results
 
