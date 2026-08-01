@@ -37,12 +37,13 @@ def run_cbas_comparative(subjects_data, group_labels, params=None,
     test_stats = compute_test_stats(count_matrix, group_indices)
 
     if chunked:
-        g_values, k_final = find_k_fwer_chunked(
-            test_stats, count_matrix, group_indices, params)
+        g_values, k_final, k_history = find_k_fwer_chunked(
+            test_stats, count_matrix, group_indices, params, return_history=True)
     else:
         null_matrix, null_directions = bootstrap_test_stats(count_matrix, group_indices, params)
-        g_values, k_final = find_k_fwer(test_stats, null_matrix, params.alpha, params.gamma,
-                                         null_directions=null_directions)
+        g_values, k_final, k_history = find_k_fwer(
+            test_stats, null_matrix, params.alpha, params.gamma,
+            null_directions=null_directions, return_history=True)
 
     significant = np.zeros(len(sequences), dtype=bool)
     for i in range(len(sequences)):
@@ -58,16 +59,20 @@ def run_cbas_comparative(subjects_data, group_labels, params=None,
         g_values=g_values,
         k_final=k_final,
         significant_mask=significant,
+        k_history=k_history,
     )
 
 
-def run_cbas_correlative(subjects_data, covariate, params=None):
+def run_cbas_correlative(subjects_data, covariate, params=None,
+                         contingency=2, encode_reward=True):
     """Run the full correlative CBAS pipeline.
 
     Args:
         subjects_data: list of subject data arrays (from load_subject_data)
         covariate: array of continuous values (e.g. CBIT scores), one per subject
         params: CBASParams instance
+        contingency: block type to filter on, or None for all trials
+        encode_reward: if True, encode symbol + reward*num_arms. Set False for 2AFC.
 
     Returns:
         CBASResult
@@ -76,11 +81,14 @@ def run_cbas_correlative(subjects_data, covariate, params=None):
         params = CBASParams()
 
     covariate = np.asarray(covariate, dtype=np.float64)
-    sequences, count_matrix = build_count_matrix(subjects_data, params)
+    sequences, count_matrix = build_count_matrix(subjects_data, params,
+                                                 contingency=contingency,
+                                                 encode_reward=encode_reward)
     test_stats = compute_test_stats_correlative(count_matrix, covariate)
     null_matrix, null_directions = bootstrap_test_stats_correlative(count_matrix, covariate, params)
-    g_values, k_final = find_k_fwer(test_stats, null_matrix, params.alpha, params.gamma,
-                                     null_directions=null_directions)
+    g_values, k_final, k_history = find_k_fwer(
+        test_stats, null_matrix, params.alpha, params.gamma,
+        null_directions=null_directions, return_history=True)
 
     significant = np.zeros(len(sequences), dtype=bool)
     for i in range(len(sequences)):
@@ -96,4 +104,5 @@ def run_cbas_correlative(subjects_data, covariate, params=None):
         g_values=g_values,
         k_final=k_final,
         significant_mask=significant,
+        k_history=k_history,
     )

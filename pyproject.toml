@@ -32,7 +32,7 @@ dev = [
 ]
 
 [project.scripts]
-cbas = "pycbas.cli:main"
+pycbas = "pycbas.cli:main"
 
 [project.urls]
 Repository = "https://github.com/droumis/pycbas"

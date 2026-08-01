@@ -47,4 +47,4 @@ noel-ibl-toward-quick = "python scripts/run_noel_ibl_toward.py --quick"
 sensitivity = "python scripts/sensitivity_analysis.py"
 comparison-figs = "python scripts/comparison_figures.py"
 reports = "python scripts/generate_reports.py"
-gui = { cmd = "cbas gui", depends-on = ["install"] }
+gui = { cmd = "pycbas gui", depends-on = ["install"] }

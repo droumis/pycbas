@@ -2,18 +2,37 @@
 
 ## Summary
 
-| | pycbas | Paper (Kastner et al.) |
-|---|---|---|
-| Rats | 85 (46 control, 39 lesion) | 85 (46 control, 39 lesion) |
-| Max seq length | 6 | 6 |
-| Criterion | 800 | 800 |
-| Resamples | 10000 | 10,000 |
-| Sequences evaluated | 16,500 | 24,342 |
-| Significant | 178 (1.1%) | 409 (1.7%) |
-| Control > Lesion | 91 | not separately reported |
-| Lesion > Control | 87 | not separately reported |
-| k (k-FWER) | 9 | not reported |
-| Runtime | 8.2s | not reported |
+| | pycbas (85 subjects) | pycbas (111 subjects) | David/Igor (all subjects) |
+|---|---|---|---|
+| Rats | 85 (46 ctrl, 39 les) | 111 (55 ctrl, 56 les) | more (not all shared) |
+| Max seq length | 6 | 6 | 6 |
+| Criterion | 800 | 800 | 800 |
+| Resamples | 10,000 | 10,000 | 10,000 |
+| Sequences evaluated | 16,500 | 19,013 | 24,342 (16,376 in test stats) |
+| Significant | 178 (1.1%) | 435 (2.3%) | 572 (2.3%) |
+| Control > Lesion | 91 | 215 | 264 |
+| Lesion > Control | 87 | 220 | 308 |
+| k (k-FWER) | 9 | 22 | 29 |
+| Runtime | 8.2s | ~8s | ~3,000s |
+
+## Comparison with David's Igor implementation (111 subjects)
+
+- All 16,376 sequences in David's test stats file are a subset of our 19,013
+- Of David's 572 significant sequences, 411 overlap with our 435
+- **100% direction agreement** on overlapping significant sequences
+- Test statistic Pearson correlation: r=0.93
+- Differences due to David having additional subjects not in our dataset, which increases statistical power and pushes more sequences over the significance threshold
+
+### k-iteration comparison
+
+| Iteration | pycbas k | pycbas rejections | David k | David rejections |
+|---|---|---|---|---|
+| 1 | 1 | 140 | 1 | 203 |
+| 2 | 8 | 286 | 11 | 404 |
+| 3 | 15 | 360 | 21 | 502 |
+| 4 | 19 | 407 | 27 | 554 |
+| 5 | 21 | 435 | 28 | 562 |
+| 6 | 22 | 435 | 29 | 572 |
 
 ## Timing Profile
 

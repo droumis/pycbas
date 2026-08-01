@@ -6,11 +6,40 @@ Uses Romano-Wolf step-down for multiple comparison correction and k-FWER iterati
 
 **Reference:** Kastner et al., "Choice-Wide Behavioral Association Study" [(2026 preprint)](https://www.biorxiv.org/content/10.1101/2024.02.26.582115v4)
 
-## Installation
+## Interactive GUI
+
+A no-code interface for running CBAS analyses. Load data from a local folder, auto-detect parameters and analysis mode, run the pipeline, and explore results visually.
 
 ```bash
 git clone https://github.com/droumis/pycbas.git
 cd pycbas
+
+# option 1: pixi (recommended)
+pixi run gui
+
+# option 2: conda/mamba + pip
+conda create -n pycbas python=3.11
+conda activate pycbas
+pip install -e ".[gui]"
+pycbas gui
+```
+
+See the [GUI documentation](https://droumis.github.io/pycbas/app/) for details.
+
+## Installation
+
+We recommend installing in a dedicated environment (conda, mamba, or pixi) rather than your base environment.
+
+```bash
+git clone https://github.com/droumis/pycbas.git
+cd pycbas
+
+# option 1: pixi (handles everything)
+pixi install
+
+# option 2: conda/mamba + pip
+conda create -n pycbas python=3.11
+conda activate pycbas
 pip install -e ".[dev]"
 ```
 
@@ -70,13 +99,13 @@ print_resource_estimate(est)
 |---|---|---|---|---|
 | Flies (2-arm, L=10) | 1,566 | 2,046 | ~21s | ~560 MB |
 | Humans (6-arm, L=4) | 1,413 | 408 | ~3s | ~155 MB |
-| Rats (6-arm, L=6) | 85 | 16,483 | ~6s | ~4.1 GB |
+| Rats (6-arm, L=6) | 111 | 19,013 | ~8s | ~4.1 GB |
 
 Timings on Apple M-series. The chunked pipeline (`chunked=True`, default) trades ~30% more time for ~40% less memory. Bootstrap and step-down are parallelized via numba. Set `NUMBA_DISABLE_JIT=1` to disable for debugging.
 
 ## Validation
 
-Exact match with the original Igor implementation on flies (1,605/2,046, k=81) and humans (31/408, k=2). Test statistics match to floating-point precision.
+Exact match with the original Igor implementation on flies (1,605/2,046, k=81) and humans (31/408, k=2). Test statistics match to floating-point precision. Rats (111 subjects): 435/19,013 significant (k=22), with 100% direction agreement on the 411 sequences that overlap with David's 572 (different subject pool accounts for the count difference).
 
 See [results/validation_summary.md](results/validation_summary.md) for details, or per-dataset reports:
 - [Flies](results/flies/validation_report.md)

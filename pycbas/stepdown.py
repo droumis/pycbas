@@ -228,7 +228,8 @@ def _count_rejections(sorted_stats, null_sub, k, alpha):
     return int(np.sum(step_p_values < alpha))
 
 
-def find_k_fwer(test_stats, null_matrix, alpha=0.5, gamma=0.05, null_directions=None):
+def find_k_fwer(test_stats, null_matrix, alpha=0.5, gamma=0.05, null_directions=None,
+                return_history=False):
     """Compute adjusted p-values with FDP control via iterative k-FWER.
 
     Iterates: run step-down at current k -> count rejections -> update k ->
@@ -248,12 +249,14 @@ def find_k_fwer(test_stats, null_matrix, alpha=0.5, gamma=0.05, null_directions=
         _prepare_null_sub(test_stats, null_matrix, null_directions)
 
     k = 1
+    k_history = []
     for _ in range(100):
         if dir_sub is not None:
             rejections = _count_rejections_directional(
                 sorted_stats, null_sub, dir_sub, obs_directions, k, alpha)
         else:
             rejections = _count_rejections(sorted_stats, null_sub, k, alpha)
+        k_history.append({"k": k, "rejections": int(rejections)})
         if rejections < (k / gamma) - 1:
             break
         new_k = int(np.ceil((rejections + 1) * gamma))
@@ -269,6 +272,8 @@ def find_k_fwer(test_stats, null_matrix, alpha=0.5, gamma=0.05, null_directions=
     for i in range(len(sorted_indices)):
         p_values[sorted_indices[i]] = step_p_values[i]
 
+    if return_history:
+        return p_values, k, k_history
     return p_values, k
 
 
@@ -298,7 +303,7 @@ def find_k_fwer_k1(test_stats, null_matrix, alpha=0.5, gamma=0.05, null_directio
 
 
 def find_k_fwer_chunked(test_stats, count_matrix, group_indices, params,
-                        chunk_size=500, rng=None):
+                        chunk_size=500, rng=None, return_history=False):
     """Memory-efficient CBAS: generates bootstrap directly into null_sub in chunks.
 
     Instead of allocating the full null matrix (M x 2S) and then extracting the
@@ -313,8 +318,9 @@ def find_k_fwer_chunked(test_stats, count_matrix, group_indices, params,
         params: CBASParams
         chunk_size: bootstrap rows generated per chunk (default 500)
         rng: numpy random Generator (default: seeded at 42)
+        return_history: if True, return k_history as third element
 
-    Returns (g_values, k_final) -- same as find_k_fwer.
+    Returns (g_values, k_final) or (g_values, k_final, k_history).
     """
     if rng is None:
         rng = np.random.default_rng(42)
@@ -363,10 +369,12 @@ def find_k_fwer_chunked(test_stats, count_matrix, group_indices, params,
     k = 1
     alpha = params.alpha
     gamma = params.gamma
+    k_history = []
     for _ in range(100):
         step_p_values = _stepdown_core_directional(
             sorted_stats, null_sub, dir_sub, obs_directions, k, alpha)
         rejections = int(np.sum(step_p_values < alpha))
+        k_history.append({"k": k, "rejections": rejections})
         if rejections < (k / gamma) - 1:
             break
         new_k = int(np.ceil((rejections + 1) * gamma))
@@ -379,4 +387,6 @@ def find_k_fwer_chunked(test_stats, count_matrix, group_indices, params,
     for i in range(n_valid):
         p_values[sorted_indices[i]] = step_p_values[i]
 
+    if return_history:
+        return p_values, k, k_history
     return p_values, k

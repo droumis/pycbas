@@ -3,7 +3,7 @@ CBAS Interactive GUI
 
 A no-code interface for running Choice-Wide Behavioral Association Studies.
 Launch with: panel serve app.py --show
-Or install: pipx install pycbas[gui] && cbas gui
+Or install: pipx install pycbas[gui] && pycbas gui
 """
 
 import io
@@ -21,8 +21,24 @@ from bokeh.models import HoverTool
 
 BROWSER_MODE = hasattr(sys, "_emscripte_info") or "pyodide" in sys.modules
 
+import os
+
+def _get_system_info():
+    """Detect available RAM and CPU cores."""
+    cores = os.cpu_count() or 1
+    try:
+        import psutil
+        ram_gb = psutil.virtual_memory().total / (1024**3)
+        available_gb = psutil.virtual_memory().available / (1024**3)
+    except ImportError:
+        ram_gb = None
+        available_gb = None
+    return {"cores": cores, "ram_gb": ram_gb, "available_gb": available_gb}
+
+SYSTEM_INFO = _get_system_info() if not BROWSER_MODE else {"cores": 1, "ram_gb": None, "available_gb": None}
+
 hv.extension("bokeh")
-pn.extension(sizing_mode="stretch_width", notifications=True)
+pn.extension("tabulator", sizing_mode="stretch_width", notifications=True)
 
 
 # =============================================================================
@@ -118,13 +134,43 @@ class CBASApp(param.Parameterized):
         else:
             self.result = run_cbas_correlative(
                 self.subjects_data, self.covariate, params,
+                contingency=self.contingency,
+                encode_reward=self.encode_reward,
             )
+
+    _observed_cache_key = param.Parameter(default=None)
+    _observed_cache_val = param.Integer(default=0)
+
+    def _count_observed_sequences(self):
+        cache_key = (
+            self.num_arms, self.seq_len_max, self.criterion,
+            self.contingency, self.encode_reward, self.n_subjects,
+        )
+        if cache_key == self._observed_cache_key:
+            return self._observed_cache_val
+
+        from pycbas.io import extract_choice_stream, enumerate_sequences
+        all_seqs = set()
+        for subj_data in self.subjects_data:
+            stream = extract_choice_stream(
+                subj_data, self.contingency, self.num_arms,
+                encode_reward=self.encode_reward)
+            for seq_len in range(1, self.seq_len_max + 1):
+                counts = enumerate_sequences(stream, seq_len, self.criterion)
+                all_seqs.update(counts.keys())
+        self._observed_cache_key = cache_key
+        self._observed_cache_val = len(all_seqs)
+        return self._observed_cache_val
 
     def get_resource_estimate(self):
         from pycbas import estimate_resources
+        n_observed = None
+        if self.data_loaded and self.subjects_data:
+            n_observed = self._count_observed_sequences()
         return estimate_resources(
             num_arms=self.num_arms,
             seq_len_max=self.seq_len_max,
+            n_observed=n_observed,
             resample_number=self.resample_number,
             encode_reward=self.encode_reward,
         )
@@ -139,7 +185,7 @@ app_state = CBASApp()
 
 # --- Header ---
 header = pn.pane.Markdown(
-    """# CBAS
+    """# pyCBAS
 ### Choice-Wide Behavioral Association Study
 
 Find behavioral sequences that differ between groups or correlate with a continuous measure.
@@ -170,6 +216,17 @@ mode_selector = pn.widgets.RadioButtonGroup(
 )
 
 mode_explanation = pn.pane.Markdown("", styles={"font-size": "13px", "color": "#666"})
+mode_detection_alert = pn.pane.Alert("", alert_type="info", visible=False)
+
+def detect_mode(values):
+    """Detect whether values look like group labels (comparative) or continuous scores (correlative)."""
+    unique = set(values)
+    if unique <= {0, 1, 0.0, 1.0}:
+        return "Comparative"
+    all_int = all(v == int(v) for v in values)
+    if all_int and len(unique) == 2:
+        return "Comparative"
+    return "Correlative"
 
 def update_mode_explanation(event=None):
     value = event.new if event else mode_selector.value
@@ -191,14 +248,264 @@ mode_selector.param.watch(update_mode_explanation, "value")
 update_mode_explanation()
 
 
+def set_detected_mode(values):
+    """Auto-detect and set mode from info file values. Returns the detected mode string."""
+    detected = detect_mode(values)
+    mode_selector.value = detected
+    app_state.mode = detected
+    update_mode_explanation()
+    mode_detection_alert.object = f"**Mode auto-detected: {detected}** based on your info file values. Change above if needed."
+    mode_detection_alert.visible = True
+    return detected
+
+
 # --- Data upload ---
 data_upload_type = pn.widgets.RadioButtonGroup(
     name="Data Format",
-    options=["CSV per subject", "Single spreadsheet"],
-    value="Single spreadsheet",
+    options=["Local folder", "CSV per subject", "Single spreadsheet"],
+    value="Local folder",
     button_type="default",
     button_style="outline",
 )
+
+# Local folder selector
+folder_selector = pn.widgets.FileSelector(
+    directory=str(Path.cwd()),
+    only_files=False,
+    file_pattern="*",
+    name="Select a data folder",
+)
+
+folder_format_help = pn.pane.Markdown("""
+**Navigate to your data folder** and select any file inside it (or the folder itself).
+Subject files and group/score info will be detected automatically.
+
+**Option A:** Folder with an info file
+```
+my_data/
+├── subjectInfo.txt    ← *Info.txt: subject_id,label_or_score per line
+├── subject0.txt       ← one file per subject (CSV: session,choice,reward,contingency)
+└── ...
+```
+
+**Option B:** Folder with group names in filenames (no info file needed)
+```
+my_data/
+├── control0.txt       ← prefix determines group membership
+├── control1.txt
+├── lesion0.txt
+└── lesion1.txt
+```
+Recognized group keywords: control/ctrl/sham/wt (group 0), lesion/exp/ko/mutant (group 1).
+""", styles={"font-size": "13px"})
+
+folder_load_button = pn.widgets.Button(
+    name="Load from this folder",
+    button_type="primary",
+    icon="folder-open",
+    width=180,
+)
+
+
+def load_from_folder(event):
+    selected = folder_selector.value
+    if not selected:
+        data_status.object = "Select something from the file browser above."
+        data_status.alert_type = "warning"
+        return
+
+    # Reset previous state
+    app_state.data_loaded = False
+    app_state.result = None
+    results_tabs.objects = []
+    mode_detection_alert.visible = False
+
+    folder_path = Path(selected[0])
+    if not folder_path.is_dir():
+        folder_path = folder_path.parent
+
+    try:
+        from pycbas import load_subject_data
+        import re
+
+        info_files = list(folder_path.glob("*Info.txt"))
+
+        if info_files:
+            # --- Mode 1: Info file present ---
+            info_file = info_files[0]
+            info = {}
+            with open(info_file) as f:
+                for line in f:
+                    parts = line.strip().split(",")
+                    if len(parts) >= 2:
+                        info[int(parts[0])] = float(parts[1])
+
+            if not info:
+                data_status.object = f"**Error:** info file `{info_file.name}` is empty or malformed."
+                data_status.alert_type = "danger"
+                return
+
+            all_files = list(folder_path.glob("*.txt")) + list(folder_path.glob("*.csv"))
+            subject_files = [f for f in all_files if f != info_file and not f.name.endswith("Info.txt")]
+
+            matched = {}
+            for f in subject_files:
+                stem = f.stem
+                digits = ""
+                for ch in reversed(stem):
+                    if ch.isdigit():
+                        digits = ch + digits
+                    else:
+                        break
+                if digits:
+                    subj_id = int(digits)
+                    if subj_id in info:
+                        matched[subj_id] = f
+
+            if not matched:
+                data_status.object = (
+                    f"**Error:** found info file `{info_file.name}` with {len(info)} entries, "
+                    "but could not match any subject data files. "
+                    "Subject files should be named like `subject0.txt`, `fly12.txt`, etc."
+                )
+                data_status.alert_type = "danger"
+                return
+
+            subjects_data = []
+            labels_or_scores = []
+            for subj_id in sorted(matched.keys()):
+                subjects_data.append(load_subject_data(matched[subj_id]))
+                labels_or_scores.append(info[subj_id])
+
+            source_desc = f"info file: `{info_file.name}`"
+
+        else:
+            # --- Mode 2: No info file, detect groups from filenames ---
+            all_files = sorted(
+                list(folder_path.glob("*.txt")) + list(folder_path.glob("*.csv"))
+            )
+            if not all_files:
+                data_status.object = "**Error:** no data files found in that folder."
+                data_status.alert_type = "danger"
+                return
+
+            # Extract prefix (letters before the trailing digits) for each file
+            prefixes = {}
+            for f in all_files:
+                m = re.match(r'^([a-zA-Z]+)\d+$', f.stem)
+                if m:
+                    prefix = m.group(1)
+                    prefixes.setdefault(prefix, []).append(f)
+
+            if len(prefixes) < 2:
+                data_status.object = (
+                    "**Error:** no `*Info.txt` file found, and could not detect two groups "
+                    "from filenames. Expected either an info file, or files named with "
+                    "distinct prefixes like `control0.txt`/`lesion0.txt`."
+                )
+                data_status.alert_type = "danger"
+                return
+
+            # Assign group labels: sort prefixes alphabetically, group0=first, group1=second
+            # If more than 2 prefixes, look for common comparative keywords
+            group_keywords_0 = {"control", "ctrl", "sham", "wt", "wildtype"}
+            group_keywords_1 = {"lesion", "experimental", "exp", "ko", "knockout", "mutant"}
+
+            sorted_prefixes = sorted(prefixes.keys())
+            if len(sorted_prefixes) == 2:
+                grp0_prefix, grp1_prefix = sorted_prefixes
+                # Swap if the second prefix looks more like a control
+                if grp1_prefix.lower() in group_keywords_0 or grp0_prefix.lower() in group_keywords_1:
+                    grp0_prefix, grp1_prefix = grp1_prefix, grp0_prefix
+                elif grp0_prefix.lower() not in group_keywords_0 and grp1_prefix.lower() in group_keywords_1:
+                    pass  # already correct
+                group_map = {grp0_prefix: 0, grp1_prefix: 1}
+            else:
+                # Multiple prefixes: merge by keyword matching
+                group_map = {}
+                for p in sorted_prefixes:
+                    p_lower = p.lower()
+                    if any(kw in p_lower for kw in group_keywords_1):
+                        group_map[p] = 1
+                    else:
+                        group_map[p] = 0
+
+            subjects_data = []
+            labels_or_scores = []
+            for prefix in sorted_prefixes:
+                label = group_map[prefix]
+                for f in sorted(prefixes[prefix]):
+                    subjects_data.append(load_subject_data(f))
+                    labels_or_scores.append(float(label))
+
+            group_counts = {}
+            for prefix in sorted_prefixes:
+                label = group_map[prefix]
+                group_counts.setdefault(label, []).append(f"{prefix} ({len(prefixes[prefix])})")
+
+            grp_desc = ", ".join(
+                f"group {g}: {' + '.join(names)}"
+                for g, names in sorted(group_counts.items())
+            )
+            source_desc = f"groups from filenames: {grp_desc}"
+
+        # --- Common: set state and auto-detect params ---
+        app_state.subjects_data = subjects_data
+
+        set_detected_mode(labels_or_scores)
+        if app_state.mode == "Comparative":
+            app_state.group_labels = np.asarray(labels_or_scores, dtype=np.int32)
+        else:
+            app_state.covariate = np.asarray(labels_or_scores, dtype=np.float64)
+
+        app_state.n_subjects = len(subjects_data)
+        app_state.data_loaded = True
+
+        # Auto-detect parameters from loaded data
+        max_choice = max(int(arr[:, 1].max()) for arr in subjects_data)
+        max_reward = max(int(arr[:, 2].max()) for arr in subjects_data)
+        has_reward = max_reward > 0
+        suggested_arms = max_choice + 1
+        contingency_values = set()
+        for arr in subjects_data:
+            contingency_values.update(arr[:, 3].tolist())
+        has_contingency = len(contingency_values) > 1 or (0 not in contingency_values)
+        suggested_contingency = max(contingency_values) if has_contingency else 0
+
+        trial_counts = []
+        for arr in subjects_data:
+            if has_contingency and suggested_contingency > 0:
+                n = int((arr[:, 3] == suggested_contingency).sum())
+            else:
+                n = len(arr)
+            trial_counts.append(n)
+        suggested_criterion = min(trial_counts)
+
+        num_arms_widget.value = suggested_arms
+        app_state.num_arms = suggested_arms
+        encode_reward_widget.value = has_reward
+        app_state.encode_reward = has_reward
+        contingency_widget.value = suggested_contingency
+        app_state.contingency = suggested_contingency
+        criterion_widget.value = suggested_criterion
+        app_state.criterion = suggested_criterion
+
+        data_status.object = (
+            f"**Loaded {app_state.n_subjects} subjects** from `{folder_path.name}/` "
+            f"({source_desc}). "
+            f"Parameters auto-configured: {suggested_arms} arms, "
+            f"{'reward encoded, ' if has_reward else ''}"
+            f"criterion={suggested_criterion}"
+            f"{f', contingency={suggested_contingency}' if has_contingency else ''}."
+        )
+        data_status.alert_type = "success"
+        update_resource_estimate()
+
+    except Exception as e:
+        data_status.object = f"**Error loading folder:** {str(e)}"
+        data_status.alert_type = "danger"
+
+folder_load_button.on_click(load_from_folder)
 
 # Multi-file upload for CSVs
 csv_file_input = pn.widgets.FileInput(
@@ -300,36 +607,53 @@ def parse_spreadsheet(event):
             stream = subj_df["choice"].values.astype(np.int32)
             choice_streams.append(stream)
 
-        if app_state.mode == "Comparative":
-            if "group" not in df.columns:
-                data_status.object = "**Error:** comparative mode requires a 'group' column."
-                data_status.alert_type = "danger"
-                return
+        has_group = "group" in df.columns
+        has_score = "score" in df.columns
+        if has_group and not has_score:
             labels = df.groupby("subject")["group"].first().loc[subjects].values
+            set_detected_mode(labels.tolist())
             app_state.load_choice_streams(choice_streams, labels)
-        else:
-            if "score" not in df.columns:
-                data_status.object = "**Error:** correlative mode requires a 'score' column."
-                data_status.alert_type = "danger"
-                return
+        elif has_score and not has_group:
             scores = df.groupby("subject")["score"].first().loc[subjects].values
+            set_detected_mode(scores.tolist())
             app_state.load_choice_streams(choice_streams, scores)
+        elif has_group and has_score:
+            if app_state.mode == "Comparative":
+                labels = df.groupby("subject")["group"].first().loc[subjects].values
+                app_state.load_choice_streams(choice_streams, labels)
+            else:
+                scores = df.groupby("subject")["score"].first().loc[subjects].values
+                app_state.load_choice_streams(choice_streams, scores)
+        else:
+            data_status.object = "**Error:** spreadsheet needs a 'group' or 'score' column."
+            data_status.alert_type = "danger"
+            return
 
         max_choice = max(s.max() for s in choice_streams)
         suggested_arms = int(max_choice) + 1
-        if suggested_arms > app_state.num_arms:
-            app_state.num_arms = suggested_arms
-            num_arms_widget.value = suggested_arms
+        num_arms_widget.value = suggested_arms
+        app_state.num_arms = suggested_arms
+
+        has_reward = "reward" in df.columns and df["reward"].max() > 0
+        encode_reward_widget.value = has_reward
+        app_state.encode_reward = has_reward
+
+        if "contingency" in df.columns:
+            cont_vals = df["contingency"].unique()
+            if len(cont_vals) > 1 or (0 not in cont_vals):
+                suggested_cont = int(df["contingency"].max())
+                contingency_widget.value = suggested_cont
+                app_state.contingency = suggested_cont
 
         min_len = min(len(s) for s in choice_streams)
-        if app_state.criterion > min_len:
-            app_state.criterion = min_len
-            criterion_widget.value = min_len
+        criterion_widget.value = min_len
+        app_state.criterion = min_len
 
         data_status.object = (
             f"**Loaded {app_state.n_subjects} subjects** from spreadsheet. "
-            f"Choices range 0-{max_choice}, "
-            f"min trials per subject: {min_len}."
+            f"Parameters auto-configured: {suggested_arms} arms, "
+            f"{'reward encoded, ' if has_reward else ''}"
+            f"criterion={min_len}."
         )
         data_status.alert_type = "success"
         update_resource_estimate()
@@ -371,6 +695,7 @@ def parse_csv_files(event):
             if line:
                 labels_values.append(float(line.split(",")[-1]))
 
+        set_detected_mode(labels_values)
         app_state.load_csv_files(file_contents, labels_values)
         data_status.object = f"**Loaded {app_state.n_subjects} subjects** from CSV files."
         data_status.alert_type = "success"
@@ -430,22 +755,49 @@ for w in [num_arms_widget, seq_len_max_widget, criterion_widget,
           resample_widget, encode_reward_widget, contingency_widget]:
     w.param.watch(sync_params, "value")
 
-resource_estimate_pane = pn.pane.Alert("", alert_type="light")
+resource_estimate_pane = pn.pane.Alert("", alert_type="light", visible=False)
 
 def update_resource_estimate():
+    if not app_state.data_loaded:
+        resource_estimate_pane.visible = False
+        return
+
+    resource_estimate_pane.visible = True
     est = app_state.get_resource_estimate()
     alphabet = est["alphabet"]
     total_seq = est["total_sequences"]
+    n_observed = est["observed_sequences"]
     mem_gb = est["memory_chunked_gb"]
     est_time = est["est_time_seconds"]
-    verdict = est["recommendation"]
+
+    available_gb = SYSTEM_INFO["available_gb"]
+    cores = SYSTEM_INFO["cores"]
+
+    if available_gb is not None:
+        if mem_gb < available_gb * 0.3:
+            verdict = "COMFORTABLE"
+        elif mem_gb < available_gb * 0.7:
+            verdict = "FITS (close other apps)"
+        elif mem_gb < available_gb * 0.95:
+            verdict = "TIGHT (may need reduced M)"
+        else:
+            verdict = "TOO LARGE (reduce M or sequence length)"
+    else:
+        if mem_gb < 1.0:
+            verdict = "TRIVIAL"
+        elif mem_gb < 8.0:
+            verdict = "COMFORTABLE"
+        elif mem_gb < 24.0:
+            verdict = "FITS (close other apps)"
+        else:
+            verdict = "TOO LARGE (reduce M or sequence length)"
 
     color_map = {
         "TRIVIAL": "success",
         "COMFORTABLE": "success",
         "FITS (close other apps)": "warning",
-        "TIGHT (may need reduced M or chunking to disk)": "warning",
-        "TOO LARGE (needs embedding or M reduction)": "danger",
+        "TIGHT (may need reduced M)": "warning",
+        "TOO LARGE (reduce M or sequence length)": "danger",
     }
     alert_type = color_map.get(verdict, "light")
 
@@ -458,17 +810,30 @@ def update_resource_estimate():
         )
         alert_type = "danger"
 
+    sys_note = ""
+    if available_gb is not None:
+        sys_note = f"\n\n**System:** {available_gb:.0f} GB available, {cores} cores"
+
+    if mem_gb < 0.1:
+        mem_str = f"{mem_gb * 1024:.0f} MB"
+    else:
+        mem_str = f"{mem_gb:.1f} GB"
+
+    if n_observed is not None:
+        seq_str = f"**Sequences to test:** {n_observed:,} (of {total_seq:,} possible)"
+    else:
+        seq_str = f"**Hypothesis space:** {total_seq:,} sequences"
+
     resource_estimate_pane.object = (
         f"**Effective alphabet:** {alphabet} symbols | "
-        f"**Hypothesis space:** {total_seq:,} sequences\n\n"
-        f"**Est. memory:** {mem_gb:.1f} GB | "
-        f"**Est. time:** {est_time:.0f}s | "
+        f"{seq_str}\n\n"
+        f"**Est. memory:** {mem_str} | "
+        f"**Est. time:** ~{est_time:.0f}s | "
         f"**Verdict:** {verdict}"
         f"{browser_note}"
+        f"{sys_note}"
     )
     resource_estimate_pane.alert_type = alert_type
-
-update_resource_estimate()
 
 
 # --- Run button and progress ---
@@ -577,6 +942,16 @@ def build_results_tabs():
     manhattan = make_manhattan_plot(result)
     tabs.append(("Manhattan Plot", manhattan))
 
+    # --- Top sequences bar chart ---
+    if n_sig > 0:
+        top_seqs = make_top_sequences_plot(result)
+        tabs.append(("Top Sequences", top_seqs))
+
+    # --- k-convergence plot ---
+    if result.k_history and len(result.k_history) > 1:
+        k_plot = make_k_convergence_plot(result)
+        tabs.append(("k-FWER Convergence", k_plot))
+
     # --- Significant sequences table ---
     sig_table = make_sig_table(result)
     tabs.append(("Significant Sequences", sig_table))
@@ -592,6 +967,20 @@ def make_manhattan_plot(result):
     n_seq = len(result.sequences)
     g_values = result.g_values
     seq_lengths = np.array([len(s) for s in result.sequences])
+    unique_lens = sorted(set(seq_lengths))
+
+    length_colors = ["#00e5ff", "#0099ff", "#0044dd", "#00aa44",
+                     "#009922", "#006600", "#ccaa00", "#dd6600", "#cc0000"]
+    color_map = {slen: length_colors[i % len(length_colors)]
+                 for i, slen in enumerate(unique_lens)}
+
+    # Rank sequences grouped by length (paper style)
+    x_pos = np.zeros(n_seq)
+    rank = 1
+    for slen in unique_lens:
+        for idx in np.where(seq_lengths == slen)[0]:
+            x_pos[idx] = rank
+            rank += 1
 
     points_data = []
     for i in range(n_seq):
@@ -611,15 +1000,16 @@ def make_manhattan_plot(result):
 
         if not np.isnan(best_g) and best_g > 0:
             neg_log = -np.log10(best_g)
-            seq_str = "".join(str(x) for x in result.sequences[i])
+            seq_str = "-".join(str(x) for x in result.sequences[i])
             points_data.append({
-                "x": i,
+                "x": x_pos[i],
                 "neg_log_g": neg_log,
                 "length": int(seq_lengths[i]),
                 "direction": direction,
                 "significant": bool(result.significant_mask[i]),
                 "sequence": seq_str,
                 "g_value": best_g,
+                "color": color_map[int(seq_lengths[i])],
             })
 
     if not points_data:
@@ -627,9 +1017,6 @@ def make_manhattan_plot(result):
 
     df = pd.DataFrame(points_data)
     threshold = -np.log10(0.5)
-
-    sig_df = df[df["significant"]]
-    nonsig_df = df[~df["significant"]]
 
     hover = HoverTool(tooltips=[
         ("Sequence", "@sequence"),
@@ -639,28 +1026,168 @@ def make_manhattan_plot(result):
         ("Length", "@length"),
     ])
 
-    scatter_nonsig = hv.Points(
-        nonsig_df, kdims=["x", "neg_log_g"],
-        vdims=["sequence", "g_value", "direction", "length"],
-    ).opts(color="#ccc", size=4, alpha=0.5, tools=[hover])
-
-    scatter_sig = hv.Points(
-        sig_df, kdims=["x", "neg_log_g"],
-        vdims=["sequence", "g_value", "direction", "length"],
-    ).opts(color="direction", cmap={"positive": "#e76f51", "negative": "#4361ee"},
-           size=7, alpha=0.8, tools=[hover])
+    overlays = []
+    for slen in unique_lens:
+        slen_df = df[df["length"] == slen]
+        if slen_df.empty:
+            continue
+        scatter = hv.Points(
+            slen_df, kdims=["x", "neg_log_g"],
+            vdims=["sequence", "g_value", "direction", "length", "color"],
+        ).opts(color=color_map[slen], size=5, alpha=0.8, tools=[hover],
+               line_color="black", line_width=0.3)
+        overlays.append(scatter)
 
     hline = hv.HLine(threshold).opts(
-        color="red", line_dash="dashed", line_width=1,
+        color="black", line_dash="dotted", line_width=1,
     )
 
-    plot = (scatter_nonsig * scatter_sig * hline).opts(
+    plot = hv.Overlay(overlays) * hline
+    plot = plot.opts(
         width=700, height=400,
-        xlabel="Sequence index", ylabel="-log10(g-value)",
+        xlabel="Sequence (ranked by length)", ylabel="-log10(g-value)",
         title="Manhattan Plot",
-        show_legend=True,
+        logx=True,
     )
-    return pn.pane.HoloViews(plot, sizing_mode="stretch_width")
+
+    legend_md = " | ".join(
+        f'<span style="color:{color_map[slen]}">&#9679;</span> L={slen}'
+        for slen in unique_lens
+    )
+
+    return pn.Column(
+        pn.pane.HTML(f"<div style='text-align:center; font-size:12px;'>{legend_md}</div>"),
+        pn.pane.HoloViews(plot, sizing_mode="stretch_width"),
+    )
+
+
+def make_top_sequences_plot(result, n_top=20):
+    """Bar chart of the most significant sequences, colored by direction."""
+    rows = []
+    for i, seq in enumerate(result.sequences):
+        if not result.significant_mask[i]:
+            continue
+        pos_g = result.g_values[i * 2]
+        neg_g = result.g_values[i * 2 + 1]
+        pos_t = result.test_stats[i * 2]
+        neg_t = result.test_stats[i * 2 + 1]
+
+        pos_sig = not np.isnan(pos_g) and pos_g < 0.5
+        neg_sig = not np.isnan(neg_g) and neg_g < 0.5
+
+        if pos_sig and neg_sig:
+            if pos_g <= neg_g:
+                g_val, t_val, direction = pos_g, pos_t, "positive"
+            else:
+                g_val, t_val, direction = neg_g, neg_t, "negative"
+        elif pos_sig:
+            g_val, t_val, direction = pos_g, pos_t, "positive"
+        elif neg_sig:
+            g_val, t_val, direction = neg_g, neg_t, "negative"
+        else:
+            continue
+
+        seq_str = "-".join(str(x) for x in seq)
+        rows.append({
+            "sequence": seq_str,
+            "t_stat": float(t_val) if not np.isnan(t_val) else 0.0,
+            "g_value": g_val,
+            "direction": direction,
+            "length": len(seq),
+        })
+
+    if not rows:
+        return pn.pane.Markdown("No significant sequences to display.")
+
+    df = pd.DataFrame(rows)
+    df = df.sort_values("g_value").head(n_top)
+    # Use signed t-stat for bar direction
+    df["signed_t"] = df.apply(
+        lambda r: r["t_stat"] if r["direction"] == "positive" else -r["t_stat"], axis=1)
+    df = df.sort_values("signed_t")
+
+    if app_state.mode == "Correlative":
+        pos_label = "Positive correlation"
+        neg_label = "Negative correlation"
+    else:
+        pos_label = "Group 0 > Group 1"
+        neg_label = "Group 1 > Group 0"
+
+    pos_df = df[df["direction"] == "positive"]
+    neg_df = df[df["direction"] == "negative"]
+
+    bars_pos = hv.Bars(
+        pos_df, kdims=["sequence"], vdims=["signed_t"],
+    ).opts(color="#e76f51", alpha=0.85) if not pos_df.empty else hv.Bars([])
+
+    bars_neg = hv.Bars(
+        neg_df, kdims=["sequence"], vdims=["signed_t"],
+    ).opts(color="#4361ee", alpha=0.85) if not neg_df.empty else hv.Bars([])
+
+    plot = (bars_neg * bars_pos).opts(
+        width=700, height=max(300, len(df) * 22),
+        xlabel="Test statistic (t)", ylabel="",
+        title=f"Top {len(df)} Significant Sequences",
+        invert_axes=True,
+        show_legend=False,
+    )
+
+    legend_html = (
+        f'<div style="font-size:12px; text-align:center;">'
+        f'<span style="color:#e76f51">&#9632;</span> {pos_label} &nbsp; '
+        f'<span style="color:#4361ee">&#9632;</span> {neg_label}'
+        f'</div>'
+    )
+
+    return pn.Column(
+        pn.pane.HoloViews(plot, sizing_mode="stretch_width"),
+        pn.pane.HTML(legend_html),
+    )
+
+
+def make_k_convergence_plot(result):
+    history = result.k_history
+    iterations = list(range(1, len(history) + 1))
+    ks = [h["k"] for h in history]
+    rejections = [h["rejections"] for h in history]
+
+    k_curve = hv.Curve(
+        list(zip(iterations, ks)), kdims=["Iteration"], vdims=["k"]
+    ).opts(color="#4361ee", line_width=2, tools=["hover"])
+
+    k_scatter = hv.Scatter(
+        list(zip(iterations, ks)), kdims=["Iteration"], vdims=["k"]
+    ).opts(color="#4361ee", size=8)
+
+    rej_curve = hv.Curve(
+        list(zip(iterations, rejections)), kdims=["Iteration"], vdims=["Rejections"]
+    ).opts(color="#e76f51", line_width=2, tools=["hover"])
+
+    rej_scatter = hv.Scatter(
+        list(zip(iterations, rejections)), kdims=["Iteration"], vdims=["Rejections"]
+    ).opts(color="#e76f51", size=8)
+
+    k_plot = (k_curve * k_scatter).opts(
+        width=350, height=250, ylabel="k", title="k convergence",
+    )
+    rej_plot = (rej_curve * rej_scatter).opts(
+        width=350, height=250, ylabel="Rejections", title="Rejections per iteration",
+    )
+
+    explanation = pn.pane.Markdown(
+        f"The k-FWER procedure iterates until the number of rejections stabilizes. "
+        f"Converged at **k={result.k_final}** after **{len(history)}** iterations "
+        f"with **{history[-1]['rejections']}** final rejections.",
+        styles={"font-size": "13px"},
+    )
+
+    return pn.Column(
+        explanation,
+        pn.Row(
+            pn.pane.HoloViews(k_plot),
+            pn.pane.HoloViews(rej_plot),
+        ),
+    )
 
 
 def make_sig_table(result):
@@ -673,10 +1200,20 @@ def make_sig_table(result):
             continue
         pos_g = result.g_values[i * 2]
         neg_g = result.g_values[i * 2 + 1]
-        if not np.isnan(pos_g) and pos_g < 0.5:
+
+        pos_sig = not np.isnan(pos_g) and pos_g < 0.5
+        neg_sig = not np.isnan(neg_g) and neg_g < 0.5
+
+        if pos_sig and neg_sig:
+            g_val = min(pos_g, neg_g)
+            if pos_g <= neg_g:
+                direction = "positive" if app_state.mode == "Correlative" else "group0 > group1"
+            else:
+                direction = "negative" if app_state.mode == "Correlative" else "group1 > group0"
+        elif pos_sig:
             direction = "positive" if app_state.mode == "Correlative" else "group0 > group1"
             g_val = pos_g
-        elif not np.isnan(neg_g) and neg_g < 0.5:
+        elif neg_sig:
             direction = "negative" if app_state.mode == "Correlative" else "group1 > group0"
             g_val = neg_g
         else:
@@ -689,11 +1226,13 @@ def make_sig_table(result):
             "g-value": round(g_val, 6),
         })
 
-    df = pd.DataFrame(rows).sort_values("g-value")
+    if not rows:
+        return pn.pane.Markdown("No significant sequences found.")
+
+    df = pd.DataFrame(rows).sort_values("g-value").reset_index(drop=True)
     return pn.widgets.Tabulator(
         df, show_index=False, sizing_mode="stretch_width",
         page_size=25, pagination="remote",
-        frozen_columns=["Sequence"],
     )
 
 
@@ -816,7 +1355,13 @@ demo_button.on_click(generate_demo_data)
 
 def data_upload_panel():
     """Build the data upload section based on selected format."""
-    if data_upload_type.value == "Single spreadsheet":
+    if data_upload_type.value == "Local folder":
+        return pn.Column(
+            folder_format_help,
+            folder_selector,
+            folder_load_button,
+        )
+    elif data_upload_type.value == "Single spreadsheet":
         return pn.Column(
             spreadsheet_format_help,
             spreadsheet_input,
@@ -840,8 +1385,8 @@ data_upload_type.param.watch(on_upload_type_change, "value")
 # Assemble the sidebar
 sidebar = pn.Column(
     pn.pane.Markdown("### Steps", styles={"margin-top": "0"}),
-    make_step_indicator(1, "Choose mode"),
-    make_step_indicator(2, "Load data"),
+    make_step_indicator(1, "Load data"),
+    make_step_indicator(2, "Confirm mode"),
     make_step_indicator(3, "Set parameters"),
     make_step_indicator(4, "Run analysis"),
     make_step_indicator(5, "View results"),
@@ -858,7 +1403,7 @@ sidebar = pn.Column(
 browser_banner = pn.pane.Alert(
     "**Browser demo mode.** Running without numba acceleration. "
     "Suitable for small datasets (< 50 subjects, short sequences). "
-    "For full performance, install locally: `pipx install pycbas[gui]` then run `cbas gui`.",
+    "For full performance, install locally: `pipx install pycbas[gui]` then run `pycbas gui`.",
     alert_type="warning",
 ) if BROWSER_MODE else None
 
@@ -868,17 +1413,18 @@ main_content = pn.Column(
     *([browser_banner] if browser_banner else []),
     pn.layout.Divider(),
 
-    # Step 1: Mode
-    pn.pane.Markdown("## 1. Choose analysis mode"),
-    mode_selector,
-    mode_explanation,
-    pn.layout.Divider(),
-
-    # Step 2: Data
-    pn.pane.Markdown("## 2. Load your data"),
+    # Step 1: Data
+    pn.pane.Markdown("## 1. Load your data"),
     pn.Row(data_upload_type, demo_button),
     data_upload_content,
     data_status,
+    pn.layout.Divider(),
+
+    # Step 2: Mode (auto-detected, with override)
+    pn.pane.Markdown("## 2. Analysis mode"),
+    mode_detection_alert,
+    mode_selector,
+    mode_explanation,
     pn.layout.Divider(),
 
     # Step 3: Parameters
@@ -907,7 +1453,7 @@ main_content = pn.Column(
 
 # Final layout
 template = pn.template.MaterialTemplate(
-    title="CBAS",
+    title="pyCBAS",
     sidebar=[sidebar],
     main=[main_content],
     header_background="#4361ee",

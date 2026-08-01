@@ -22,6 +22,7 @@ class CBASResult:
     g_values: np.ndarray
     k_final: int
     significant_mask: np.ndarray
+    k_history: list = None
 
     @property
     def n_significant(self):
