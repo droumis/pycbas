@@ -4,4 +4,4 @@
 Part 2 covers <strong>correlative mode</strong>, where each subject has a continuous measure (like a clinical score) instead of a group label. <a href="../walkthrough/">Part 1 (comparative mode) is here.</a>
 </div>
 
-<iframe src="../walkthrough-correlative.html" style="width: 100%; height: 3600px; border: none; margin-top: 16px;"></iframe>
+<iframe src="../walkthrough-correlative.html" style="width: 100%; height: 4200px; border: none; margin-top: 16px;"></iframe>

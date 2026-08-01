@@ -177,6 +177,18 @@ code { background: var(--code-bg); padding: 2px 6px; border-radius: 3px; font-si
 
 <p>The counting step (step 1 from Part 1) is exactly the same. You still slide a window across each subject's choice stream and build a count matrix. The differences start at step 2, where you measure the strength of the relationship.</p>
 
+<h3>The big picture</h3>
+
+<p>Here's what the full setup looks like. Each subject has a choice stream (just like Part 1) AND a continuous score. After counting sequences, you get a matrix. Then for each sequence (each column), you ask: "Does usage of this sequence track with the score across subjects?"</p>
+
+<div class="vis-container" id="vis-overview">
+  <svg viewBox="0 0 780 420"></svg>
+</div>
+
+<p>On the left, each row is a subject. You can see their choice stream and their score. In the middle, the count matrix tallies how often each subject produced each sequence. On the right, picking one column (one sequence) and pairing it with the scores gives you a scatter plot. The correlation across that scatter is a single number that measures how strongly that sequence tracks with the covariate.</p>
+
+<p>CBAS repeats this for every column (every sequence), producing one test statistic per sequence. Then it asks: which of those are strong enough to survive correction for all the tests you just ran?</p>
+
 <!-- ============ STEP 1: WHAT IS CORRELATION ============ -->
 <h2><span class="step-number">1</span> What is Correlation?</h2>
 
@@ -321,6 +333,236 @@ code { background: var(--code-bg); padding: 2px 6px; border-radius: 3px; font-si
 </div>
 
 <script>
+// ============================================================
+// Overview figure: subjects → count matrix → one correlation
+// ============================================================
+(function() {
+  const svg = d3.select("#vis-overview svg");
+  const width = 780, height = 420;
+  const margin = { top: 10, right: 10, bottom: 10, left: 10 };
+  const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
+
+  const nSubjects = 8;
+  const sequences = ["LL", "LR", "RL", "RR", "LRL", "RLR"];
+  const nSeq = sequences.length;
+
+  // Deterministic seed-like data
+  const streams = [
+    "LRLRLRLLRRL", "RRLLLRLRRLL", "LLRLRRLRLRL",
+    "RLRLLLRRLRL", "RRRLLRLRLLL", "LLLRLRLRRLR",
+    "RLRRLRLLLRL", "LLRRLRLRLRR"
+  ];
+  const scores = [72, 58, 85, 44, 39, 91, 63, 78];
+
+  // Count sequences in each stream
+  function countSeqs(stream, seqs) {
+    const counts = seqs.map(() => 0);
+    for (let s = 0; s < seqs.length; s++) {
+      const pat = seqs[s];
+      for (let i = 0; i <= stream.length - pat.length; i++) {
+        if (stream.slice(i, i + pat.length) === pat) counts[s]++;
+      }
+    }
+    return counts;
+  }
+
+  const countMatrix = streams.map(s => countSeqs(s, sequences));
+
+  // Layout sections
+  const leftW = 200;   // streams + scores
+  const matW = 200;    // count matrix
+  const rightW = 280;  // scatter
+  const gapA = 40;     // gap between left and matrix
+  const gapB = 40;     // gap between matrix and scatter
+  const rowH = 38;
+  const headerH = 40;
+  const totalContentH = headerH + nSubjects * rowH;
+
+  // Colors
+  const scoreColor = d3.scaleSequential(d3.interpolateOranges).domain([30, 100]);
+  const highlightCol = 4; // LRL column to highlight
+
+  // ---- Left section: subjects ----
+  const leftG = g.append("g").attr("transform", `translate(0, 0)`);
+
+  leftG.append("text")
+    .attr("x", 0).attr("y", 14)
+    .attr("font-size", "11px").attr("font-weight", "600").attr("fill", "#666")
+    .text("Subjects");
+  leftG.append("text")
+    .attr("x", 130).attr("y", 14)
+    .attr("font-size", "11px").attr("font-weight", "600").attr("fill", "#666")
+    .text("Score");
+
+  for (let i = 0; i < nSubjects; i++) {
+    const y = headerH + i * rowH;
+    // Subject label
+    leftG.append("text")
+      .attr("x", 0).attr("y", y + 16)
+      .attr("font-size", "10px").attr("fill", "#999")
+      .text(`S${i + 1}`);
+    // Choice stream
+    leftG.append("text")
+      .attr("x", 20).attr("y", y + 16)
+      .attr("font-size", "11px").attr("font-family", "monospace").attr("fill", "#333")
+      .text(streams[i]);
+    // Score
+    leftG.append("rect")
+      .attr("x", 135).attr("y", y + 3)
+      .attr("width", 30).attr("height", 18).attr("rx", 3)
+      .attr("fill", scoreColor(scores[i])).attr("opacity", 0.8);
+    leftG.append("text")
+      .attr("x", 150).attr("y", y + 16)
+      .attr("text-anchor", "middle")
+      .attr("font-size", "10px").attr("font-weight", "600").attr("fill", "#fff")
+      .text(scores[i]);
+  }
+
+  // ---- Arrow 1 ----
+  const arrow1X = leftW + gapA / 2;
+  g.append("text")
+    .attr("x", arrow1X).attr("y", headerH + (nSubjects * rowH) / 2)
+    .attr("text-anchor", "middle").attr("font-size", "20px").attr("fill", "#ccc")
+    .text("→");
+  g.append("text")
+    .attr("x", arrow1X).attr("y", headerH + (nSubjects * rowH) / 2 + 18)
+    .attr("text-anchor", "middle").attr("font-size", "9px").attr("fill", "#999")
+    .text("count");
+
+  // ---- Middle section: count matrix ----
+  const matG = g.append("g").attr("transform", `translate(${leftW + gapA}, 0)`);
+  const cellW = matW / nSeq;
+
+  // Column headers
+  for (let j = 0; j < nSeq; j++) {
+    const x = j * cellW;
+    matG.append("text")
+      .attr("x", x + cellW / 2).attr("y", 14)
+      .attr("text-anchor", "middle")
+      .attr("font-size", "9px").attr("font-family", "monospace")
+      .attr("font-weight", j === highlightCol ? "700" : "400")
+      .attr("fill", j === highlightCol ? "#e76f51" : "#666")
+      .text(sequences[j]);
+  }
+
+  // Matrix cells
+  const maxCount = d3.max(countMatrix.flat());
+  const cellColor = d3.scaleSequential(d3.interpolateBlues).domain([0, maxCount]);
+
+  for (let i = 0; i < nSubjects; i++) {
+    for (let j = 0; j < nSeq; j++) {
+      const x = j * cellW;
+      const y = headerH + i * rowH;
+      const isHighlight = j === highlightCol;
+      matG.append("rect")
+        .attr("x", x + 2).attr("y", y + 2)
+        .attr("width", cellW - 4).attr("height", rowH - 8)
+        .attr("rx", 3)
+        .attr("fill", isHighlight ? "#e76f51" : cellColor(countMatrix[i][j]))
+        .attr("opacity", isHighlight ? 0.8 : 0.6)
+        .attr("stroke", isHighlight ? "#e76f51" : "none")
+        .attr("stroke-width", isHighlight ? 2 : 0);
+      matG.append("text")
+        .attr("x", x + cellW / 2).attr("y", y + rowH / 2 + 2)
+        .attr("text-anchor", "middle")
+        .attr("font-size", "11px")
+        .attr("font-weight", isHighlight ? "700" : "400")
+        .attr("fill", isHighlight ? "#fff" : "#333")
+        .text(countMatrix[i][j]);
+    }
+  }
+
+  // Highlight column label
+  matG.append("text")
+    .attr("x", highlightCol * cellW + cellW / 2)
+    .attr("y", headerH + nSubjects * rowH + 18)
+    .attr("text-anchor", "middle")
+    .attr("font-size", "10px").attr("fill", "#e76f51").attr("font-weight", "600")
+    .text("↑ pick one column");
+
+  // ---- Arrow 2 ----
+  const arrow2X = leftW + gapA + matW + gapB / 2;
+  g.append("text")
+    .attr("x", arrow2X).attr("y", headerH + (nSubjects * rowH) / 2)
+    .attr("text-anchor", "middle").attr("font-size", "20px").attr("fill", "#ccc")
+    .text("→");
+  g.append("text")
+    .attr("x", arrow2X).attr("y", headerH + (nSubjects * rowH) / 2 + 18)
+    .attr("text-anchor", "middle").attr("font-size", "9px").attr("fill", "#999")
+    .text("correlate");
+
+  // ---- Right section: scatter plot for highlighted column ----
+  const scatterX = leftW + gapA + matW + gapB;
+  const scatterG = g.append("g").attr("transform", `translate(${scatterX}, 0)`);
+  const sw = rightW - 20, sh = totalContentH - 30;
+  const sm = { top: 25, right: 10, bottom: 35, left: 35 };
+  const spw = sw - sm.left - sm.right;
+  const sph = sh - sm.top - sm.bottom;
+
+  const colData = countMatrix.map(row => row[highlightCol]);
+  const xScale = d3.scaleLinear().domain([d3.min(colData) - 0.5, d3.max(colData) + 0.5]).range([0, spw]);
+  const yScale = d3.scaleLinear().domain([30, 100]).range([sph, 0]);
+
+  const plotG = scatterG.append("g").attr("transform", `translate(${sm.left},${sm.top})`);
+
+  plotG.append("g").attr("transform", `translate(0,${sph})`)
+    .call(d3.axisBottom(xScale).ticks(5).tickFormat(d3.format("d")))
+    .selectAll("text").attr("font-size", "9px");
+  plotG.append("text")
+    .attr("x", spw / 2).attr("y", sph + 28)
+    .attr("text-anchor", "middle").attr("font-size", "10px").attr("fill", "#e76f51")
+    .text("LRL count");
+
+  plotG.append("g").call(d3.axisLeft(yScale).ticks(5))
+    .selectAll("text").attr("font-size", "9px");
+  plotG.append("text")
+    .attr("transform", "rotate(-90)")
+    .attr("x", -sph / 2).attr("y", -28)
+    .attr("text-anchor", "middle").attr("font-size", "10px").attr("fill", "#666")
+    .text("Score");
+
+  // Dots
+  for (let i = 0; i < nSubjects; i++) {
+    plotG.append("circle")
+      .attr("cx", xScale(colData[i]))
+      .attr("cy", yScale(scores[i]))
+      .attr("r", 5)
+      .attr("fill", "#e76f51").attr("opacity", 0.7);
+  }
+
+  // Regression line
+  const mx = d3.mean(colData), my = d3.mean(scores);
+  const slope = d3.sum(colData.map((x, i) => (x - mx) * (scores[i] - my))) /
+                d3.sum(colData.map(x => (x - mx) * (x - mx)));
+  const intercept = my - slope * mx;
+  const xMin = d3.min(colData), xMax = d3.max(colData);
+  plotG.append("line")
+    .attr("x1", xScale(xMin)).attr("x2", xScale(xMax))
+    .attr("y1", yScale(slope * xMin + intercept))
+    .attr("y2", yScale(slope * xMax + intercept))
+    .attr("stroke", "#e76f51").attr("stroke-width", 2)
+    .attr("opacity", 0.5).attr("stroke-dasharray", "4,2");
+
+  // r value
+  let num = 0, dx2 = 0, dy2 = 0;
+  for (let i = 0; i < nSubjects; i++) {
+    const dx = colData[i] - mx, dy = scores[i] - my;
+    num += dx * dy; dx2 += dx * dx; dy2 += dy * dy;
+  }
+  const r = num / Math.sqrt(dx2 * dy2);
+  plotG.append("text")
+    .attr("x", spw - 5).attr("y", 10)
+    .attr("text-anchor", "end")
+    .attr("font-size", "12px").attr("font-weight", "600").attr("fill", "#e76f51")
+    .text(`r = ${r.toFixed(2)}`);
+
+  scatterG.append("text")
+    .attr("x", sw / 2).attr("y", 12)
+    .attr("text-anchor", "middle")
+    .attr("font-size", "11px").attr("font-weight", "600").attr("fill", "#e76f51")
+    .text("One sequence → one correlation");
+})();
+
 // ============================================================
 // Scatter plot with adjustable correlation
 // ============================================================
