@@ -18,6 +18,12 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+gui = [
+    "panel>=1.4",
+    "holoviews>=1.18",
+    "bokeh>=3.3",
+    "pandas>=2.0",
+]
 dev = [
     "pytest>=7",
     "matplotlib>=3.7",
@@ -25,11 +31,17 @@ dev = [
     "scipy>=1.11",
 ]
 
+[project.scripts]
+cbas = "pycbas.cli:main"
+
 [project.urls]
 Repository = "https://github.com/droumis/pycbas"
 
 [tool.hatch.build.targets.wheel]
 packages = ["pycbas"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"app.py" = "pycbas/_app.py"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

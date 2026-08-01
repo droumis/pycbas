@@ -21,8 +21,25 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - run: pip install mkdocs-material
+      - run: pip install mkdocs-material panel holoviews bokeh numpy pandas param
       - run: mkdocs build --strict
+
+      # Build WASM demo app (runs in browser via Pyodide)
+      - run: |
+          panel convert app.py --to pyodide-worker --out site/demo \
+            --requirements numpy pandas \
+            --resources pycbas/__init__.py pycbas/params.py pycbas/io.py \
+              pycbas/core.py pycbas/bootstrap.py pycbas/stepdown.py \
+              pycbas/pipeline.py pycbas/resources.py pycbas/_numba.py
+      - run: |
+          cat > site/demo/index.html << 'REDIRECT'
+          <!DOCTYPE html>
+          <html>
+          <head><meta http-equiv="refresh" content="0; url=app.html"></head>
+          <body><a href="app.html">Launch CBAS demo</a></body>
+          </html>
+          REDIRECT
+
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site

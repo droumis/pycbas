@@ -24,6 +24,7 @@ theme:
 
 nav:
   - Home: index.md
+  - Interactive App: app.md
   - Walkthrough (Comparative): walkthrough.md
   - Walkthrough (Correlative): walkthrough-correlative.md
   - User Guide: guide.md
