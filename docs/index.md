@@ -8,10 +8,6 @@ Uses Romano-Wolf step-down for multiple comparison correction and k-FWER iterati
 
 A no-code interface for running CBAS analyses. Load data, auto-detect parameters and mode, run the pipeline, and explore results visually.
 
-![pyCBAS GUI](img/gui-results.png)
-
-[Launch the GUI](app.md){ .md-button .md-button--primary }
-
 ## Install
 
 We recommend installing in a dedicated environment (conda, mamba, or pixi) rather than your base environment.
