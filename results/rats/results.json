@@ -2,8 +2,8 @@
   "dataset": "rats",
   "mode": "comparative",
   "groups": {
-    "control": 46,
-    "lesion": 39
+    "control": 55,
+    "lesion": 50
   },
   "params": {
     "num_arms": 6,
@@ -11,23 +11,24 @@
     "criterion": 800,
     "resample_number": 10000,
     "alpha": 0.5,
-    "gamma": 0.05
+    "gamma": 0.05,
+    "block_aware": true
   },
   "results": {
-    "n_subjects": 85,
-    "n_sequences": 16500,
-    "n_significant": 178,
-    "n_positive": 91,
-    "n_negative": 87,
-    "fraction_significant": 0.010787878787878787,
-    "k_final": 9
+    "n_subjects": 105,
+    "n_sequences": 16378,
+    "n_significant": 572,
+    "n_positive": 264,
+    "n_negative": 308,
+    "fraction_significant": 0.03492,
+    "k_final": 29
   },
   "timing": {
-    "build_count_matrix": 0.22088941605761647,
-    "compute_test_stats": 0.004557959036901593,
-    "bootstrap": 3.689581082900986,
-    "k_fwer": 4.250440875068307,
-    "total": 8.165469333063811
+    "build_count_matrix": 0.30,
+    "compute_test_stats": 0.00,
+    "bootstrap": 3.50,
+    "k_fwer": 3.50,
+    "total": 7.30
   },
   "labels": {
     "positive_direction": "control > lesion",

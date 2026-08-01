@@ -66,7 +66,7 @@ class CBASApp(param.Parameterized):
     criterion = param.Integer(default=200, bounds=(10, 5000), doc="Trials per subject to use")
     resample_number = param.Integer(default=10000, bounds=(100, 50000), doc="Bootstrap resamples")
     encode_reward = param.Boolean(default=False, doc="Encode reward into symbols")
-    contingency = param.Integer(default=1, bounds=(0, 10), doc="Block type filter")
+    contingency = param.Integer(default=1, bounds=(0, 10), doc="Trial condition filter")
     block_aware = param.Boolean(default=False, doc="Sequences cannot span block/session boundaries")
 
     # --- Run state ---
@@ -336,34 +336,106 @@ def load_from_folder(event):
         if info_files:
             # --- Mode 1: Info file present ---
             info_file = info_files[0]
+            all_files = list(folder_path.glob("*.txt")) + list(folder_path.glob("*.csv"))
+            subject_files_unsorted = [
+                f for f in all_files if f != info_file and not f.name.endswith("Info.txt")
+            ]
+
+            def _numeric_key(p):
+                digits = ""
+                for ch in reversed(p.stem):
+                    if ch.isdigit():
+                        digits = ch + digits
+                    else:
+                        break
+                return int(digits) if digits else 0
+
+            subject_files = sorted(subject_files_unsorted, key=_numeric_key)
+
+            # Try to parse: first detect if it has a CSV header
             info = {}
+            info_df = None
             with open(info_file) as f:
-                for line in f:
-                    parts = line.strip().split(",")
-                    if len(parts) >= 2:
-                        info[int(parts[0])] = float(parts[1])
+                first_line = f.readline().strip()
+
+            has_header = not first_line[0].isdigit() and "," in first_line
+
+            if has_header:
+                # Multi-column CSV with header (e.g. rat data: name,experiment,sex,genotype,lesion)
+                info_df = pd.read_csv(info_file)
+                # Row index = file index (row 0 -> an0.txt, etc.)
+                # Look for a group column (lesion, group, label)
+                group_col = None
+                for col in ["lesion", "group", "label", "condition"]:
+                    if col in info_df.columns:
+                        group_col = col
+                        break
+                # Look for a filter column (genotype)
+                filter_col = None
+                for col in ["genotype", "geno", "genotype_filter"]:
+                    if col in info_df.columns:
+                        filter_col = col
+                        break
+
+                if group_col:
+                    # Apply filter if present
+                    if filter_col is not None:
+                        mask = info_df[filter_col] == 0
+                        valid_rows = info_df[mask]
+                    else:
+                        valid_rows = info_df
+
+                    # Get rows with valid group labels (0 or 1)
+                    valid_rows = valid_rows[valid_rows[group_col].isin([0, 1])]
+
+                    for idx in valid_rows.index:
+                        info[idx] = float(valid_rows.loc[idx, group_col])
+                else:
+                    # No group column found, try second column as score
+                    cols = info_df.columns.tolist()
+                    if len(cols) >= 2:
+                        for idx, row in info_df.iterrows():
+                            try:
+                                info[idx] = float(row.iloc[1])
+                            except (ValueError, TypeError):
+                                continue
+            else:
+                # Simple format: subject_id, label_or_score per line
+                with open(info_file) as f:
+                    for line in f:
+                        parts = line.strip().split(",")
+                        if len(parts) >= 2:
+                            try:
+                                info[int(parts[0])] = float(parts[1])
+                            except ValueError:
+                                continue
 
             if not info:
                 data_status.object = f"**Error:** info file `{info_file.name}` is empty or malformed."
                 data_status.alert_type = "danger"
                 return
 
-            all_files = list(folder_path.glob("*.txt")) + list(folder_path.glob("*.csv"))
-            subject_files = [f for f in all_files if f != info_file and not f.name.endswith("Info.txt")]
-
+            # Match subjects to files
             matched = {}
-            for f in subject_files:
-                stem = f.stem
-                digits = ""
-                for ch in reversed(stem):
-                    if ch.isdigit():
-                        digits = ch + digits
-                    else:
-                        break
-                if digits:
-                    subj_id = int(digits)
-                    if subj_id in info:
-                        matched[subj_id] = f
+            if has_header and info_df is not None:
+                # Row-indexed: row i -> file i (sorted by name)
+                for subj_idx in sorted(info.keys()):
+                    if subj_idx < len(subject_files):
+                        matched[subj_idx] = subject_files[subj_idx]
+            else:
+                # ID-based matching from filename trailing digits
+                for f in subject_files:
+                    stem = f.stem
+                    digits = ""
+                    for ch in reversed(stem):
+                        if ch.isdigit():
+                            digits = ch + digits
+                        else:
+                            break
+                    if digits:
+                        subj_id = int(digits)
+                        if subj_id in info:
+                            matched[subj_id] = f
 
             if not matched:
                 data_status.object = (
@@ -564,7 +636,7 @@ spreadsheet_format_help = pn.pane.Markdown("""
 |--------|-------------|
 | `score` | Continuous measure per subject |
 
-Optionally include `reward` (0 or 1) and `contingency` (block type integer) columns.
+Optionally include `reward` (0 or 1) and `contingency` (trial condition integer) columns.
 Trials should be in order within each subject.
 
 **Example (comparative):**
@@ -736,30 +808,41 @@ labels_file_input.param.watch(parse_csv_files, "value")
 num_arms_widget = pn.widgets.IntInput(
     name="Number of choice symbols",
     value=2, start=2, end=20, step=1,
+    description="Number of distinct choices in your task. With reward encoding enabled, effective alphabet becomes num_arms * 2.",
 )
 seq_len_max_widget = pn.widgets.IntInput(
     name="Max sequence length (L)",
     value=4, start=2, end=10, step=1,
+    description="Maximum pattern length to test. All lengths 1 through L are evaluated. Larger L greatly increases the hypothesis space.",
 )
 criterion_widget = pn.widgets.IntInput(
     name="Trials per subject (criterion)",
     value=200, start=10, end=5000, step=10,
+    description="Number of trials per subject used for sequence counting. Should not exceed the minimum trial count across subjects.",
 )
 resample_widget = pn.widgets.IntInput(
     name="Bootstrap resamples (M)",
     value=10000, start=100, end=50000, step=100,
+    description="Number of bootstrap resamples for the null distribution. More gives tighter p-values but costs linearly in time and memory.",
 )
 encode_reward_widget = pn.widgets.Checkbox(
     name="Encode reward into symbols (doubles alphabet)",
     value=False,
 )
+encode_reward_tooltip = pn.widgets.TooltipIcon(
+    value="When enabled, each trial's symbol becomes choice + reward * num_arms. Use for tasks where reward outcome is informative.",
+)
 contingency_widget = pn.widgets.IntInput(
-    name="Contingency filter (block type)",
+    name="Contingency filter (trial condition)",
     value=1, start=0, end=10, step=1,
+    description="Only trials matching this value in the contingency column are used. Filters by task condition, not session.",
 )
 block_aware_widget = pn.widgets.Checkbox(
     name="Block-aware (sequences cannot span sessions)",
     value=False,
+)
+block_aware_tooltip = pn.widgets.TooltipIcon(
+    value="When enabled, sequences are counted within blocks only and cannot span block/session boundaries. Enable for multi-session experiments.",
 )
 
 def sync_params(*events):
@@ -1460,8 +1543,8 @@ main_content = pn.Column(
     # Step 3: Parameters
     pn.pane.Markdown("## 3. Configure parameters"),
     pn.Row(
-        pn.Column(num_arms_widget, seq_len_max_widget, encode_reward_widget, width=300),
-        pn.Column(criterion_widget, resample_widget, contingency_widget, block_aware_widget, width=300),
+        pn.Column(num_arms_widget, seq_len_max_widget, pn.Row(encode_reward_widget, encode_reward_tooltip), width=300),
+        pn.Column(criterion_widget, resample_widget, contingency_widget, pn.Row(block_aware_widget, block_aware_tooltip), width=300),
     ),
     resource_estimate_pane,
     pn.layout.Divider(),

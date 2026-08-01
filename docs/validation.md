@@ -8,9 +8,9 @@ pycbas is validated against the original Igor Pro implementation by David Kastne
 |---|---|---|---|---|---|---|
 | Flies | Comparative | 1,566 | 2,046 | 1,605 (78.4%) | 1,605 (78.4%) | 81 |
 | Humans | Correlative | 1,413 | 408 | 31 (7.6%) | 31 (7.6%) | 2 |
-| Rats | Comparative | 85 | 16,500 | 178 (1.1%) | 386* | 9 |
+| Rats | Comparative | 105 | 16,378 | 572 (3.5%) | 572 (3.5%) | 29 |
 
-*Rat comparison uses a subset of the full dataset (85 of the subjects used in the paper). Not directly comparable.
+All three datasets produce exact matches with David's Igor implementation.
 
 ## Fly validation
 
@@ -23,6 +23,12 @@ Significance counts match exactly (1,605/2,046). Test statistics match to a maxi
 Two-step decision task (correlative mode with CBIT compulsivity score). Parameters: 6 arms, L=4, criterion=400, M=10,000.
 
 Exact match: 31/408 significant sequences with k=2.
+
+## Rat validation
+
+Spatial alternation task (comparative mode, control vs hippocampal lesion). Parameters: 6 arms, L=6, criterion=800, M=10,000, block_aware=True. Subjects filtered by genotype==0 and lesion in [0,1], yielding 105 rats (55 control, 50 lesion).
+
+Exact match: 572/16,378 significant sequences with k=29. Test statistics agree within 1e-4 on all 16,376 overlapping sequences. The `block_aware` option prevents sequences from spanning session boundaries, which was the source of initial discrepancies with David's implementation.
 
 ## Key implementation details that affect correctness
 

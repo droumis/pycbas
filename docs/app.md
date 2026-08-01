@@ -73,6 +73,7 @@ Parameters are auto-configured from the loaded data:
 | Encode reward | Whether reward column has non-zero values |
 | Contingency filter | Distinct contingency values present |
 | Criterion | Min trial count per subject (filtered by contingency) |
+| Block aware | Multiple sessions/blocks detected in data |
 
 **Max sequence length** and **bootstrap resamples** must be set manually as they depend on the research question.
 

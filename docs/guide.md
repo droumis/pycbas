@@ -75,7 +75,7 @@ If your data is stored as one CSV per subject with columns `session, choice, rew
 - `session` — integer session ID (used only if you want to filter by session)
 - `choice` — the arm/symbol chosen (0-indexed integer, must be < `num_arms`)
 - `reward` — 0 or 1 (used when `encode_reward=True` to double the alphabet)
-- `contingency` — block type integer (used to filter trials by condition)
+- `contingency` — trial condition integer (used to filter trials by condition)
 
 ```python
 from pycbas import load_subject_data
@@ -117,7 +117,7 @@ params = CBASParams(
 # Run
 result = run_cbas_comparative(
     subjects_data, group_labels, params,
-    contingency=2,       # filter to block type 2
+    contingency=2,       # filter to trial condition 2
     encode_reward=True,  # symbol = choice + reward * num_arms
 )
 
@@ -216,7 +216,7 @@ Pipeline functions (`run_cbas_comparative`, `run_cbas_correlative`) also accept:
 
 ## Memory and chunked mode
 
-The main memory cost is the bootstrap null matrix (M rows by number of valid test statistics). For large hypothesis spaces (e.g. rats with 16,500 sequences), this can reach several GB.
+The main memory cost is the bootstrap null matrix (M rows by number of valid test statistics). For large hypothesis spaces (e.g. rats with 16,378 sequences), this can reach several GB.
 
 The `chunked=True` option (default in `run_cbas_comparative`) generates the bootstrap in row-chunks directly into the sorted submatrix, avoiding the full intermediate allocation. This uses about 40% less peak memory at the cost of about 30% more time.
 
