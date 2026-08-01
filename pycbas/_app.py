@@ -948,7 +948,7 @@ def build_results_tabs():
         tabs.append(("Top Sequences", top_seqs))
 
     # --- k-convergence plot ---
-    if result.k_history and len(result.k_history) > 1:
+    if result.k_history:
         k_plot = make_k_convergence_plot(result)
         tabs.append(("k-FWER Convergence", k_plot))
 
