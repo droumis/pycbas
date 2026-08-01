@@ -68,14 +68,22 @@ li { margin-bottom: 6px; }
   display: flex; gap: 16px; align-items: center;
   margin-top: 16px; flex-wrap: wrap;
 }
-.controls label { font-size: 0.9em; color: var(--muted); }
-.controls input[type="range"] { width: 180px; cursor: pointer; }
 .controls button {
   padding: 6px 16px; border: 1px solid var(--border);
   border-radius: 4px; background: var(--card-bg); cursor: pointer; font-size: 0.9em;
 }
 .controls button:hover { background: var(--orange); color: white; border-color: var(--orange); }
 .controls .value { font-weight: 600; min-width: 30px; text-align: center; }
+
+.control-row {
+  display: flex; align-items: center; gap: 12px;
+  margin-top: 12px;
+}
+.control-row label {
+  font-size: 0.9em; color: var(--muted); min-width: 140px;
+}
+.control-row input[type="range"] { flex: 1; max-width: 240px; cursor: pointer; }
+.control-row .value { font-weight: 600; min-width: 60px; }
 
 code { background: var(--code-bg); padding: 2px 6px; border-radius: 3px; font-size: 0.9em; }
 
@@ -136,95 +144,127 @@ code { background: var(--code-bg); padding: 2px 6px; border-radius: 3px; font-si
 <!-- ============ INTRO ============ -->
 <h2><span class="step-number">0</span> When to Use Correlative Mode</h2>
 
-<p>The comparative walkthrough (Part 1) asks: "Do these two groups produce different behavioral patterns?" But sometimes you don't have two clean groups. Instead, you have a continuous measurement for each subject, such as a clinical score, a performance index, or an age.</p>
+<p>Part 1 of this walkthrough covers <strong>comparative mode</strong>, where you split subjects into two groups (like "control" and "lesion") and look for behavioral patterns that differ between them.</p>
 
-<p>Correlative mode asks: "Are any behavioral patterns correlated with this continuous measure?" For example, in humans performing a 6-armed bandit task, each subject has a CBIT score (a measure of cognitive flexibility). CBAS can find which choice sequences are produced more or less by subjects with higher CBIT scores.</p>
+<p>But what if you don't have two groups? What if instead, each subject has a <em>score</em> on some continuous scale? For example:</p>
+
+<ul>
+<li>Each human subject has a cognitive flexibility score (CBIT)</li>
+<li>Each rat has a measure of how much dopamine was released</li>
+<li>Each subject has an age, a reaction time, or a performance metric</li>
+</ul>
+
+<p>In these cases, there's no natural way to split subjects into "group A" and "group B." Instead, you want to ask: <strong>"Are any behavioral patterns produced more (or less) by subjects who score higher on this measure?"</strong></p>
+
+<p>That's what correlative mode does. It looks for sequences whose usage <em>correlates</em> with the continuous variable.</p>
 
 <div class="comparison">
   <div>
-    <h4 style="color: var(--accent);">Comparative mode</h4>
-    <p><strong>Input:</strong> subjects split into 2 groups</p>
-    <p><strong>Question:</strong> which sequences differ between groups?</p>
-    <p><strong>Stat:</strong> studentized difference in means</p>
+    <h4 style="color: var(--accent);">Comparative mode (Part 1)</h4>
+    <p><strong>Input:</strong> subjects in 2 groups</p>
+    <p><strong>Question:</strong> which patterns differ between groups?</p>
+    <p><strong>Measures:</strong> difference in group averages</p>
     <p><strong>Null:</strong> shuffle group labels</p>
   </div>
   <div>
-    <h4 style="color: var(--orange);">Correlative mode</h4>
-    <p><strong>Input:</strong> each subject has a continuous score</p>
-    <p><strong>Question:</strong> which sequences correlate with the score?</p>
-    <p><strong>Stat:</strong> studentized Pearson correlation</p>
-    <p><strong>Null:</strong> permute the scores across subjects</p>
+    <h4 style="color: var(--orange);">Correlative mode (this page)</h4>
+    <p><strong>Input:</strong> each subject has a score</p>
+    <p><strong>Question:</strong> which patterns track with the score?</p>
+    <p><strong>Measures:</strong> correlation between count and score</p>
+    <p><strong>Null:</strong> shuffle the scores across subjects</p>
   </div>
 </div>
 
-<p>Steps 1 (counting sequences), 4 (step-down), and 5 (k-FWER) work identically. The differences are in how you measure the effect (step 2) and how you build the null (step 3).</p>
+<p>The counting step (step 1 from Part 1) is exactly the same. You still slide a window across each subject's choice stream and build a count matrix. The differences start at step 2, where you measure the strength of the relationship.</p>
 
-<!-- ============ STEP 1: CORRELATION ============ -->
-<h2><span class="step-number">1</span> Measuring Correlation</h2>
+<!-- ============ STEP 1: WHAT IS CORRELATION ============ -->
+<h2><span class="step-number">1</span> What is Correlation?</h2>
 
-<p>In comparative mode, you ask "do the group means differ?" In correlative mode, you ask "does this sequence's count go up (or down) as the covariate increases?"</p>
+<p>Before diving into formulas, let's build intuition for what correlation means visually.</p>
 
-<p>This is a correlation question. Each subject is a data point with two values: how often they produced this sequence (x-axis) and their covariate score (y-axis). If there's a pattern where subjects who use this sequence more also have higher scores, that's a positive correlation.</p>
+<p>Imagine you have 50 subjects. Each subject produced some sequence (say "LRL") a certain number of times. You also have a clinical score for each subject. If you plot one against the other, you get a scatter plot. Each dot is one subject.</p>
 
 <div class="vis-container" id="vis-scatter">
   <svg viewBox="0 0 780 340"></svg>
-  <div class="controls">
+  <div class="control-row">
     <label>Correlation strength:</label>
     <input type="range" id="corr-slider" min="-100" max="100" value="60" step="1">
     <span class="value" id="corr-val">r = 0.60</span>
-    <label>Noise:</label>
+  </div>
+  <div class="control-row">
+    <label>Noise (scatter):</label>
     <input type="range" id="noise-slider" min="5" max="80" value="30" step="1">
+    <span class="value" id="noise-val"></span>
   </div>
 </div>
 
-<p>Each dot is one subject. The x-axis is how often they produced some particular sequence. The y-axis is their covariate score. The line shows the best-fit trend. Drag the sliders to see how correlation strength and noise affect the pattern.</p>
+<p><strong>Try it:</strong> Drag "correlation strength" to the right. The dots line up more. Subjects who produce this sequence more also tend to have higher scores. That's a positive correlation.</p>
 
-<h3>The Pearson correlation (rho)</h3>
+<p>Now drag it to the left (negative). The relationship flips: subjects who produce the sequence more tend to have <em>lower</em> scores.</p>
 
-<p>The Pearson correlation coefficient measures linear association between two variables. It ranges from -1 (perfect negative) through 0 (no relationship) to +1 (perfect positive).</p>
+<p>Now increase "noise." Even with a real underlying relationship, individual subjects scatter widely. With enough noise, you can't tell if the trend is real or just random variation. This is why you need a statistical test, not just eyeballing.</p>
+
+<h3>From a cloud of dots to a single number</h3>
+
+<p>The correlation coefficient (r, also called rho) collapses the entire scatter plot into one number between -1 and +1:</p>
+
+<ul>
+<li><strong>r = +1:</strong> perfect upward trend (every dot on the line)</li>
+<li><strong>r = 0:</strong> no relationship (random cloud)</li>
+<li><strong>r = -1:</strong> perfect downward trend</li>
+</ul>
+
+<p>It works by asking, for each subject: "Are you above or below average on <em>both</em> measures, or above on one and below on the other?" If most subjects are consistently above-or-below on both, r is positive. If they tend to be high on one and low on the other, r is negative.</p>
+
+<!-- ============ STEP 2: FROM CORRELATION TO T ============ -->
+<h2><span class="step-number">2</span> From Correlation to a Test Statistic</h2>
+
+<p>A correlation of r = 0.3 could be meaningful or meaningless depending on how many subjects you have and how noisy the data is.</p>
+
+<p>With 10 subjects, an r of 0.3 could easily happen by chance. With 1,000 subjects, an r of 0.3 almost certainly reflects a real relationship. You need to account for this.</p>
+
+<h3>The signal-to-noise ratio (same idea as Part 1)</h3>
+
+<p>In comparative mode, the test statistic was: (group difference) / (uncertainty in that difference). The bigger the difference relative to the noise, the more confident you are.</p>
+
+<p>In correlative mode, the same idea applies:</p>
 
 <div class="formula">
-  &rho; = &Sigma;(X<sub>i</sub> &minus; X&#772;)(Y<sub>i</sub> &minus; Y&#772;) / &radic;[&Sigma;(X<sub>i</sub> &minus; X&#772;)&sup2; &middot; &Sigma;(Y<sub>i</sub> &minus; Y&#772;)&sup2;]
-  <span class="explain">Multiply each subject's deviation from the X mean by their deviation from the Y mean. If high-X subjects tend to also be high-Y, the products are mostly positive, giving a positive rho.</span>
+  t = &radic;n &times; r / &tau;
+  <span class="explain">Take the correlation (r), scale it up by the square root of the sample size, and divide by a measure of how variable the correlation estimate is (&tau;).</span>
 </div>
-
-<h3>Why not just use rho directly?</h3>
-
-<p>A rho of 0.3 might be very significant with 1,000 subjects but meaningless with 10. Just like in comparative mode, you need to divide by a measure of uncertainty. The raw correlation needs to be "studentized" to account for sample size and variability.</p>
-
-<h3>The studentized correlation</h3>
-
-<p>CBAS uses a robust variance estimator called tau (from DiCiccio & Romano 2017) rather than the classical formula. This handles non-normal distributions more gracefully.</p>
 
 <div class="breakdown">
-<h4>Building the test statistic step by step</h4>
-<p><strong>1. Compute rho</strong> (the Pearson correlation between sequence counts and covariate).</p>
-<p><strong>2. Compute tau</strong> (the robust standard error). This measures how variable the correlation estimate is, accounting for heteroscedasticity (uneven spread).</p>
-<p><strong>3. Divide:</strong> t = &radic;n &times; rho / tau</p>
-<p>The result is a t-value. Larger absolute values mean more evidence that the correlation is real rather than noise.</p>
-</div>
-
-<div class="formula">
-  t = &radic;n &middot; &rho; / &tau;
-  <span class="explain">where &tau; = &radic;[mean((X<sub>i</sub>&minus;X&#772;)&sup2;(Y<sub>i</sub>&minus;Y&#772;)&sup2;)] / [std(X) &middot; std(Y)]. This is more robust than the classical &radic;(n-2) &middot; r / &radic;(1-r&sup2;) formula.</span>
+<h4>Why each piece matters</h4>
+<p><strong>&radic;n:</strong> More subjects means more evidence. An r of 0.2 with 400 subjects (t = 20 &times; 0.2 / &tau;) is much more convincing than with 16 subjects (t = 4 &times; 0.2 / &tau;).</p>
+<p><strong>r (the correlation):</strong> A stronger linear relationship gives a bigger t.</p>
+<p><strong>&tau; (tau, the denominator):</strong> This measures how stable the correlation estimate is. If some subjects are extreme outliers that heavily influence r, &tau; will be large, and t will shrink. This makes the test robust to non-normal data.</p>
 </div>
 
 <div class="vis-container" id="vis-tstat-corr">
-  <svg viewBox="0 0 780 200"></svg>
+  <svg viewBox="0 0 780 160"></svg>
 </div>
 
-<p>The bar shows the t-value computed from the scatter plot above. The color indicates direction: blue for positive correlation, pink for negative. As you increase the correlation or decrease noise, the t-value grows.</p>
+<p>This bar shows the t-value from the scatter plot above. Blue means positive correlation, pink means negative. As you make the correlation stronger or reduce noise, t grows. A larger t means more evidence that the relationship is real.</p>
 
-<h3>Two one-sided tests (same as comparative mode)</h3>
+<h3>The same two-sided approach</h3>
 
-<p>Just like before, CBAS stores the t-value in one of two slots depending on direction. If rho &gt; 0, the t goes in the "positive" slot. If rho &lt; 0, the absolute value goes in the "negative" slot. This doubles the hypothesis count to 2S.</p>
+<p>Just like in Part 1, CBAS tests each direction separately. For a given sequence, if the correlation is positive, the t-value goes in the "positive" slot. If negative, it goes in the "negative" slot. This doubles the number of tests but cleanly separates the two questions ("does more of this sequence go with higher scores?" vs "does more go with lower scores?").</p>
 
-<!-- ============ STEP 2: PERMUTATION NULL ============ -->
-<h2><span class="step-number">2</span> Building the Null by Permutation</h2>
+<!-- ============ STEP 3: PERMUTATION NULL ============ -->
+<h2><span class="step-number">3</span> What Would Chance Look Like?</h2>
 
-<p>In comparative mode, the null asks "what if group membership were random?" by reshuffling who belongs to which group. In correlative mode, the analogous question is "what if the relationship between behavior and the covariate were random?"</p>
+<p>You found a t-value of 3.5 for some sequence. Is that big enough to be real, or could it happen by random chance when you're testing hundreds of sequences?</p>
 
-<p>The answer: permute the covariate. Keep everyone's behavioral sequences exactly as they are, but randomly reassign the scores. Subject A keeps their choice stream but gets subject B's CBIT score. Then recompute correlations for all sequences.</p>
+<p>To answer this, you need to know what t-values look like when there is <em>no real relationship</em>. In Part 1, you built this "null distribution" by shuffling group labels. Here, you build it by <strong>shuffling the scores</strong>.</p>
+
+<h3>The permutation trick</h3>
+
+<p>Here's the key idea. You keep every subject's behavioral sequence counts exactly as they are. You keep all the scores in the pool. But you <em>randomly reassign</em> which subject gets which score. Subject A keeps their choice stream but gets subject C's clinical score. Subject B keeps their choices but gets subject A's score. And so on.</p>
+
+<p>After this shuffling, any correlation between behavior and scores is destroyed, because the pairing is now random. If you recompute the correlation, you get a number that reflects pure noise.</p>
+
+<p>Do this 10,000 times and you learn what noise looks like.</p>
 
 <div class="vis-container" id="vis-permute">
   <svg viewBox="0 0 780 320"></svg>
@@ -236,45 +276,47 @@ code { background: var(--code-bg); padding: 2px 6px; border-radius: 3px; font-si
   </div>
 </div>
 
-<p>The left panel shows the scatter plot. When you permute, the y-values (covariate scores) get shuffled across the x-values (sequence counts). The correlation mostly vanishes. The right panel accumulates the t-value from each permutation, building up the null distribution.</p>
+<p><strong>Left panel:</strong> the scatter plot. Click "Permute once" and watch the y-values (scores) jump to random x-positions. The trend line flattens because the pairing is now random.</p>
 
-<div class="insight">Why permutation instead of resampling? In correlative mode, you want to break the link between behavior and the covariate while preserving the marginal distributions of both. Permutation does exactly this: every subject's count stays the same, every score stays in the pool, but the pairing is randomized.</div>
+<p><strong>Right panel:</strong> the t-value from each permutation gets added to a histogram. After many permutations, you can see the full distribution of what "no real relationship" produces. The red dashed line is your real observed t. If it's far to the right of the null histogram, the relationship is unlikely to be chance.</p>
 
-<h3>Same matrix structure as before</h3>
+<div class="insight">Why shuffle scores instead of reshuffling subjects into fake groups (like Part 1)? Because there are no groups here. The permutation breaks the link between behavior and the continuous measure while preserving the distribution of both. Every score stays in the pool, every subject's behavior stays intact, only the pairing changes.</div>
 
-<p>After 10,000 permutations, you have the same matrix as in comparative mode: 10,000 rows (one per permutation) and one column per sequence-direction test. Each cell is "what this sequence's t-value would have been if behavior and the covariate were unrelated." The step-down and k-FWER procedures then operate on this matrix identically to the comparative case.</p>
+<h3>Same matrix, same downstream steps</h3>
 
-<!-- ============ STEP 3: WHAT'S THE SAME ============ -->
-<h2><span class="step-number">3</span> Everything Else is the Same</h2>
-
-<p>Once you have the null matrix, the rest of the pipeline is identical to comparative mode:</p>
-
-<ul>
-<li><strong>Step-down:</strong> sort observed t-values, compare against row-maximums (or k-th largest) of the null matrix, peel off rejected sequences, threshold drops.</li>
-<li><strong>k-FWER:</strong> iterate to find the k where the false discovery proportion is under control.</li>
-<li><strong>Output:</strong> &zeta;-values per sequence, direction of correlation (positive or negative), the converged k.</li>
-</ul>
-
-<p>The only differences are upstream: how you compute the test statistic and how you generate the null. Everything downstream of the null matrix is mode-agnostic.</p>
-
-<div class="analogy">Think of it like two different ways to fill a swimming pool. Comparative mode fills it with group-shuffled water. Correlative mode fills it with score-permuted water. Once the pool is full, you swim in it the same way (step-down, k-FWER, significance calls).</div>
+<p>After 10,000 permutations, you have a null matrix just like in Part 1: 10,000 rows (one per permutation) and one column per sequence being tested. From here, the step-down procedure and k-FWER iteration work identically. If you haven't read those yet, see steps 4 and 5 in <a href="../walkthrough.html">Part 1</a>.</p>
 
 <!-- ============ STEP 4: INTERPRETATION ============ -->
-<h2><span class="step-number">4</span> Interpreting Correlative Results</h2>
+<h2><span class="step-number">4</span> What Significant Results Mean</h2>
 
-<p>A significant sequence in correlative mode means: "Subjects who produce this pattern more (or less) tend to have higher (or lower) covariate scores, and this relationship is stronger than what you'd expect from 10,000 random score reassignments, even after correcting for testing thousands of sequences."</p>
+<p>When CBAS declares a sequence significant in correlative mode, it means:</p>
+
+<p><em>"Subjects who produce this behavioral pattern more (or less) tend to score higher (or lower) on the covariate, and this relationship is stronger than what 10,000 random score-reassignments would produce, even after correcting for the fact that hundreds of sequences were tested simultaneously."</em></p>
+
+<p>That's a strong claim. It survived both the multiple-testing correction (step-down) and the false discovery proportion control (k-FWER).</p>
 
 <div class="breakdown">
-<h4>Example from the human dataset</h4>
-<p>With 1,413 human subjects performing a 6-armed bandit task, each subject has a CBIT score. CBAS finds 31 sequences (out of 408 tested) that are significantly correlated with CBIT, at k=2. Some sequences correlate positively (subjects with higher CBIT scores produce them more) and some negatively.</p>
-<p>This tells you something about the <em>structure</em> of cognitive flexibility: it's not just that flexible people do better, but that they produce specific identifiable patterns of choices at specific lengths.</p>
+<h4>A concrete example</h4>
+<p>In the human dataset, 1,413 subjects performed a 6-armed bandit task. Each subject has a CBIT score measuring cognitive flexibility. CBAS tested 408 sequences (length 2 through 4) and found 31 that significantly correlate with CBIT, at k=2.</p>
+<p>Some of these sequences correlate positively: subjects with higher cognitive flexibility produce them more. Others correlate negatively: flexible subjects produce them less. Together, they reveal the specific choice structures that characterize flexible decision-making.</p>
 </div>
 
 <h3>Direction matters</h3>
 
-<p>Just like in comparative mode, the output tells you the direction. A positive correlation means "more of this pattern goes with higher scores." A negative correlation means "less of this pattern goes with higher scores." The algorithm tests both directions independently for each sequence.</p>
+<p>The output always tells you the direction. "Sequence LRL is positively correlated with CBIT" means subjects with higher flexibility scores tend to use that pattern more. "Sequence RRR is negatively correlated" means flexible subjects use it less. You get this information for every significant sequence.</p>
 
-<a class="nav-link" href="walkthrough/">&#8592; Part 1: Comparative Mode</a>
+<h3>What's the same, what's different</h3>
+
+<p>To summarize the relationship between the two modes:</p>
+
+<ul>
+<li><strong>Identical:</strong> sequence counting, the bootstrap null matrix structure, the step-down procedure, and k-FWER iteration.</li>
+<li><strong>Different:</strong> the test statistic (studentized mean-difference vs studentized correlation) and how the null is generated (resample groups vs permute scores).</li>
+</ul>
+
+<p>Once the null matrix exists, the algorithm doesn't know or care which mode produced it. Everything downstream is mode-agnostic.</p>
+
+<a class="nav-link" href="../walkthrough.html">&#8592; Part 1: Comparative Mode</a>
 
 </div>
 
@@ -312,9 +354,7 @@ code { background: var(--code-bg); padding: 2px 6px; border-radius: 3px; font-si
     let num = 0, dx2 = 0, dy2 = 0;
     for (const d of data) {
       const dx = d.x - mx, dy = d.y - my;
-      num += dx * dy;
-      dx2 += dx * dx;
-      dy2 += dy * dy;
+      num += dx * dy; dx2 += dx * dx; dy2 += dy * dy;
     }
     return dx2 > 0 && dy2 > 0 ? num / Math.sqrt(dx2 * dy2) : 0;
   }
@@ -327,7 +367,7 @@ code { background: var(--code-bg); padding: 2px 6px; border-radius: 3px; font-si
     const ssX = d3.sum(xDev.map(d => d * d));
     const ssY = d3.sum(yDev.map(d => d * d));
     const cross = d3.mean(xDev.map((xd, i) => xd * xd * yDev[i] * yDev[i]));
-    const tauNum = Math.sqrt(cross);
+    const tauNum = Math.sqrt(Math.max(0, cross));
     const tauDen = Math.sqrt(ssX / n) * Math.sqrt(ssY / n);
     return tauDen > 0 ? tauNum / tauDen : 1;
   }
@@ -343,7 +383,6 @@ code { background: var(--code-bg); padding: 2px 6px; border-radius: 3px; font-si
 
     d3.select("#corr-val").text(`r = ${rho.toFixed(2)}`);
 
-    // Store for t-bar viz
     window._corrTVal = tVal;
     window._corrRho = rho;
     if (window._drawTBar) window._drawTBar();
@@ -359,7 +398,7 @@ code { background: var(--code-bg); padding: 2px 6px; border-radius: 3px; font-si
     g.append("text")
       .attr("x", w / 2).attr("y", h + 40)
       .attr("text-anchor", "middle").attr("font-size", "12px").attr("fill", "#666")
-      .text("Sequence count (how often this subject produced it)");
+      .text("How often this subject produced the sequence");
 
     g.append("g").call(d3.axisLeft(yScale).ticks(6))
       .selectAll("text").attr("font-size", "11px");
@@ -367,14 +406,14 @@ code { background: var(--code-bg); padding: 2px 6px; border-radius: 3px; font-si
       .attr("transform", "rotate(-90)")
       .attr("x", -h / 2).attr("y", -45)
       .attr("text-anchor", "middle").attr("font-size", "12px").attr("fill", "#666")
-      .text("Covariate score (e.g. CBIT)");
+      .text("Subject's score (e.g. CBIT)");
 
     g.selectAll("circle").data(currentData).join("circle")
       .attr("cx", d => xScale(d.x))
       .attr("cy", d => yScale(d.y))
       .attr("r", 5)
       .attr("fill", rho >= 0 ? "#4361ee" : "#f72585")
-      .attr("opacity", 0.6);
+      .attr("opacity", 0.55);
 
     // Regression line
     const mx = d3.mean(currentData, d => d.x);
@@ -382,15 +421,14 @@ code { background: var(--code-bg); padding: 2px 6px; border-radius: 3px; font-si
     const slope = d3.sum(currentData.map(d => (d.x - mx) * (d.y - my))) /
                   d3.sum(currentData.map(d => (d.x - mx) * (d.x - mx)));
     const intercept = my - slope * mx;
-    const x1 = xExt[0], x2 = xExt[1];
     g.append("line")
-      .attr("x1", xScale(x1)).attr("x2", xScale(x2))
-      .attr("y1", yScale(slope * x1 + intercept))
-      .attr("y2", yScale(slope * x2 + intercept))
+      .attr("x1", xScale(xExt[0])).attr("x2", xScale(xExt[1]))
+      .attr("y1", yScale(slope * xExt[0] + intercept))
+      .attr("y2", yScale(slope * xExt[1] + intercept))
       .attr("stroke", rho >= 0 ? "#4361ee" : "#f72585")
-      .attr("stroke-width", 2).attr("opacity", 0.7);
+      .attr("stroke-width", 2).attr("opacity", 0.6);
 
-    // Annotation
+    // Annotations
     g.append("text")
       .attr("x", w - 5).attr("y", 14)
       .attr("text-anchor", "end")
@@ -401,7 +439,7 @@ code { background: var(--code-bg); padding: 2px 6px; border-radius: 3px; font-si
       .attr("x", w - 5).attr("y", 32)
       .attr("text-anchor", "end")
       .attr("font-size", "10px").attr("fill", "#999")
-      .text(`= √${n} × ${rho.toFixed(3)} / ${tau.toFixed(3)}`);
+      .text(`r = ${rho.toFixed(3)}, n = ${n}`);
   }
 
   d3.select("#corr-slider").on("input", function() {
@@ -421,54 +459,47 @@ code { background: var(--code-bg); padding: 2px 6px; border-radius: 3px; font-si
 // ============================================================
 (function() {
   const svg = d3.select("#vis-tstat-corr svg");
-  const width = 780, height = 200;
-  const margin = { top: 30, right: 30, bottom: 40, left: 60 };
+  const width = 780, height = 160;
+  const margin = { top: 20, right: 30, bottom: 40, left: 60 };
   const w = width - margin.left - margin.right;
   const h = height - margin.top - margin.bottom;
   const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
 
   const xScale = d3.scaleLinear().domain([-6, 6]).range([0, w]);
 
-  g.append("g").attr("transform", `translate(0,${h / 2})`)
+  g.append("g").attr("transform", `translate(0,${h * 0.6})`)
     .call(d3.axisBottom(xScale).ticks(12))
     .selectAll("text").attr("font-size", "11px");
   g.append("text")
-    .attr("x", w / 2).attr("y", h / 2 + 35)
+    .attr("x", w / 2).attr("y", h * 0.6 + 32)
     .attr("text-anchor", "middle").attr("font-size", "12px").attr("fill", "#666")
-    .text("t-value");
+    .text("t-value (signal-to-noise ratio)");
 
   // Zero line
   g.append("line")
     .attr("x1", xScale(0)).attr("x2", xScale(0))
-    .attr("y1", 10).attr("y2", h / 2)
+    .attr("y1", 0).attr("y2", h * 0.6)
     .attr("stroke", "#ccc").attr("stroke-width", 1);
+
+  // Direction labels
+  g.append("text")
+    .attr("x", xScale(-4)).attr("y", 12)
+    .attr("text-anchor", "middle").attr("font-size", "10px").attr("fill", "#f72585")
+    .text("negative correlation");
+  g.append("text")
+    .attr("x", xScale(4)).attr("y", 12)
+    .attr("text-anchor", "middle").attr("font-size", "10px").attr("fill", "#4361ee")
+    .text("positive correlation");
 
   const barG = g.append("g");
   const labelG = g.append("g");
 
-  // Significance regions
-  g.append("rect")
-    .attr("x", xScale(-6)).attr("y", 8)
-    .attr("width", xScale(-2) - xScale(-6)).attr("height", h / 2 - 8)
-    .attr("fill", "#f72585").attr("opacity", 0.05);
-  g.append("rect")
-    .attr("x", xScale(2)).attr("y", 8)
-    .attr("width", xScale(6) - xScale(2)).attr("height", h / 2 - 8)
-    .attr("fill", "#4361ee").attr("opacity", 0.05);
-  g.append("text")
-    .attr("x", xScale(-4)).attr("y", 20)
-    .attr("text-anchor", "middle").attr("font-size", "10px").attr("fill", "#f72585")
-    .text("negative correlation");
-  g.append("text")
-    .attr("x", xScale(4)).attr("y", 20)
-    .attr("text-anchor", "middle").attr("font-size", "10px").attr("fill", "#4361ee")
-    .text("positive correlation");
-
   window._drawTBar = function() {
     const tVal = window._corrTVal || 0;
     const rho = window._corrRho || 0;
-    const barH = 20;
+    const barH = 24;
     const clampedT = Math.max(-5.8, Math.min(5.8, tVal));
+    const yMid = h * 0.35;
 
     barG.selectAll("*").remove();
     labelG.selectAll("*").remove();
@@ -477,16 +508,16 @@ code { background: var(--code-bg); padding: 2px 6px; border-radius: 3px; font-si
     const barW = Math.abs(xScale(clampedT) - xScale(0));
 
     barG.append("rect")
-      .attr("x", barX).attr("y", h / 2 - barH - 5)
+      .attr("x", barX).attr("y", yMid - barH / 2)
       .attr("width", barW).attr("height", barH)
       .attr("fill", rho >= 0 ? "#4361ee" : "#f72585")
       .attr("opacity", 0.7).attr("rx", 3);
 
     labelG.append("text")
       .attr("x", xScale(clampedT) + (tVal >= 0 ? 8 : -8))
-      .attr("y", h / 2 - barH + 8)
+      .attr("y", yMid + 5)
       .attr("text-anchor", tVal >= 0 ? "start" : "end")
-      .attr("font-size", "12px").attr("font-weight", "600")
+      .attr("font-size", "13px").attr("font-weight", "600")
       .attr("fill", rho >= 0 ? "#4361ee" : "#f72585")
       .text(`t = ${tVal.toFixed(2)}`);
   };
@@ -512,9 +543,7 @@ code { background: var(--code-bg); padding: 2px 6px; border-radius: 3px; font-si
   const baseX = Array.from({ length: n }, () => d3.randomNormal(10, 3)());
   const baseY = baseX.map(x => 50 + 0.5 * (x - 10) * 10 / 3 + d3.randomNormal(0, 3)());
 
-  // Left panel: scatter
   const leftG = g.append("g");
-  // Right panel: null histogram
   const rightG = g.append("g").attr("transform", `translate(${halfW + 40}, 0)`);
 
   let nullTValues = [];
@@ -565,7 +594,7 @@ code { background: var(--code-bg); padding: 2px 6px; border-radius: 3px; font-si
       .attr("transform", "rotate(-90)")
       .attr("x", -h / 2).attr("y", -35)
       .attr("text-anchor", "middle").attr("font-size", "11px").attr("fill", "#666")
-      .text("Covariate");
+      .text("Score");
 
     leftG.selectAll("circle").data(baseX.map((x, i) => ({ x, y: ys[i] })))
       .join("circle")
@@ -580,7 +609,7 @@ code { background: var(--code-bg); padding: 2px 6px; border-radius: 3px; font-si
       .attr("x", halfW - 5).attr("y", 14)
       .attr("text-anchor", "end")
       .attr("font-size", "12px").attr("fill", isPermuted ? "#999" : "#e76f51")
-      .text(`r = ${rho.toFixed(2)}${isPermuted ? " (permuted)" : " (real)"}`);
+      .text(isPermuted ? `r = ${rho.toFixed(2)} (shuffled)` : `r = ${rho.toFixed(2)} (real)`);
   }
 
   function drawHist() {
@@ -595,7 +624,13 @@ code { background: var(--code-bg); padding: 2px 6px; border-radius: 3px; font-si
       .attr("text-anchor", "middle").attr("font-size", "11px").attr("fill", "#666")
       .text("Null t-values");
 
-    if (nullTValues.length === 0) return;
+    if (nullTValues.length === 0) {
+      rightG.append("text")
+        .attr("x", halfW / 2).attr("y", h / 2)
+        .attr("text-anchor", "middle").attr("font-size", "12px").attr("fill", "#ccc")
+        .text("(permute to build null)");
+      return;
+    }
 
     const bins = d3.bin().domain([-5, 5]).thresholds(30)(nullTValues);
     const maxCount = d3.max(bins, d => d.length);
@@ -627,8 +662,7 @@ code { background: var(--code-bg); padding: 2px 6px; border-radius: 3px; font-si
 
   function permute() {
     const shuffled = d3.shuffle([...baseY]);
-    const t = computeT(baseX, shuffled);
-    nullTValues.push(t);
+    nullTValues.push(computeT(baseX, shuffled));
     drawScatter(shuffled, true);
     drawHist();
   }
