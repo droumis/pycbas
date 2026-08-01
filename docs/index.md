@@ -40,7 +40,13 @@ result = run_cbas_comparative(subjects_data, group_labels, params)
 print(f"{result.n_significant} significant sequences (k={result.k_final})")
 ```
 
-See the [User Guide](guide.md) for data format details, parameter selection, and working with results.
+## Where to go next
+
+- **New to CBAS?** The [Comparative Walkthrough](walkthrough.md) and [Correlative Walkthrough](walkthrough-correlative.md) build intuition for what the algorithm does and how to interpret results.
+- **Ready to run your own data?** The [User Guide](guide.md) covers data formats, parameter selection, and working with results.
+- **Want the math?** The [Algorithm](algorithm.md) page details the step-down procedure and k-FWER iteration.
+- **Prefer no code?** pyCBAS includes an [Interactive GUI](app.md) that handles data loading, parameter detection, and visualization.
+- **Building on pyCBAS?** The [API Reference](api.md) documents all public functions and classes.
 
 ## Performance
 
@@ -54,14 +60,14 @@ Timings on Apple M-series. Bootstrap and step-down are parallelized via numba.
 
 ## Interactive GUI
 
-For a no-code alternative, pyCBAS includes an interactive GUI that handles data loading, parameter detection, and result visualization. Install the GUI extras and launch:
+Install the GUI extras and launch:
 
 ```bash
 pip install -e ".[gui]"
 pycbas gui
 ```
 
-See the [Interactive App](app.md) docs for details.
+See the [Interactive App (GUI)](app.md) docs for details.
 
 ## Reference
 
