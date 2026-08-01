@@ -4,35 +4,35 @@ A no-code interface for running CBAS analyses. Upload your data, configure param
 
 ## Install and launch
 
-### Option 1: pipx (recommended)
-
-```bash
-pipx install pycbas[gui]
-cbas gui
-```
-
-This installs CBAS in an isolated environment and gives you a `cbas` command. The GUI opens in your browser at `localhost:5007`.
-
-To use a different port:
-
-```bash
-cbas gui --port 5008
-```
-
-### Option 2: pip into an existing environment
-
-```bash
-pip install pycbas[gui]
-cbas gui
-```
-
-### Option 3: pixi (for developers)
+### Option 1: pixi (recommended)
 
 ```bash
 git clone https://github.com/droumis/pycbas.git
 cd pycbas
 pixi run install
 pixi run gui
+```
+
+To use a different port:
+
+```bash
+pixi run -- cbas gui --port 5008
+```
+
+### Option 2: pip from the repo
+
+```bash
+git clone https://github.com/droumis/pycbas.git
+cd pycbas
+pip install -e ".[gui]"
+cbas gui
+```
+
+### Once published to PyPI
+
+```bash
+pipx install "pycbas[gui]"
+cbas gui
 ```
 
 ## What the app does
