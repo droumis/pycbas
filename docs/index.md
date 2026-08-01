@@ -6,7 +6,13 @@ Uses Romano-Wolf step-down for multiple comparison correction and k-FWER iterati
 
 ## Install
 
-We recommend installing in a dedicated environment (conda, mamba, or pixi) rather than your base environment.
+```bash
+pip install pycbas
+```
+
+### Development install
+
+For contributing or running from source, we recommend a dedicated environment:
 
 ```bash
 git clone https://github.com/droumis/pycbas.git
@@ -18,7 +24,7 @@ pixi install
 # option 2: conda/mamba + pip
 conda create -n pycbas python=3.11
 conda activate pycbas
-pip install -e ".[dev]"
+pip install -e '.[dev]'
 ```
 
 ## Quick example
@@ -60,10 +66,8 @@ Timings on Apple M-series. Bootstrap and step-down are parallelized via numba.
 
 ## Interactive GUI
 
-Install the GUI extras and launch:
-
 ```bash
-pip install -e ".[gui]"
+pip install 'pycbas[gui]'
 pycbas gui
 ```
 

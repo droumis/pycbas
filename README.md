@@ -6,27 +6,22 @@ Uses Romano-Wolf step-down for multiple comparison correction and k-FWER iterati
 
 **Reference:** Kastner et al., "Choice-Wide Behavioral Association Study" [(2026 preprint)](https://www.biorxiv.org/content/10.1101/2024.02.26.582115v4)
 
-## Interactive GUI
-
-A no-code interface for running CBAS analyses. Load data from a local folder, auto-detect parameters and analysis mode, run the pipeline, and explore results visually.
+## Installation
 
 ```bash
-git clone https://github.com/droumis/pycbas.git
-cd pycbas
+pip install pycbas
+```
 
-# option 1: pixi (recommended)
-pixi run gui
+For the interactive GUI:
 
-# option 2: conda/mamba + pip
-conda create -n pycbas python=3.11
-conda activate pycbas
-pip install -e ".[gui]"
+```bash
+pip install 'pycbas[gui]'
 pycbas gui
 ```
 
 See the [GUI documentation](https://droumis.github.io/pycbas/app/) for details.
 
-## Installation
+### Development install
 
 We recommend installing in a dedicated environment (conda, mamba, or pixi) rather than your base environment.
 
@@ -40,7 +35,7 @@ pixi install
 # option 2: conda/mamba + pip
 conda create -n pycbas python=3.11
 conda activate pycbas
-pip install -e ".[dev]"
+pip install -e '.[dev]'
 ```
 
 ## Quick start

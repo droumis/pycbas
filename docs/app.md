@@ -4,28 +4,24 @@ A no-code interface for running CBAS analyses. Load data, configure parameters, 
 
 ## Install and launch
 
-### Option 1: pixi (recommended)
-
 ```bash
-git clone https://github.com/droumis/pycbas.git
-cd pycbas
-pixi run install
-pixi run gui
+pip install 'pycbas[gui]'
+pycbas gui
 ```
 
 To use a different port:
 
 ```bash
-pixi run -- pycbas gui --port 5008
+pycbas gui --port 5008
 ```
 
-### Option 2: pip from the repo
+### Development install
 
 ```bash
 git clone https://github.com/droumis/pycbas.git
 cd pycbas
-pip install -e ".[gui]"
-pycbas gui
+pixi run gui          # option 1: pixi
+pip install -e '.[gui]' && pycbas gui  # option 2: pip
 ```
 
 ## Workflow
