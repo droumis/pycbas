@@ -11,7 +11,8 @@ Reference: Kastner et al., "Choice-Wide Behavioral Association Study"
 """
 
 from .params import CBASParams, CBASResult
-from .io import load_subject_data, extract_choice_stream, enumerate_sequences
+from .io import (load_subject_data, extract_choice_stream, extract_choice_streams_by_block,
+                 enumerate_sequences, enumerate_sequences_block_aware)
 from .core import build_count_matrix, compute_test_stats, compute_test_stats_correlative
 from .bootstrap import bootstrap_test_stats, bootstrap_test_stats_correlative
 from .stepdown import (
@@ -28,7 +29,9 @@ __all__ = [
     "CBASResult",
     "load_subject_data",
     "extract_choice_stream",
+    "extract_choice_streams_by_block",
     "enumerate_sequences",
+    "enumerate_sequences_block_aware",
     "build_count_matrix",
     "compute_test_stats",
     "compute_test_stats_correlative",

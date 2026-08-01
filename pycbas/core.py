@@ -1,10 +1,12 @@
 """Count matrix construction and test statistics."""
 
 import numpy as np
-from .io import extract_choice_stream, enumerate_sequences
+from .io import (extract_choice_stream, extract_choice_streams_by_block,
+                 enumerate_sequences, enumerate_sequences_block_aware)
 
 
-def build_count_matrix(subjects_data, params, contingency=2, encode_reward=True):
+def build_count_matrix(subjects_data, params, contingency=2, encode_reward=True,
+                       block_aware=False):
     """Build the full sequence count matrix.
 
     Args:
@@ -13,6 +15,8 @@ def build_count_matrix(subjects_data, params, contingency=2, encode_reward=True)
         contingency: block type to filter on, or None for all trials
         encode_reward: if True, encode symbol + reward*num_arms. Set False for
             tasks where outcome is deterministic from the symbol (e.g., 2AFC).
+        block_aware: if True, sequences cannot span block/session boundaries.
+            Matches Igor's counting for multi-session experiments.
 
     Returns:
         sequences: list of all unique sequence tuples (sorted by total frequency descending)
@@ -21,12 +25,20 @@ def build_count_matrix(subjects_data, params, contingency=2, encode_reward=True)
     n_subjects = len(subjects_data)
     all_seq_counts = []
     for subj_data in subjects_data:
-        stream = extract_choice_stream(subj_data, contingency, params.num_arms,
-                                       encode_reward=encode_reward)
         subj_counts = {}
-        for seq_len in range(1, params.seq_len_max + 1):
-            seq_counts = enumerate_sequences(stream, seq_len, params.criterion)
-            subj_counts.update(seq_counts)
+        if block_aware:
+            block_streams = extract_choice_streams_by_block(
+                subj_data, contingency, params.num_arms, encode_reward=encode_reward)
+            for seq_len in range(1, params.seq_len_max + 1):
+                seq_counts = enumerate_sequences_block_aware(
+                    block_streams, seq_len, params.criterion)
+                subj_counts.update(seq_counts)
+        else:
+            stream = extract_choice_stream(subj_data, contingency, params.num_arms,
+                                           encode_reward=encode_reward)
+            for seq_len in range(1, params.seq_len_max + 1):
+                seq_counts = enumerate_sequences(stream, seq_len, params.criterion)
+                subj_counts.update(seq_counts)
         all_seq_counts.append(subj_counts)
 
     all_sequences = set()

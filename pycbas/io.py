@@ -41,6 +41,31 @@ def extract_choice_stream(subject_data, contingency=2, num_arms=6, encode_reward
     return symbols
 
 
+def extract_choice_streams_by_block(subject_data, contingency=2, num_arms=6, encode_reward=True):
+    """Extract choice streams split by block/session boundaries.
+
+    Returns a list of arrays, one per block, preserving temporal order.
+    Sequences should not span across blocks.
+    """
+    if contingency is None:
+        data = subject_data
+    else:
+        mask = subject_data[:, 3] == contingency
+        data = subject_data[mask]
+
+    if encode_reward:
+        symbols = data[:, 1] + data[:, 2] * num_arms
+    else:
+        symbols = data[:, 1]
+
+    blocks = data[:, 0]
+    streams = []
+    for block in np.unique(blocks):
+        block_mask = blocks == block
+        streams.append(symbols[block_mask])
+    return streams
+
+
 def enumerate_sequences(choice_stream, seq_len, criterion):
     """Find all subsequences of given length with start position <= criterion.
 
@@ -52,4 +77,29 @@ def enumerate_sequences(choice_stream, seq_len, criterion):
     for i in range(max_start + 1):
         seq = tuple(choice_stream[i:i + seq_len].tolist())
         counts[seq] = counts.get(seq, 0) + 1
+    return counts
+
+
+def enumerate_sequences_block_aware(block_streams, seq_len, criterion):
+    """Count sequences within blocks, never crossing block boundaries.
+
+    Args:
+        block_streams: list of symbol arrays, one per block (from extract_choice_streams_by_block)
+        seq_len: length of sequences to enumerate
+        criterion: max total start positions across all blocks
+    """
+    counts = {}
+    total_positions = 0
+    for stream in block_streams:
+        remaining = criterion - total_positions
+        if remaining <= 0:
+            break
+        max_start = min(len(stream) - seq_len, remaining)
+        if max_start < 0:
+            total_positions += len(stream)
+            continue
+        for i in range(max_start + 1):
+            seq = tuple(stream[i:i + seq_len].tolist())
+            counts[seq] = counts.get(seq, 0) + 1
+        total_positions += len(stream)
     return counts

@@ -54,7 +54,7 @@ print(f"{result.n_significant} significant sequences (k={result.k_final})")
 |---|---|---|---|---|
 | Flies (2-arm, L=10) | 1,566 | 2,046 | ~21s | ~560 MB |
 | Humans (6-arm, L=4) | 1,413 | 408 | ~3s | ~155 MB |
-| Rats (6-arm, L=6) | 111 | 19,013 | ~8s | ~4.1 GB |
+| Rats (6-arm, L=6) | 105 | 16,378 | ~7s | ~3.6 GB |
 
 Timings on Apple M-series. Bootstrap and step-down are parallelized via numba.
 

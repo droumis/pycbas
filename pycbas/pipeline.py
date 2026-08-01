@@ -8,7 +8,8 @@ from .stepdown import find_k_fwer, find_k_fwer_chunked
 
 
 def run_cbas_comparative(subjects_data, group_labels, params=None,
-                         contingency=2, encode_reward=True, chunked=True):
+                         contingency=2, encode_reward=True, chunked=True,
+                         block_aware=False):
     """Run the full comparative CBAS pipeline.
 
     Args:
@@ -18,6 +19,7 @@ def run_cbas_comparative(subjects_data, group_labels, params=None,
         contingency: block type to filter on, or None for all trials
         encode_reward: if True, encode symbol + reward*num_arms. Set False for 2AFC.
         chunked: if True (default), use memory-efficient chunked pipeline
+        block_aware: if True, sequences cannot span block/session boundaries.
 
     Returns:
         CBASResult
@@ -33,7 +35,8 @@ def run_cbas_comparative(subjects_data, group_labels, params=None,
 
     sequences, count_matrix = build_count_matrix(subjects_data, params,
                                                  contingency=contingency,
-                                                 encode_reward=encode_reward)
+                                                 encode_reward=encode_reward,
+                                                 block_aware=block_aware)
     test_stats = compute_test_stats(count_matrix, group_indices)
 
     if chunked:
@@ -64,7 +67,7 @@ def run_cbas_comparative(subjects_data, group_labels, params=None,
 
 
 def run_cbas_correlative(subjects_data, covariate, params=None,
-                         contingency=2, encode_reward=True):
+                         contingency=2, encode_reward=True, block_aware=False):
     """Run the full correlative CBAS pipeline.
 
     Args:
@@ -73,6 +76,7 @@ def run_cbas_correlative(subjects_data, covariate, params=None,
         params: CBASParams instance
         contingency: block type to filter on, or None for all trials
         encode_reward: if True, encode symbol + reward*num_arms. Set False for 2AFC.
+        block_aware: if True, sequences cannot span block/session boundaries.
 
     Returns:
         CBASResult
@@ -83,7 +87,8 @@ def run_cbas_correlative(subjects_data, covariate, params=None,
     covariate = np.asarray(covariate, dtype=np.float64)
     sequences, count_matrix = build_count_matrix(subjects_data, params,
                                                  contingency=contingency,
-                                                 encode_reward=encode_reward)
+                                                 encode_reward=encode_reward,
+                                                 block_aware=block_aware)
     test_stats = compute_test_stats_correlative(count_matrix, covariate)
     null_matrix, null_directions = bootstrap_test_stats_correlative(count_matrix, covariate, params)
     g_values, k_final, k_history = find_k_fwer(

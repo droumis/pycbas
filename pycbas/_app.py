@@ -67,6 +67,7 @@ class CBASApp(param.Parameterized):
     resample_number = param.Integer(default=10000, bounds=(100, 50000), doc="Bootstrap resamples")
     encode_reward = param.Boolean(default=False, doc="Encode reward into symbols")
     contingency = param.Integer(default=1, bounds=(0, 10), doc="Block type filter")
+    block_aware = param.Boolean(default=False, doc="Sequences cannot span block/session boundaries")
 
     # --- Run state ---
     running = param.Boolean(default=False)
@@ -130,12 +131,14 @@ class CBASApp(param.Parameterized):
                 self.subjects_data, self.group_labels, params,
                 contingency=self.contingency,
                 encode_reward=self.encode_reward,
+                block_aware=self.block_aware,
             )
         else:
             self.result = run_cbas_correlative(
                 self.subjects_data, self.covariate, params,
                 contingency=self.contingency,
                 encode_reward=self.encode_reward,
+                block_aware=self.block_aware,
             )
 
     _observed_cache_key = param.Parameter(default=None)
@@ -490,13 +493,33 @@ def load_from_folder(event):
         criterion_widget.value = suggested_criterion
         app_state.criterion = suggested_criterion
 
+        # Auto-detect block_aware: enable if data has multiple blocks/sessions
+        # (column 0) and contingency-filtered data spans multiple blocks
+        suggested_block_aware = False
+        for arr in subjects_data:
+            unique_blocks = set(arr[:, 0].tolist())
+            if len(unique_blocks) > 1:
+                # Check if filtered data spans multiple blocks
+                if suggested_contingency > 0:
+                    filtered = arr[arr[:, 3] == suggested_contingency]
+                else:
+                    filtered = arr
+                if len(filtered) > 0:
+                    filtered_blocks = set(filtered[:, 0].tolist())
+                    if len(filtered_blocks) > 1:
+                        suggested_block_aware = True
+                        break
+        block_aware_widget.value = suggested_block_aware
+        app_state.block_aware = suggested_block_aware
+
         data_status.object = (
             f"**Loaded {app_state.n_subjects} subjects** from `{folder_path.name}/` "
             f"({source_desc}). "
             f"Parameters auto-configured: {suggested_arms} arms, "
             f"{'reward encoded, ' if has_reward else ''}"
             f"criterion={suggested_criterion}"
-            f"{f', contingency={suggested_contingency}' if has_contingency else ''}."
+            f"{f', contingency={suggested_contingency}' if has_contingency else ''}"
+            f"{', block-aware' if suggested_block_aware else ''}."
         )
         data_status.alert_type = "success"
         update_resource_estimate()
@@ -734,6 +757,10 @@ contingency_widget = pn.widgets.IntInput(
     name="Contingency filter (block type)",
     value=1, start=0, end=10, step=1,
 )
+block_aware_widget = pn.widgets.Checkbox(
+    name="Block-aware (sequences cannot span sessions)",
+    value=False,
+)
 
 def sync_params(*events):
     for e in events:
@@ -749,10 +776,13 @@ def sync_params(*events):
             app_state.encode_reward = e.new
         elif e.obj is contingency_widget:
             app_state.contingency = e.new
+        elif e.obj is block_aware_widget:
+            app_state.block_aware = e.new
     update_resource_estimate()
 
 for w in [num_arms_widget, seq_len_max_widget, criterion_widget,
-          resample_widget, encode_reward_widget, contingency_widget]:
+          resample_widget, encode_reward_widget, contingency_widget,
+          block_aware_widget]:
     w.param.watch(sync_params, "value")
 
 resource_estimate_pane = pn.pane.Alert("", alert_type="light", visible=False)
@@ -1431,7 +1461,7 @@ main_content = pn.Column(
     pn.pane.Markdown("## 3. Configure parameters"),
     pn.Row(
         pn.Column(num_arms_widget, seq_len_max_widget, encode_reward_widget, width=300),
-        pn.Column(criterion_widget, resample_widget, contingency_widget, width=300),
+        pn.Column(criterion_widget, resample_widget, contingency_widget, block_aware_widget, width=300),
     ),
     resource_estimate_pane,
     pn.layout.Divider(),

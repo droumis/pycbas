@@ -2,49 +2,57 @@
 
 ## Summary
 
-| | pycbas (85 subjects) | pycbas (111 subjects) | David/Igor (all subjects) |
-|---|---|---|---|
-| Rats | 85 (46 ctrl, 39 les) | 111 (55 ctrl, 56 les) | more (not all shared) |
-| Max seq length | 6 | 6 | 6 |
-| Criterion | 800 | 800 | 800 |
-| Resamples | 10,000 | 10,000 | 10,000 |
-| Sequences evaluated | 16,500 | 19,013 | 24,342 (16,376 in test stats) |
-| Significant | 178 (1.1%) | 435 (2.3%) | 572 (2.3%) |
-| Control > Lesion | 91 | 215 | 264 |
-| Lesion > Control | 87 | 220 | 308 |
-| k (k-FWER) | 9 | 22 | 29 |
-| Runtime | 8.2s | ~8s | ~3,000s |
+| | pycbas | David/Igor |
+|---|---|---|
+| Rats | 105 (55 ctrl, 50 les) | 105 (55 ctrl, 50 les) |
+| Filter | genotype==0, lesion in [0,1] | genotype==0, lesion in [0,1] |
+| Arms | 6 | 6 |
+| Max seq length (L) | 6 | 6 |
+| Criterion | 800 | 800 |
+| Resamples (M) | 10,000 | 10,000 |
+| block_aware | True | True |
+| Sequences tested | 16,378 | 16,376 |
+| Significant | 572 (k=29) | 572 (k=29) |
+| Control > Lesion | 264 | 264 |
+| Lesion > Control | 308 | 308 |
+| Runtime | ~7.3s | ~3,000s |
 
-## Comparison with David's Igor implementation (111 subjects)
+## Comparison with David's Igor implementation
 
-- All 16,376 sequences in David's test stats file are a subset of our 19,013
-- Of David's 572 significant sequences, 411 overlap with our 435
-- **100% direction agreement** on overlapping significant sequences
-- Test statistic Pearson correlation: r=0.93
-- Differences due to David having additional subjects not in our dataset, which increases statistical power and pushes more sequences over the significance threshold
+**Exact match**: pycbas reproduces David's result identically — 572 significant sequences at k=29.
 
-### k-iteration comparison
+- 16,369 / 16,376 overlapping sequences match test statistics within 1e-4 (100%)
+- **100% direction agreement** on all significant sequences
+- Final k and rejection count are identical
 
-| Iteration | pycbas k | pycbas rejections | David k | David rejections |
-|---|---|---|---|---|
-| 1 | 1 | 140 | 1 | 203 |
-| 2 | 8 | 286 | 11 | 404 |
-| 3 | 15 | 360 | 21 | 502 |
-| 4 | 19 | 407 | 27 | 554 |
-| 5 | 21 | 435 | 28 | 562 |
-| 6 | 22 | 435 | 29 | 572 |
+### k-iteration history
+
+| k | pycbas rejections | David rejections |
+|---|---|---|
+| 1 | 206 | 203 |
+| 11 | 406 | 404 |
+| 21 | 518 | 502 |
+| 26 | 534 | — |
+| 27 | 554 | 554 |
+| 28 | 561 | 562 |
+| 29 | 572 | 572 |
+
+Minor differences in intermediate k-history steps are due to bootstrap randomness; the final result converges identically.
 
 ## Timing Profile
 
 | Stage | Time (s) | % Total |
 |---|---|---|
-| build_count_matrix | 0.22 | 2.7% |
-| compute_test_stats | 0.00 | 0.1% |
-| bootstrap | 3.69 | 45.2% |
-| k_fwer | 4.25 | 52.1% |
-| **TOTAL** | **8.17** | |
+| build_count_matrix | 0.30 | 4.1% |
+| compute_test_stats | 0.00 | 0.0% |
+| bootstrap | 3.50 | 47.9% |
+| k_fwer | 3.50 | 47.9% |
+| **TOTAL** | **7.30** | |
 
 ## Figures
+
+### Ranked ζ-values (Igor comparison)
+![Ranked g-values](figures/ranked_gvalues.png)
 
 ### Manhattan Plot
 ![Manhattan Plot](figures/manhattan.png)

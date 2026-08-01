@@ -194,6 +194,14 @@ for i, seq in enumerate(result.sequences):
 | `gamma` | 0.05 | FDP tolerance. Fraction of rejections allowed to be false. |
 | `centering` | False | Whether to center the bootstrap null by subtracting the observed delta. False matches the Igor implementation. True is slightly more liberal. |
 
+Pipeline functions (`run_cbas_comparative`, `run_cbas_correlative`) also accept:
+
+| Parameter | Default | Description |
+|-----------|---------|--------|
+| `contingency` | 2 | Filter trials by contingency column value, or None for all trials. |
+| `encode_reward` | True | Encode reward into symbols (doubles alphabet). Set False for deterministic-outcome tasks. |
+| `block_aware` | False | When True, sequences cannot span block/session boundaries. Enable for multi-session experiments where concatenating across sessions would create artificial adjacencies. |
+
 ## Choosing parameters
 
 **num_arms** is determined by your task. Binary choice = 2. Six-arm maze = 6.

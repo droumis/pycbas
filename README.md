@@ -92,6 +92,7 @@ print_resource_estimate(est)
 | `alpha` | 0.5 | Significance threshold for FDP control |
 | `gamma` | 0.05 | FDP tolerance |
 | `centering` | False | Center bootstrap null (False matches Igor) |
+| `block_aware` | False | Prevent sequences from spanning block/session boundaries |
 
 ## Performance
 
@@ -99,13 +100,13 @@ print_resource_estimate(est)
 |---|---|---|---|---|
 | Flies (2-arm, L=10) | 1,566 | 2,046 | ~21s | ~560 MB |
 | Humans (6-arm, L=4) | 1,413 | 408 | ~3s | ~155 MB |
-| Rats (6-arm, L=6) | 111 | 19,013 | ~8s | ~4.1 GB |
+| Rats (6-arm, L=6) | 105 | 16,378 | ~7s | ~3.6 GB |
 
 Timings on Apple M-series. The chunked pipeline (`chunked=True`, default) trades ~30% more time for ~40% less memory. Bootstrap and step-down are parallelized via numba. Set `NUMBA_DISABLE_JIT=1` to disable for debugging.
 
 ## Validation
 
-Exact match with the original Igor implementation on flies (1,605/2,046, k=81) and humans (31/408, k=2). Test statistics match to floating-point precision. Rats (111 subjects): 435/19,013 significant (k=22), with 100% direction agreement on the 411 sequences that overlap with David's 572 (different subject pool accounts for the count difference).
+Exact match with the original Igor implementation on flies (1,605/2,046, k=81) and humans (31/408, k=2). Test statistics match to floating-point precision. Rats (105 subjects, `block_aware=True`): 572/16,378 significant (k=29), exact match with David's Igor implementation. Test statistics agree within 1e-4 on all 16,376 overlapping sequences.
 
 See [results/validation_summary.md](results/validation_summary.md) for details, or per-dataset reports:
 - [Flies](results/flies/validation_report.md)
