@@ -20,15 +20,15 @@
     "n_significant": 572,
     "n_positive": 264,
     "n_negative": 308,
-    "fraction_significant": 0.03492,
+    "fraction_significant": 0.034924899255098306,
     "k_final": 29
   },
   "timing": {
-    "build_count_matrix": 0.30,
-    "compute_test_stats": 0.00,
-    "bootstrap": 3.50,
-    "k_fwer": 3.50,
-    "total": 7.30
+    "build_count_matrix": 0.28914154204539955,
+    "compute_test_stats": 0.00854441593401134,
+    "bootstrap": 4.8669264579657465,
+    "k_fwer": 5.87863920792006,
+    "total": 11.043251623865217
   },
   "labels": {
     "positive_direction": "control > lesion",

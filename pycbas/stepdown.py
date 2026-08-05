@@ -323,7 +323,7 @@ def find_k_fwer_chunked(test_stats, count_matrix, group_indices, params,
     Returns (g_values, k_final) or (g_values, k_final, k_history).
     """
     if rng is None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(2)
 
     grp0 = group_indices[0]
     grp1 = group_indices[1]

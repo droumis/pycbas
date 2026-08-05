@@ -81,25 +81,27 @@ def enumerate_sequences(choice_stream, seq_len, criterion):
 
 
 def enumerate_sequences_block_aware(block_streams, seq_len, criterion):
-    """Count sequences within blocks, never crossing block boundaries.
+    """Count sequences in a block-aware stream, matching Igor's approach.
+
+    The criterion is applied to global position in the concatenated stream
+    (start_position <= criterion, inclusive). A sequence is only counted if all
+    its positions fall within the same block.
 
     Args:
-        block_streams: list of symbol arrays, one per block (from extract_choice_streams_by_block)
+        block_streams: list of symbol arrays, one per block
         seq_len: length of sequences to enumerate
-        criterion: max total start positions across all blocks
+        criterion: maximum global start position (inclusive)
     """
     counts = {}
-    total_positions = 0
+    global_pos = 0
     for stream in block_streams:
-        remaining = criterion - total_positions
-        if remaining <= 0:
-            break
-        max_start = min(len(stream) - seq_len, remaining)
-        if max_start < 0:
-            total_positions += len(stream)
-            continue
-        for i in range(max_start + 1):
+        block_len = len(stream)
+        for i in range(block_len - seq_len + 1):
+            if global_pos + i > criterion:
+                return counts
             seq = tuple(stream[i:i + seq_len].tolist())
             counts[seq] = counts.get(seq, 0) + 1
-        total_positions += len(stream)
+        global_pos += block_len
+        if global_pos > criterion:
+            break
     return counts

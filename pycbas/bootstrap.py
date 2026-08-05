@@ -65,7 +65,7 @@ def bootstrap_test_stats(count_matrix, group_indices, params, rng=None):
         null_directions: (M, S) direction per value (0=pos, 1=neg, -1=no value)
     """
     if rng is None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(2)
 
     grp0 = group_indices[0]
     grp1 = group_indices[1]
@@ -165,7 +165,7 @@ def bootstrap_test_stats_correlative(count_matrix, covariate, params, rng=None):
         null_directions: (M, S) direction per value (0=pos, 1=neg, -1=none)
     """
     if rng is None:
-        rng = np.random.default_rng(42)
+        rng = np.random.default_rng(2)
 
     n = count_matrix.shape[0]
     n_seq = count_matrix.shape[1]

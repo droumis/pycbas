@@ -21,6 +21,8 @@ Thumbs.db
 
 # Cached results (regenerable)
 **/*.npz
+# Allow results.npz in committed results dirs (for reproducibility)
+!results/**/results.npz
 
 # Reference materials (not for distribution)
 papers/

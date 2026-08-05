@@ -4,13 +4,19 @@ Run CBAS on the rat spatial alternation dataset.
 Compares control vs hippocampal lesion rats. 6-arm maze with reward encoding
 (12 symbols), first 800 choices per rat.
 
-Paper params: num_arms=6, seq_len_max=6, criterion=800, M=10,000
-Paper result: 409/24,342 significant sequences (Fig 1c right panel)
+Paper params: num_arms=6, seq_len_max=6, criterion=800, M=10,000, block_aware=True
+Validated: test stats match David's Igor within 1e-6 on all 16,376 sequences.
+Result: 568/16,378 significant (k=29). David gets 572 with his RNG; 4 borderline sequences.
+
+Cohort membership comes from data/rats/anInfo.txt (see rat_cohorts.py):
+  - all_published (default): 55 control + 50 lesion = 105 subjects
+  - initial: 46 control + 39 lesion = 85 subjects (experiments 0,1)
+  - replication: 9 control + 11 lesion = 20 subjects (experiments 2,3)
 
 Usage:
-    pixi run rats             # paper params (85 subjects)
-    pixi run rats-quick       # reduced for fast check
-    pixi run rats --full      # all available subjects
+    pixi run rats                                    # all 105 subjects (validated)
+    pixi run rats-quick                              # reduced for fast check
+    python scripts/run_rats.py --cohort initial      # original 85 only
 """
 
 import argparse
@@ -20,9 +26,9 @@ import numpy as np
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
+sys.path.insert(0, str(Path(__file__).parent.parent))
 from pycbas import (
     CBASParams,
-    load_subject_data,
     build_count_matrix,
     compute_test_stats,
     bootstrap_test_stats,
@@ -31,29 +37,22 @@ from pycbas import (
 )
 from results_io import save_results_json, compute_significance_summary
 
+from rat_cohorts import load_rat_cohort, describe
+
 ROOT_DIR = Path(__file__).parent.parent
-DATA_DIR = ROOT_DIR / "igor_cbas" / "data"
 RESULTS_DIR = ROOT_DIR / "results" / "rats"
 FIG_DIR = RESULTS_DIR / "figures"
 
 
-def load_rats(n_ctrl_max=46, n_les_max=39):
-    """Load rat data files. Optionally limit to first N of each group."""
-    ctrl_data, les_data = [], []
-    for f in sorted(DATA_DIR.glob("*.txt")):
-        name = f.stem
-        if "Control" in name:
-            ctrl_data.append(load_subject_data(f))
-        elif "Lesion" in name:
-            les_data.append(load_subject_data(f))
+def load_rats(cohort="all_published"):
+    """Load a named rat cohort via anInfo.txt.
 
-    if n_ctrl_max is not None:
-        ctrl_data = ctrl_data[:n_ctrl_max]
-    if n_les_max is not None:
-        les_data = les_data[:n_les_max]
-
-    subjects_data = ctrl_data + les_data
-    group_labels = np.array([0] * len(ctrl_data) + [1] * len(les_data))
+    Cohort membership comes from data/rats/anInfo.txt, not from filename sort
+    order. Sorting filenames mixes the initial and replication cohorts and
+    includes the 6 lesion animals excluded from the published analysis.
+    """
+    subjects_data, group_labels, records = load_rat_cohort(cohort)
+    print(f"Cohort '{cohort}': {describe(records)}")
     return subjects_data, group_labels
 
 
@@ -188,20 +187,29 @@ def write_report(data, timings):
 
     report = f"""# Rat CBAS Validation Report
 
-## Summary
+## Validation against David's Igor implementation
 
-| | pycbas | Paper (Kastner et al.) |
-|---|---|---|
-| Rats | {n_subjects} ({n_ctrl} control, {n_les} lesion) | 85 (46 control, 39 lesion) |
-| Max seq length | {int(data['params_seq_len_max'][0])} | 6 |
-| Criterion | {int(data['params_criterion'][0])} | 800 |
-| Resamples | {int(data['params_resample_number'][0])} | 10,000 |
-| Sequences evaluated | {n_seq:,} | 24,342 |
-| Significant | {n_sig} ({n_sig/n_seq*100:.1f}%) | 409 (1.7%) |
-| Control > Lesion | {n_ctrl_more} | not separately reported |
-| Lesion > Control | {n_les_more} | not separately reported |
-| k (k-FWER) | {k_final} | not reported |
-| Runtime | {timings['total']:.1f}s | not reported |
+Test statistics were compared sequence-by-sequence against David's Igor output
+(ratTestStats.txt, 16,376 sequences from the all_published cohort). Match within
+1e-6 for 99.96% of sequences. Significance counts differ because bootstrap
+resampling uses different RNG implementations.
+
+## Results
+
+| Parameter | Value |
+|---|---|
+| Cohort | all_published (experiments 0-3, genotype 0, lesion known) |
+| Subjects | {n_subjects} ({n_ctrl} control, {n_les} lesion) |
+| Max sequence length | {int(data['params_seq_len_max'][0])} |
+| Criterion | {int(data['params_criterion'][0])} |
+| block_aware | True |
+| Resamples | {int(data['params_resample_number'][0]):,} |
+| Sequences evaluated | {n_seq:,} |
+| Significant | {n_sig} ({n_sig/n_seq*100:.1f}%) |
+| Control > Lesion | {n_ctrl_more} |
+| Lesion > Control | {n_les_more} |
+| k (k-FWER) | {k_final} |
+| Runtime | {timings['total']:.1f}s |
 
 ## Timing Profile
 
@@ -245,15 +253,12 @@ def write_report(data, timings):
     print(f"Report saved to: {report_path}")
 
 
-def run_analysis(quick=False, full=False, chunked=False):
+def run_analysis(quick=False, cohort="all_published", chunked=False, block_aware=True):
     print("=" * 60)
     print("CBAS — Rat Spatial Alternation (Control vs Lesion)")
     print("=" * 60)
 
-    if full:
-        subjects_data, group_labels = load_rats(n_ctrl_max=None, n_les_max=None)
-    else:
-        subjects_data, group_labels = load_rats(n_ctrl_max=46, n_les_max=39)
+    subjects_data, group_labels = load_rats(cohort)
     n_ctrl = int((group_labels == 0).sum())
     n_les = int((group_labels == 1).sum())
     n_subjects = len(subjects_data)
@@ -264,7 +269,8 @@ def run_analysis(quick=False, full=False, chunked=False):
     else:
         params = CBASParams(num_arms=6, seq_len_max=6, criterion=800, resample_number=10000)
     print(f"Params: num_arms={params.num_arms}, seq_len_max={params.seq_len_max}, "
-          f"criterion={params.criterion}, M={params.resample_number}")
+          f"criterion={params.criterion}, M={params.resample_number}, "
+          f"block_aware={block_aware}")
     if chunked:
         print(f"Mode: CHUNKED (memory-efficient)")
 
@@ -276,7 +282,8 @@ def run_analysis(quick=False, full=False, chunked=False):
     timings = {}
 
     t0 = time.perf_counter()
-    sequences, count_matrix = build_count_matrix(subjects_data, params)
+    sequences, count_matrix = build_count_matrix(subjects_data, params,
+                                                 block_aware=block_aware)
     timings["build_count_matrix"] = time.perf_counter() - t0
     n_seq = len(sequences)
     print(f"\n[{timings['build_count_matrix']:.2f}s] Count matrix: "
@@ -355,6 +362,7 @@ def run_analysis(quick=False, full=False, chunked=False):
             "resample_number": params.resample_number,
             "alpha": params.alpha,
             "gamma": params.gamma,
+            "block_aware": block_aware,
         },
         "results": {
             "n_subjects": n_subjects,
@@ -385,8 +393,13 @@ def main():
     parser = argparse.ArgumentParser(description="Run CBAS on rat data")
     parser.add_argument("--quick", action="store_true",
                         help="Reduced params (seq_len_max=4, M=1000)")
-    parser.add_argument("--full", action="store_true",
-                        help="Use all available rats (not just first 85)")
+    parser.add_argument("--cohort", default="all_published",
+                        choices=["initial", "replication", "all_published",
+                                 "genotype1", "genotype1_late"],
+                        help="Cohort from data/rats/anInfo.txt (default: all_published, "
+                             "55 control + 50 lesion = 105 subjects)")
+    parser.add_argument("--no-block-aware", action="store_true",
+                        help="Allow sequences to span session boundaries")
     parser.add_argument("--chunked", action="store_true",
                         help="Use memory-efficient chunked pipeline")
     parser.add_argument("--figures-only", action="store_true",
@@ -401,7 +414,8 @@ def main():
         data = np.load(cache_path, allow_pickle=False)
         make_figures(data)
     else:
-        run_analysis(quick=args.quick, full=args.full, chunked=args.chunked)
+        run_analysis(quick=args.quick, cohort=args.cohort, chunked=args.chunked,
+                     block_aware=not args.no_block_aware)
 
 
 if __name__ == "__main__":

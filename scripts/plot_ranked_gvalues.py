@@ -16,7 +16,9 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from pathlib import Path
 
-from scripts.compare_with_david import parse_david_file, load_our_results
+import sys
+sys.path.insert(0, str(Path(__file__).parent))
+from compare_with_david import parse_david_file, load_our_results
 
 ROOT_DIR = Path(__file__).parent.parent
 NOTES_DIR = ROOT_DIR / "notes"
@@ -36,9 +38,9 @@ SPECIES_CONFIG = [
     },
     {
         "name": "rats",
-        "david_file": None,
-        "max_seq_len": None,
-        "title": "Rat CBAS: Control vs Lesion",
+        "david_file": "ratSigSeq.txt",
+        "max_seq_len": 6,
+        "title": "Rat CBAS: Control vs Lesion (block_aware=True)",
     },
 ]
 
@@ -137,6 +139,33 @@ def plot_with_comparison(species_cfg, alpha=0.5):
     ax_rank.legend(loc="upper left", fontsize=8, framealpha=0.9)
     ax_rank.set_ylim(-0.02, 1.02)
     ax_rank.set_xlim(-20, len(ranked_g) + 20)
+
+    # Inset zoomed to the threshold region
+    near_mask = (ranked_g > alpha - 0.06) & (ranked_g < alpha + 0.06)
+    if np.any(near_mask):
+        near_ranks = ranks[near_mask]
+        ax_inset = ax_rank.inset_axes([0.38, 0.35, 0.42, 0.42])
+        for cat in ["neither", "both", "us_only", "david_only"]:
+            mask = (ranked_cat == cat) & near_mask
+            if not np.any(mask):
+                continue
+            ax_inset.scatter(
+                ranks[mask], ranked_g[mask],
+                c=style[cat]["color"],
+                marker=style[cat]["marker"],
+                s=style[cat]["s"] * 3,
+                zorder=3 if cat in ("david_only", "us_only") else 2,
+                edgecolors="none" if style[cat]["marker"] == "." else style[cat]["color"],
+                linewidths=1.5,
+            )
+        ax_inset.axhline(alpha, color="#6baed6", linestyle="--", linewidth=1.0)
+        ax_inset.set_xlim(near_ranks.min() - 10, near_ranks.max() + 10)
+        ax_inset.set_ylim(alpha - 0.055, alpha + 0.055)
+        ax_inset.set_xlabel("Rank", fontsize=7)
+        ax_inset.set_ylabel("ζ-value", fontsize=7)
+        ax_inset.tick_params(labelsize=7)
+        ax_inset.set_title("Threshold region", fontsize=8)
+        ax_rank.indicate_inset_zoom(ax_inset, edgecolor="0.5", linewidth=0.8)
 
     fig.tight_layout()
     out_dir = ROOT_DIR / "results" / species_cfg["name"] / "figures"
