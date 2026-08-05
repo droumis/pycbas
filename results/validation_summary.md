@@ -34,7 +34,7 @@ Cross-species validation of the CBAS reimplementation against Kastner et al. (20
 - 105 subjects (55 control, 50 lesion), all_published cohort (genotype==0, lesion known)
 - Test statistics match David's Igor within 1e-6 on all 16,376 overlapping sequences
 - All 572 significant sequences identical between pycbas and Igor
-- Runtime: ~10s | Peak RAM: ~3.6 GB
+- Runtime: ~11s | Peak RAM: ~3.6 GB
 
 [Full report](rats/validation_report.md)
 

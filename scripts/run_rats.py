@@ -238,6 +238,9 @@ resampling uses different RNG implementations.
 ### g-value Distribution
 ![g-value Distribution](figures/gvalue_dist.png)
 
+### Ranked ζ-values (Igor comparison)
+![Ranked ζ-values](figures/ranked_gvalues.png)
+
 ## Top Significant Sequences
 
 | Sequence | Direction | ζ-value | Decoded (arm, * = rewarded) |
