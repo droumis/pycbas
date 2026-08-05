@@ -48,4 +48,3 @@ Three key fixes brought us into exact alignment with David's Igor implementation
 
 3. **Criterion boundary (inclusive)** — Igor checks `start_position <= criterion` (inclusive, 0-based), giving 251 counting windows per subject. We were using `stream[:criterion]` which gave only 250 elements (250−L+1 windows). This missed L counting windows per subject per sequence length and caused the 11-sequence discrepancy: 1,594 → 1,605 (exact match).
 
-See [notes/algorithm_comparison.md](../notes/algorithm_comparison.md) for detailed pseudocode comparison.
