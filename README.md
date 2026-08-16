@@ -1,5 +1,10 @@
 # pycbas
 
+[![docs](https://img.shields.io/github/actions/workflow/status/droumis/pycbas/docs.yml?style=flat-square&branch=main&label=docs&logo=materialformkdocs&logoColor=white)](https://github.com/droumis/pycbas/actions/workflows/docs.yml)
+[![pypi-version](https://img.shields.io/pypi/v/pycbas.svg?logo=pypi&logoColor=white&style=flat-square)](https://pypi.org/project/pycbas)
+[![python-version](https://img.shields.io/badge/python-3.11%2B-blue?logo=python&logoColor=white&style=flat-square)](https://pypi.org/project/pycbas)
+[![license](https://img.shields.io/github/license/droumis/pycbas?style=flat-square&color=blue&logo=github&logoColor=white)](https://github.com/droumis/pycbas/blob/main/LICENSE)
+
 Python implementation of the [CBAS algorithm](https://github.com/dbkastner/CBAS) (Choice-Wide Behavioral Association Study) for identifying behavioral sequences that differ significantly between experimental groups or correlate with a continuous measure.
 
 Uses Romano-Wolf step-down for multiple comparison correction and k-FWER iteration for false discovery proportion control.
