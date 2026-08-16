@@ -6,6 +6,20 @@ Uses Romano-Wolf step-down for multiple comparison correction and k-FWER iterati
 
 **Reference:** Kastner et al., "Choice-Wide Behavioral Association Study" [(2026 preprint)](https://www.biorxiv.org/content/10.1101/2024.02.26.582115v4)
 
+## How it works
+
+A sliding window walks each subject's choice stream and counts every subsequence up to length `seq_len_max`. Each unique sequence becomes one column of a subject-by-sequence count matrix, and one hypothesis test.
+
+![Sliding window counting subsequences in a choice stream](https://raw.githubusercontent.com/droumis/pycbas/main/docs/img/concept-sequences.gif)
+
+Testing thousands of sequences needs multiple-comparison correction, but Bonferroni's single fixed threshold is far too strict here. Romano-Wolf step-down instead recomputes the threshold from the bootstrap null after every rejection, over only the sequences that remain. The bar drops as strong effects are peeled off, so moderate effects can still clear it:
+
+![Step-down procedure lowering the threshold after each rejection](https://raw.githubusercontent.com/droumis/pycbas/main/docs/img/concept-stepdown.gif)
+
+k-FWER iteration then relaxes "no false positives" to "at most k", raising k until the false discovery proportion is bounded by `gamma`.
+
+Both animations are interactive in the [walkthrough](https://droumis.github.io/pycbas/walkthrough/), which builds up the whole algorithm step by step.
+
 ## Installation
 
 ```bash
@@ -18,6 +32,10 @@ For the interactive GUI:
 pip install 'pycbas[gui]'
 pycbas gui
 ```
+
+Load data, confirm the auto-detected mode, set parameters, run, and explore results — no code required.
+
+<img src="https://raw.githubusercontent.com/droumis/pycbas/main/docs/img/gui-overview.png" alt="pyCBAS GUI running the human dataset" width="760">
 
 See the [GUI documentation](https://droumis.github.io/pycbas/app/) for details.
 
