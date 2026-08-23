@@ -37,6 +37,9 @@ pycbas = "pycbas.cli:main"
 [project.urls]
 Repository = "https://github.com/droumis/pycbas"
 
+[tool.hatch.build.targets.sdist]
+include = ["/pycbas", "/pyproject.toml", "/README.md", "/LICENSE"]
+
 [tool.hatch.build.targets.wheel]
 packages = ["pycbas"]
 
