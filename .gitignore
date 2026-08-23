@@ -15,6 +15,10 @@ site/
 # Pytest
 .pytest_cache/
 
+# Coding agent local state and tool artifacts
+.claude/
+.playwright-mcp/
+
 # OS
 .DS_Store
 Thumbs.db
