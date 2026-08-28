@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install
+        run: pip install -e ".[dev]"
+
+      - name: Test
+        run: pytest tests/ -q --durations=5
+
+      # The Igor cross-validation in test_cbas.py needs igor_cbas/data, which is
+      # reference material that is not distributed, so those tests skip here.
+      # test_regression.py covers the same numerical path against committed golden
+      # values, so a change to enumeration, the statistic, the bootstrap,
+      # step-down, or k-FWER fails this job even without the reference data.
+      - name: Confirm the regression fixture actually ran
+        run: pytest tests/test_regression.py -q --no-header -p no:randomly

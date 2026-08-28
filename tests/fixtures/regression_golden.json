@@ -1,0 +1,112 @@
+{
+  "block_aware": {
+    "count_checksum": 254232.0,
+    "count_total": 28512,
+    "motif_column_total": 1738,
+    "n_sequences": 39,
+    "row_sums_head": [
+      594,
+      594,
+      594,
+      594,
+      594,
+      594
+    ]
+  },
+  "bootstrap": {
+    "mean_finite": 0.82512732,
+    "n_finite": 76453,
+    "shape": [
+      2000,
+      39
+    ]
+  },
+  "comparative": {
+    "g_value_sum": 7.210895,
+    "k_final": 2,
+    "n_sequences": 39,
+    "n_significant": 32,
+    "significant_sequences": [
+      [
+        0
+      ],
+      [
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        1
+      ],
+      [
+        0,
+        0,
+        5
+      ],
+      [
+        0,
+        1
+      ],
+      [
+        0,
+        1,
+        0
+      ],
+      [
+        0,
+        1,
+        1
+      ],
+      [
+        0,
+        5
+      ],
+      [
+        0,
+        5,
+        0
+      ],
+      [
+        0,
+        5,
+        1
+      ],
+      [
+        0,
+        5,
+        5
+      ]
+    ]
+  },
+  "correlative": {
+    "g_value_sum": 6.318341,
+    "k_final": 2,
+    "n_sequences": 39,
+    "n_significant": 34
+  },
+  "pooled": {
+    "count_checksum": 261621.0,
+    "count_total": 28944,
+    "motif_column_total": 1758,
+    "n_sequences": 39,
+    "row_sums_head": [
+      603,
+      603,
+      603,
+      603,
+      603,
+      603
+    ]
+  },
+  "test_stats": {
+    "max": 9.34570215,
+    "n_finite": 39,
+    "sum_finite": 161.118143
+  }
+}
