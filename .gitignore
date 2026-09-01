@@ -40,6 +40,9 @@ utilities/
 notes/
 notes.md
 
-# Raw downloaded data (regenerable from source)
-data/noel_ibl_mice/raw/
-data/ibl_mice/raw/
+# Datasets. Nothing under data/ is tracked: the public cohorts are downloadable
+# from their sources, and the rest is unpublished data belonging to collaborators.
+# This has to be stated here rather than left to a machine-local global ignore,
+# otherwise the protection does not travel with the repository and `git add -A`
+# on another checkout would stage an unpublished cohort.
+data/

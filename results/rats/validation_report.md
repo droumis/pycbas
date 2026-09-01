@@ -2,11 +2,7 @@
 
 ## Validation against David's Igor implementation
 
-Test statistics were compared sequence-by-sequence against David's Igor output
-(ratTestStats.txt, 16,376 sequences from the all_published cohort). All 16,376
-overlapping sequences match within 1e-6 (max difference 2.7e-7). Significance
-counts match exactly: 572 significant sequences with k=29, reproducing David's
-result with zero discrepancy.
+Test statistics were compared sequence-by-sequence against David's Igor output (`ratTestStats.txt`). Of 16,376 overlapping sequences, 100.0000% match within 1e-6, with a maximum absolute difference of 2.66e-07. This run found 572 significant sequences with k=29.
 
 ## Results
 
@@ -23,17 +19,17 @@ result with zero discrepancy.
 | Control > Lesion | 264 |
 | Lesion > Control | 308 |
 | k (k-FWER) | 29 |
-| Runtime | 11.0s |
+| Runtime | 12.3s |
 
 ## Timing Profile
 
 | Stage | Time (s) | % Total |
 |---|---|---|
-| build_count_matrix | 0.29 | 2.6% |
+| build_count_matrix | 0.27 | 2.2% |
 | compute_test_stats | 0.01 | 0.1% |
-| bootstrap | 4.87 | 44.1% |
-| k_fwer | 5.88 | 53.2% |
-| **TOTAL** | **11.04** | |
+| bootstrap | 4.97 | 40.4% |
+| k_fwer | 7.06 | 57.4% |
+| **TOTAL** | **12.31** | |
 
 ## Figures
 

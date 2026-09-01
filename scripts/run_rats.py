@@ -141,6 +141,52 @@ def make_figures(data):
     print(f"Figures saved to: {FIG_DIR}/")
 
 
+IGOR_TEST_STATS = Path(__file__).resolve().parent.parent / "notes" / "ratTestStats.txt"
+
+
+def compare_to_igor(seq_strs, test_stats, n_sig, k_final):
+    """Measure agreement with Igor's per-sequence test statistics.
+
+    This used to be a hardcoded sentence claiming 99.96% agreement and differing
+    significance counts, which contradicted the measured result and silently
+    overwrote the verified report on every run. It is computed now, so the report
+    cannot drift from the data.
+    """
+    if not IGOR_TEST_STATS.exists():
+        return ("Igor's per-sequence test statistics were not available at "
+                "`notes/ratTestStats.txt`, so no comparison was made in this "
+                "run. That file is untracked; see .gitignore.")
+
+    igor = {}
+    for line in IGOR_TEST_STATS.read_text().splitlines():
+        if not line.strip():
+            continue
+        fields = line.split(",")
+        key = tuple(int(x) for x in fields[:6] if x.strip())
+        igor[key] = float(fields[6])
+
+    ours = {}
+    for i, s in enumerate(seq_strs):
+        candidates = [v for v in (test_stats[2 * i], test_stats[2 * i + 1])
+                      if not np.isnan(v)]
+        if candidates:
+            ours[tuple(int(x) for x in str(s).split("-"))] = max(candidates)
+
+    shared = set(igor) & set(ours)
+    if not shared:
+        return "No sequences overlapped with Igor's output, so no comparison was made."
+
+    diffs = np.array([abs(igor[k] - ours[k]) for k in shared])
+    within = float((diffs < 1e-6).mean()) * 100.0
+    return (
+        "Test statistics were compared sequence-by-sequence against David's Igor "
+        f"output (`ratTestStats.txt`). Of {len(shared):,} overlapping sequences, "
+        f"{within:.4f}% match within 1e-6, with a maximum absolute difference of "
+        f"{diffs.max():.3g}. This run found {n_sig} significant sequences with "
+        f"k={k_final}."
+    )
+
+
 def write_report(data, timings):
     """Write markdown validation report."""
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
@@ -185,14 +231,13 @@ def write_report(data, timings):
 
     sig_seqs.sort(key=lambda x: x[2])
 
+    igor_line = compare_to_igor(seq_strs, test_stats, n_sig, k_final)
+
     report = f"""# Rat CBAS Validation Report
 
 ## Validation against David's Igor implementation
 
-Test statistics were compared sequence-by-sequence against David's Igor output
-(ratTestStats.txt, 16,376 sequences from the all_published cohort). Match within
-1e-6 for 99.96% of sequences. Significance counts differ because bootstrap
-resampling uses different RNG implementations.
+{igor_line}
 
 ## Results
 
