@@ -28,6 +28,9 @@ Thumbs.db
 # Allow results.npz in committed results dirs (for reproducibility)
 !results/**/results.npz
 
+# Private analysis output (derived from unpublished data)
+private_results/
+
 # Reference materials (not for distribution)
 papers/
 cbas_paper_docling/
