@@ -21,7 +21,7 @@ Testing thousands of sequences needs multiple-comparison correction, but Bonferr
 
 ![Step-down procedure lowering the threshold after each rejection](https://raw.githubusercontent.com/droumis/pycbas/main/docs/img/concept-stepdown.gif)
 
-k-FWER iteration then relaxes "no false positives" to "at most k", raising k until the false discovery proportion is bounded by `gamma`.
+k-FWER iteration then relaxes from familywise error control (i.e. shooting for "no false positives") to false discovery control, enabling "at most k false positives", raising k until the false discovery proportion is bounded by `gamma`.
 
 Both animations are interactive in the [walkthrough](https://droumis.github.io/pycbas/walkthrough/), which builds up the whole algorithm step by step.
 
