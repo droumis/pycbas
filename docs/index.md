@@ -75,4 +75,4 @@ See the [Interactive App (GUI)](app.md) docs for details.
 
 ## Reference
 
-Kastner et al., "Choice-Wide Behavioral Association Study" [(2026 preprint)](https://www.biorxiv.org/content/10.1101/2024.02.26.582115v4)
+Kastner et al., "Choice-Wide Behavioral Association Study" _Nature Communications_ [(2026)](https://www.nature.com/articles/s41467-026-76681-3)

@@ -236,7 +236,7 @@ code {
   </div>
 </div>
 
-<p>The sliding window moves across the stream and extracts every subsequence of the chosen length. Each unique pattern gets a count. With 2 symbols and length 3, there are 8 possible patterns (LLL, LLR, LRL, ...). With longer sequences or more symbols, the space grows exponentially.</p>
+<p>The sliding window moves across the stream and extracts every subsequence up to and including the chosen length; the demo above shows one length at a time. Each unique pattern gets a count. With 2 symbols and lengths up to 3, there are 14 possible patterns (L, R, LL, LR, RL, RR, LLL, LLR, LRL, ...). With longer sequences or more symbols, the space grows exponentially.</p>
 
 <p>This happens for every subject independently. At the end, you have a matrix where each row is a subject and each column is a sequence, and the values are how many times that subject produced that pattern.</p>
 
@@ -318,7 +318,7 @@ code {
 
 <h3>From the matrix to a p-value for one sequence</h3>
 
-<p>For a single sequence, you could get its p-value by looking down its column and asking "what fraction of null values are bigger than my observed value?" But that ignores the multiple testing problem. The step-down procedure (step 4) uses the matrix differently, looking <em>across</em> rows rather than down columns.</p>
+<p>For a single sequence, you could get its p-value by looking down its column and asking "what fraction of null values are bigger than my observed value?" But that ignores the multiple testing problem. The step-down procedure (step 4) uses the matrix differently, looking <em>across</em> rows and down columns, rather than just down columns.</p>
 
 <div class="vis-container" id="vis-bootstrap">
   <svg viewBox="0 0 780 280"></svg>
@@ -330,9 +330,9 @@ code {
   </div>
 </div>
 
-<p>This histogram shows the distribution of <em>row maximums</em> (the biggest null t-value in each row). The red dashed line is your real observed statistic. The fraction of row-maximums that exceed it is the adjusted p-value. This is much stricter than looking at just one column because the row-maximum represents "what the most extreme random noise across all sequences would look like."</p>
+<p>This histogram shows the distribution of <em>row maximums</em> (the biggest null t-value in each row). The red dashed line is your real observed statistic. The fraction of row-maximums that are equal to or greater than your observed statistic is the adjusted p-value (computed as <code>(count + 1) / (M + 1)</code>, the standard bootstrap correction). This is much stricter than looking at just one column because the row-maximum represents "what the most extreme random noise across all sequences would look like."</p>
 
-<div class="insight">All sequences share the same shuffled groups on each draw. This preserves correlations between sequences (e.g. if LLL goes up, LLLL probably goes up too). Preserving this structure matters for the step-down correction next.</div>
+<div class="insight">All sequences share the same shuffled groups on each draw. This preserves correlations between sequences (e.g. if LLL goes up, LLLL probably goes up too). Preserving this structure is what maintains power when sequences are correlated.</div>
 
 <!-- ============ STEP 4: STEP-DOWN ============ -->
 <h2><span class="step-number">4</span> Correcting for Multiple Comparisons</h2>
@@ -341,11 +341,11 @@ code {
 
 <h3>The naive approach (Bonferroni)</h3>
 
-<p>The simplest fix: divide your significance threshold by the number of tests. With 2,000 tests and alpha = 0.05, you'd need p &lt; 0.000025 to declare significance. This works but is extremely conservative. Real effects with moderate strength get missed because the bar is so high.</p>
+<p>The simplest fix: divide your significance threshold by the number of tests. With 2,000 tests and alpha = 0.05, you'd need p &lt; 0.000025 to declare significance. This works but is extremely conservative. Real effects with moderate strength get missed because the bar is so high. Additionally, this method does nothing to account for correlations in the data, and when correlations are present it is even more conservative.</p>
 
 <h3>The step-down idea</h3>
 
-<p>Romano-Wolf step-down is a smarter approach. It works in rounds, peeling off the most significant sequences one at a time, and each round uses a slightly easier threshold.</p>
+<p>Romano-Wolf uses a step-down approach and, by resampling the data, maintains power in the face of correlations. It works in rounds, peeling off the most significant sequences one at a time, and each round uses a slightly easier threshold.</p>
 
 <p>Here's the logic:</p>
 
@@ -395,7 +395,7 @@ code {
 <!-- ============ STEP 5: k-FWER ============ -->
 <h2><span class="step-number">5</span> Allowing Some False Positives (k-FWER)</h2>
 
-<p>The step-down procedure as described above controls the "family-wise error rate" at k=1. That means: the probability of even <em>one</em> false positive is kept below alpha. This is very strict.</p>
+<p>The step-down procedure as described above controls the "family-wise error rate" at k=1. That means: the probability of at least <em>one</em> false positive is kept below alpha. This is very strict.</p>
 
 <h3>Why strictness hurts</h3>
 

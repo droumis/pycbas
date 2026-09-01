@@ -7,7 +7,7 @@ continuous measure. Uses Romano-Wolf step-down for multiple comparison
 correction and k-FWER iteration for false discovery proportion control.
 
 Reference: Kastner et al., "Choice-Wide Behavioral Association Study"
-(2026 preprint) https://www.biorxiv.org/content/10.1101/2024.02.26.582115v4
+Nature Communications (2026) https://www.nature.com/articles/s41467-026-76681-3
 """
 
 from .params import CBASParams, CBASResult

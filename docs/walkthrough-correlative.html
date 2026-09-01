@@ -149,7 +149,7 @@ code { background: var(--code-bg); padding: 2px 6px; border-radius: 3px; font-si
 <p>But what if you don't have two groups? What if instead, each subject has a <em>score</em> on some continuous scale? For example:</p>
 
 <ul>
-<li>Each human subject has a cognitive flexibility score (CBIT)</li>
+<li>Each human subject has a CBIT score, measuring features related to compulsive behavior and intrusive thoughts</li>
 <li>Each rat has a measure of how much dopamine was released</li>
 <li>Each subject has an age, a reaction time, or a performance metric</li>
 </ul>
@@ -309,13 +309,13 @@ code { background: var(--code-bg); padding: 2px 6px; border-radius: 3px; font-si
 
 <div class="breakdown">
 <h4>A concrete example</h4>
-<p>In the human dataset, 1,413 subjects performed a 6-armed bandit task. Each subject has a CBIT score measuring cognitive flexibility. CBAS tested 408 sequences (length 2 through 4) and found 31 that significantly correlate with CBIT, at k=2.</p>
-<p>Some of these sequences correlate positively: subjects with higher cognitive flexibility produce them more. Others correlate negatively: flexible subjects produce them less. Together, they reveal the specific choice structures that characterize flexible decision-making.</p>
+<p>In the human dataset, 1,413 subjects performed the two-step task, making image choices at successive steps. Each subject has a CBIT score, measuring features related to compulsive behavior and intrusive thoughts. CBAS tested 408 sequences (lengths 1 through 4) and found 31 that significantly correlate with CBIT, at k=2.</p>
+<p>Some of these sequences correlate positively: subjects with higher CBIT scores produce them more. Others correlate negatively: subjects with higher CBIT scores produce them less. Together, they reveal the specific choice structures that track compulsive behavior and intrusive thoughts.</p>
 </div>
 
 <h3>Direction matters</h3>
 
-<p>The output always tells you the direction. "Sequence LRL is positively correlated with CBIT" means subjects with higher flexibility scores tend to use that pattern more. "Sequence RRR is negatively correlated" means flexible subjects use it less. You get this information for every significant sequence.</p>
+<p>The output always tells you the direction. "Sequence LRL is positively correlated with CBIT" means subjects with higher CBIT scores tend to use that pattern more. "Sequence RRR is negatively correlated" means subjects with higher CBIT scores use it less. You get this information for every significant sequence.</p>
 
 <h3>What's the same, what's different</h3>
 
