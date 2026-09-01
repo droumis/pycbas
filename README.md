@@ -17,7 +17,7 @@ A sliding window walks each subject's choice stream and counts every subsequence
 
 ![Sliding window counting subsequences in a choice stream](https://raw.githubusercontent.com/droumis/pycbas/main/docs/img/concept-sequences.gif)
 
-Testing thousands of sequences needs multiple-comparison correction, but Bonferroni's single fixed threshold is far too strict here. Romano-Wolf step-down instead recomputes the threshold from the bootstrap null after every rejection, over only the sequences that remain. The bar drops as strong effects are peeled off, so moderate effects can still clear it:
+Testing thousands of sequences needs multiple-comparison correction, but Bonferroni's single fixed threshold is far too strict here. Romano-Wolf step-down instead recomputes the threshold from the bootstrap null after every rejection, over only the sequences that remain. Additionally, Romano-Wolf takes into account the correlational structure of the data, providing more power in the face of correlations between the different sequences. The bar drops as strong effects are peeled off, so moderate effects can still clear it:
 
 ![Step-down procedure lowering the threshold after each rejection](https://raw.githubusercontent.com/droumis/pycbas/main/docs/img/concept-stepdown.gif)
 
