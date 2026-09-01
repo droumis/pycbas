@@ -188,7 +188,8 @@ for i, seq in enumerate(result.sequences):
 |-----------|---------|--------|
 | `num_arms` | 6 | Base alphabet size. With `encode_reward=True`, effective alphabet is `num_arms * 2`. |
 | `seq_len_max` | 6 | Maximum sequence length L. All lengths 1 through L are tested. |
-| `criterion` | 800 | How many trials per subject to use for counting. Sequences starting at positions 0 through `criterion` (inclusive) are counted. |
+| `criterion` | 800 | How much of each subject's stream to count. With the default `criterion_order=0` this is a trial index: sequences starting at positions 0 through `criterion` (inclusive) are counted. |
+| `criterion_order` | 0 | What `criterion` counts. 0 is a trial index. 1 stops each subject at its `criterion`-th reward. Higher orders stop at the `criterion`-th run of that many consecutive rewarded choices. See [Higher-order criteria](#higher-order-criteria). |
 | `resample_number` | 10,000 | Number of bootstrap resamples M. More gives tighter p-values but costs linearly in time and memory. |
 | `alpha` | 0.5 | Significance threshold for FDP control. The paper uses 0.5 (median FDP). |
 | `gamma` | 0.05 | FDP tolerance. Fraction of rejections allowed to be false. |
@@ -213,6 +214,61 @@ Pipeline functions (`run_cbas_comparative`, `run_cbas_correlative`) also accept:
 **criterion** should match the minimum usable trial count across your subjects. If some subjects have only 300 trials, set criterion to 300 or less.
 
 **resample_number** of 10,000 is standard. For exploratory work, 1,000 is faster with coarser p-values.
+
+## Higher-order criteria
+
+By default the criterion is a fixed number of trials, which gives every subject the
+same amount of data. An alternative is to stop each subject once it has *achieved*
+some amount, matching subjects on performance rather than on exposure. This is
+optional and off by default.
+
+```python
+params = CBASParams(
+    num_arms=6,
+    seq_len_max=6,
+    criterion=100,
+    criterion_order=4,   # stop at the 100th run of 4 consecutive rewarded choices
+)
+```
+
+| `criterion_order` | `criterion` counts | Stops each subject at |
+|---|---|---|
+| 0 (default) | trials | trial number `criterion` |
+| 1 | rewards | its `criterion`-th reward |
+| k | runs of k consecutive rewarded choices | its `criterion`-th such run |
+
+Runs are counted in overlapping windows, so seven consecutive rewarded trials contain
+four runs of length four. Runs never span a session boundary when `block_aware=True`.
+
+Three consequences worth understanding before using it.
+
+**Subjects contribute unequal amounts of data.** Reaching the same achievement takes
+different numbers of trials, so subjects no longer contribute equally. Since CBAS
+averages raw counts rather than rates, a subject that took twice as long has roughly
+twice the counts. If time-to-criterion differs between your groups, that difference
+alone shifts every sequence.
+
+**Subjects that never reach the criterion are not truncated.** They contribute every
+trial they have, so the weakest subjects contribute the most data. Check for this
+before running:
+
+```python
+from pycbas.core import subject_criteria
+import numpy as np
+
+criteria = subject_criteria(subjects_data, params, contingency=2, block_aware=True)
+print(f"{np.sum(~np.isfinite(criteria))} subjects never reached the criterion")
+print(f"trials used: {np.nanmin(criteria):.0f} to {np.nanmax(criteria[np.isfinite(criteria)]):.0f}")
+```
+
+The interactive app shows the same information automatically once a higher order is
+selected.
+
+**The achievable count is set by your weakest subject.** If you want every subject to
+reach the criterion, `criterion` cannot exceed what the worst performer manages.
+
+Reward information comes from the reward column, so higher orders work regardless of
+the `encode_reward` setting.
 
 ## Memory and chunked mode
 

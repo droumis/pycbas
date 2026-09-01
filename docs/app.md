@@ -75,6 +75,15 @@ Parameters are auto-configured from the loaded data:
 
 The resource estimate shows the actual number of observed sequences (not the worst-case theoretical space), estimated memory, runtime, and a verdict based on your system's available RAM.
 
+**Count criterion in units of** leaves the criterion as a trial count by default. The
+other options stop each subject once it has earned that many rewards, or produced that
+many runs of consecutive rewarded choices, which matches subjects on performance rather
+than on exposure. Choosing one changes the criterion label to match, disables the
+auto-detected trial count since the number no longer means trials, and reports how many
+subjects fail to reach the criterion along with the spread of trials used. Subjects that
+fall short are not truncated, so they contribute every trial they have. See
+[higher-order criteria](guide.md#higher-order-criteria) for the caveats.
+
 ### Step 4: Run analysis
 
 Click "Run CBAS Analysis" to execute the full pipeline. Progress is shown in real time.

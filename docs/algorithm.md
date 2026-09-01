@@ -17,6 +17,8 @@ For each subject, extract the choice stream (filtered by contingency block if ap
 
 A sliding window at each position `i` from 0 to `min(criterion, stream_length - seq_len)` extracts the tuple `stream[i : i + seq_len]` and increments its count. The inclusive upper bound on start position matches Igor's `seqTrialWv[p][0] <= critWv` check.
 
+The criterion is always ultimately a start-position cutoff, but it need not be given as one. With [higher-order criteria](guide.md#higher-order-criteria) the cutoff is derived per subject from that subject's rewards, so subjects are matched on achievement rather than exposure and each gets a different cutoff. Everything downstream is unchanged.
+
 ## Step 2. Count matrix
 
 Union all sequences observed across subjects. Sort by total frequency descending. Build the matrix C of shape (N, S) where `C[n, s]` is the count of sequence s for subject n.

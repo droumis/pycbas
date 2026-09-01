@@ -53,11 +53,26 @@ Run the full correlative CBAS pipeline.
 ### `CBASParams`
 
 ```python
-CBASParams(num_arms=6, seq_len_max=6, criterion=800,
+CBASParams(num_arms=6, seq_len_max=6, criterion=800, criterion_order=0,
            resample_number=10000, alpha=0.5, gamma=0.05, centering=False)
 ```
 
 All analysis parameters. See the [User Guide](guide.md#parameters) for descriptions.
+
+---
+
+### `subject_criteria`
+
+```python
+subject_criteria(subjects_data, params, contingency=2, block_aware=False)
+```
+
+Per-subject criterion trial index, as a float array so that `inf` survives. `inf` marks
+a subject that never reached a higher-order criterion, which means it is not truncated
+and contributes every window it has. Pass the same `contingency` and `block_aware` used
+for the run, since the criterion is expressed in the same coordinates as the
+enumeration. Only interesting when `params.criterion_order` is nonzero; see
+[higher-order criteria](guide.md#higher-order-criteria).
 
 ---
 
