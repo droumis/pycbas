@@ -61,6 +61,69 @@ All analysis parameters. See the [User Guide](guide.md#parameters) for descripti
 
 ---
 
+### `run_cbas_multicontingency`
+
+```python
+run_cbas_multicontingency(records, group_labels, params=None, blocks=None,
+                          encode_reward=True, chunked=True)
+```
+
+Comparative CBAS across several contingencies, each counted as its own set of
+hypotheses. `records` comes from `load_cohort_with_contingencies`. Returns a
+`CBASResult` whose `sequences` entries are `(block, sequence_tuple)` pairs rather than
+bare tuples. Everything downstream of the count matrix is the ordinary comparative
+path. See [multiple contingencies](guide.md#multiple-contingencies).
+
+---
+
+### `load_cohort_with_contingencies`
+
+```python
+load_cohort_with_contingencies(directory, allow_mid_session_change=False)
+```
+
+Load every `an*.txt` subject file in a directory, ordered numerically, plus the
+`anInfo.txt` table if present. Returns `(records, info)`. Raises if the file count and
+the info row count disagree.
+
+---
+
+### `shared_contingency_blocks`
+
+```python
+shared_contingency_blocks(records)
+```
+
+Sorted contingency block indices common to every subject, excluding exploration.
+Raises if a block index denotes different arms for different subjects, or if some
+subject did not run a contingency the others did.
+
+---
+
+### `build_multicontingency_count_matrix`
+
+```python
+build_multicontingency_count_matrix(records, params, blocks=None, encode_reward=True)
+```
+
+The count matrix behind `run_cbas_multicontingency`. Returns
+`(sequences, count_matrix)` with columns grouped contiguously by contingency, so a
+single contingency can be sliced out.
+
+---
+
+### `criterion_trial`
+
+```python
+criterion_trial(reward_blocks, order, count)
+```
+
+Trial index at which `count` units of the given order have accumulated, or `inf` if the
+subject never gets there. `reward_blocks` is a list of per-session 0/1 arrays.
+`reached_criterion(value)` tests the result.
+
+---
+
 ### `subject_criteria`
 
 ```python

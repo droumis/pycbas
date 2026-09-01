@@ -270,6 +270,78 @@ reach the criterion, `criterion` cannot exceed what the worst performer manages.
 Reward information comes from the reward column, so higher orders work regardless of
 the `encode_reward` setting.
 
+## Multiple contingencies
+
+When subjects run several task contingencies in sequence, each one can be analysed as
+its own set of hypotheses. The same arm sequence under two contingencies then becomes
+two columns rather than one, and the multiplicity correction runs over all of them
+jointly. With 100 sequences in the first contingency and 200 in the second, you are
+testing 300.
+
+This needs a data format that records which contingency each trial belongs to, which
+the single-contingency loader does not carry:
+
+```python
+from pycbas import (CBASParams, load_cohort_with_contingencies,
+                    run_cbas_multicontingency)
+
+records, info = load_cohort_with_contingencies("data/my_cohort")
+labels = ...   # 0/1 per subject, aligned with records
+
+params = CBASParams(num_arms=6, seq_len_max=4, criterion=100, criterion_order=4)
+result = run_cbas_multicontingency(records, labels, params)
+
+# sequences are (contingency_block, sequence) pairs
+for (block, seq), significant in zip(result.sequences, result.significant_mask):
+    if significant:
+        print(block, seq)
+```
+
+Four things behave differently from the single-contingency path.
+
+**A contingency is a block of sessions, not a set of arms.** If a task returns to an
+earlier configuration later in training, that recurrence is a separate contingency with
+its own columns. Identity comes from the order the blocks appear, so keying on the arms
+would silently merge the two. Exploration or pretraining phases are excluded.
+
+**The criterion applies within each contingency.** Each is its own learning episode, so
+a subject gets a separate cutoff per contingency, and the trial index is local to it.
+
+**Counting is always session-respecting.** Sequences never span a session boundary
+within a contingency.
+
+**Every subject must run every contingency.** A subject missing one has no data for
+those columns, and filling zero would assert it never produced those sequences rather
+than that it was not measured. Representing that honestly needs missing-value support
+in the statistic and the bootstrap, which is not implemented, so the mismatch raises.
+Restrict to the shared blocks explicitly if you need to:
+
+```python
+from pycbas import shared_contingency_blocks
+
+print(shared_contingency_blocks(records))          # e.g. [1, 2, 3, 4, 5, 6]
+result = run_cbas_multicontingency(records, labels, params, blocks=[1, 2])
+```
+
+**Watch the hypothesis space.** Counting several contingencies multiplies it, and the
+step-down's peak allocation grows with it directly. The null it holds is
+`resample_number` by hypotheses, at nine bytes an entry: eight for the magnitude and
+one for the direction. At `M=10,000` that is roughly 0.9 GB per ten thousand
+hypotheses, so a space in the tens of thousands is a multi-gigabyte run, and raising
+`seq_len_max` by one can multiply it several times over.
+
+Measure your own space rather than extrapolating from someone else's cohort, because
+the count depends on how much of the sequence space the subjects actually visit:
+`build_multicontingency_count_matrix` returns the sequence list, and
+`estimate_resources` turns a hypothesis count into a memory and time estimate.
+
+Note that `chunked=True`, the default, does **not** remove this cost. It avoids the
+intermediate full-width matrix, roughly halving peak memory, but still allocates
+`M × n_valid` for the sorted null and its directions. Reducing `resample_number` or
+`seq_len_max` is what actually lowers the floor. Pass the multi-contingency hypothesis
+count to `estimate_resources` as `n_observed` rather than relying on a
+single-contingency estimate.
+
 ## Memory and chunked mode
 
 The main memory cost is the bootstrap null matrix (M rows by number of valid test statistics). For large hypothesis spaces (e.g. rats with 16,378 sequences), this can reach several GB.

@@ -22,7 +22,14 @@ from .stepdown import (
     find_k_fwer_chunked,
 )
 from .resources import estimate_resources, print_resource_estimate
-from .pipeline import run_cbas_comparative, run_cbas_correlative
+from .pipeline import (run_cbas_comparative, run_cbas_correlative,
+                       run_cbas_multicontingency)
+from .contingency import (load_subject_data_with_contingencies,
+                          load_cohort_with_contingencies,
+                          shared_contingency_blocks,
+                          build_multicontingency_count_matrix)
+from .criterion import criterion_trial, reached_criterion
+from .core import subject_criteria
 
 __all__ = [
     "CBASParams",
@@ -43,6 +50,14 @@ __all__ = [
     "find_k_fwer_chunked",
     "run_cbas_comparative",
     "run_cbas_correlative",
+    "run_cbas_multicontingency",
+    "load_subject_data_with_contingencies",
+    "load_cohort_with_contingencies",
+    "shared_contingency_blocks",
+    "build_multicontingency_count_matrix",
+    "criterion_trial",
+    "reached_criterion",
+    "subject_criteria",
     "estimate_resources",
     "print_resource_estimate",
 ]

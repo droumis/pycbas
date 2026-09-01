@@ -47,6 +47,9 @@ __all__ = [
     "assign_contingency_blocks",
     "load_subject_data_with_contingencies",
     "load_cohort_info",
+    "load_cohort_with_contingencies",
+    "shared_contingency_blocks",
+    "build_multicontingency_count_matrix",
 ]
 
 
@@ -252,6 +255,176 @@ def load_subject_data_with_contingencies(filepath, allow_mid_session_change=Fals
     block, blocks = assign_contingency_blocks(
         session, centres, lefts, allow_mid_session_change=allow_mid_session_change)
     return SubjectRecord(session, choice, reward, block, blocks)
+
+
+def shared_contingency_blocks(records):
+    """Validate that a block index means the same thing for every subject.
+
+    Kastner's convention counts each contingency separately, so a column of the
+    count matrix is identified by (block, sequence). That is only coherent if
+    block 3 refers to the same three arms for every subject, which is what Igor
+    checks when it prints "Contingencies not aligned".
+
+    Two failure modes are rejected rather than papered over:
+
+    Misalignment, where subjects disagree about which arms block i uses. Pooling
+    those would compare unlike behaviours under one label.
+
+    Incompleteness, where a subject never ran a contingency other subjects did.
+    That subject has no data for those columns, and zero is the wrong fill because
+    zero means "produced this sequence zero times" rather than "was not measured".
+    Igor represents it as NaN and its statistic ignores NaN, giving a per-sequence
+    n. pycbas has no NaN support in the statistic or the bootstrap yet, so this
+    raises instead of silently writing zeros. Every subject in the hippocampal
+    lesion cohort runs all six contingencies, so the case does not arise there.
+
+    Returns:
+        sorted list of block indices common to all subjects
+    """
+    if not records:
+        raise ValueError("no subject records given")
+
+    arms_by_block = {}
+    block_sets = []
+    for index, record in enumerate(records):
+        blocks = {b.block: (b.centre, b.left_outer)
+                  for b in record.alternation_blocks()}
+        block_sets.append(set(blocks))
+        for block, arms in blocks.items():
+            if block not in arms_by_block:
+                arms_by_block[block] = (arms, index)
+            elif arms_by_block[block][0] != arms:
+                first_arms, first_index = arms_by_block[block]
+                raise ValueError(
+                    f"contingency block {block} is not aligned across subjects: "
+                    f"subject {first_index} has centre/left {first_arms} but "
+                    f"subject {index} has {arms}. A block index must denote the "
+                    "same arms for every subject before its sequences can be "
+                    "pooled into one hypothesis."
+                )
+
+    common = set.intersection(*block_sets)
+    union = set.union(*block_sets)
+    if common != union:
+        missing = sorted(union - common)
+        offenders = [i for i, s in enumerate(block_sets) if not union <= s]
+        raise ValueError(
+            f"not every subject ran every contingency: block(s) {missing} are "
+            f"absent for {len(offenders)} of {len(records)} subjects, first at "
+            f"index {offenders[0]}. Those subjects have no data for the affected "
+            "columns, and filling zero would assert they never produced those "
+            "sequences. Representing it honestly needs NaN support in the "
+            "statistic and the bootstrap, which pycbas does not have yet. Restrict "
+            "to the blocks all subjects share by passing `blocks=`."
+        )
+    return sorted(common)
+
+
+def build_multicontingency_count_matrix(records, params, blocks=None,
+                                        encode_reward=True):
+    """Count sequences separately per contingency and concatenate the columns.
+
+    Each contingency is analysed as its own set of hypotheses, so the same arm
+    sequence under two contingencies gives two columns. With 100 sequences in the
+    first contingency and 200 in the second, the matrix has 300 columns and the
+    multiplicity correction runs over all of them jointly.
+
+    Counting is always session-respecting within a contingency, matching Igor,
+    which enumerates per session and concatenates. The criterion is applied per
+    subject *and* per contingency, since each contingency is its own learning
+    episode, and its trial index is local to that contingency.
+
+    Args:
+        records: list of SubjectRecord
+        params: CBASParams; `criterion_order` and `criterion` apply within each
+            contingency
+        blocks: contingency block indices to include, default all that every
+            subject shares. Exploration is never included.
+        encode_reward: encode reward into symbols
+
+    Returns:
+        (sequences, count_matrix) where `sequences` is a list of
+        (block, sequence_tuple) pairs and `count_matrix` has shape
+        (n_subjects, len(sequences)).
+    """
+    from .criterion import criterion_trial, as_enumeration_cutoff
+    from .io import enumerate_sequences_block_aware
+
+    available = shared_contingency_blocks(records)
+    if blocks is None:
+        blocks = available
+    else:
+        blocks = sorted(blocks)
+        unknown = [b for b in blocks if b not in available]
+        if unknown:
+            raise ValueError(
+                f"contingency block(s) {unknown} are not shared by all subjects; "
+                f"available: {available}")
+
+    order = getattr(params, "criterion_order", 0)
+
+    # counts[subject][(block, sequence)] = n
+    per_subject = []
+    for record in records:
+        counts = {}
+        for block in blocks:
+            streams = record.symbol_blocks_for(block, params.num_arms, encode_reward)
+            n_trials = sum(len(s) for s in streams)
+            cutoff = as_enumeration_cutoff(
+                criterion_trial(record.reward_blocks_for(block), order,
+                                params.criterion),
+                n_trials)
+            for seq_len in range(1, params.seq_len_max + 1):
+                for seq, n in enumerate_sequences_block_aware(
+                        streams, seq_len, cutoff).items():
+                    counts[(block, seq)] = n
+        per_subject.append(counts)
+
+    totals = {}
+    for counts in per_subject:
+        for key, n in counts.items():
+            totals[key] = totals.get(key, 0) + n
+
+    # Ordered by contingency first, then as build_count_matrix orders within one:
+    # descending total frequency, then length, then value. Keeping contingencies
+    # contiguous makes the matrix readable and lets callers slice one out.
+    sequences = sorted(totals, key=lambda k: (k[0], -totals[k], len(k[1]), k[1]))
+
+    index = {key: i for i, key in enumerate(sequences)}
+    count_matrix = np.zeros((len(records), len(sequences)), dtype=np.float64)
+    for row, counts in enumerate(per_subject):
+        for key, n in counts.items():
+            count_matrix[row, index[key]] = n
+    return sequences, count_matrix
+
+
+def load_cohort_with_contingencies(directory, allow_mid_session_change=False):
+    """Load every numbered subject file in a directory, plus the info table.
+
+    Files are ordered numerically by the digits in their stem, so `an2` precedes
+    `an10`, which is the order the info table rows correspond to.
+
+    Returns:
+        (records, info) where records is a list of SubjectRecord and info is the
+        list of dicts from `load_cohort_info`, or None when no info file exists.
+    """
+    from pathlib import Path
+    directory = Path(directory)
+    files = [p for p in directory.glob("an*.txt") if p.stem.lower() != "aninfo"]
+    if not files:
+        raise ValueError(f"no subject files matching an*.txt in {directory}")
+    files.sort(key=lambda p: int("".join(c for c in p.stem if c.isdigit())))
+
+    records = [load_subject_data_with_contingencies(
+        p, allow_mid_session_change=allow_mid_session_change) for p in files]
+
+    info_path = directory / "anInfo.txt"
+    info = load_cohort_info(info_path) if info_path.exists() else None
+    if info is not None and len(info) != len(records):
+        raise ValueError(
+            f"{len(records)} subject files but {len(info)} rows in "
+            f"{info_path.name}; they must correspond one to one")
+    return records, info
 
 
 def load_cohort_info(filepath):
