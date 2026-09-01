@@ -64,6 +64,7 @@ class CBASApp(param.Parameterized):
     num_arms = param.Integer(default=2, bounds=(2, 20), doc="Number of choice symbols")
     seq_len_max = param.Integer(default=4, bounds=(2, 10), doc="Max sequence length")
     criterion = param.Integer(default=200, bounds=(10, 5000), doc="Trials per subject to use")
+    criterion_order = param.Integer(default=0, bounds=(0, 8), doc="0 = trials, 1 = rewards, k = runs of k rewarded choices")
     resample_number = param.Integer(default=10000, bounds=(100, 50000), doc="Bootstrap resamples")
     encode_reward = param.Boolean(default=False, doc="Encode reward into symbols")
     contingency = param.Integer(default=1, bounds=(0, 10), doc="Trial condition filter")
@@ -124,6 +125,7 @@ class CBASApp(param.Parameterized):
             num_arms=self.num_arms,
             seq_len_max=self.seq_len_max,
             criterion=self.criterion,
+            criterion_order=self.criterion_order,
             resample_number=self.resample_number,
         )
         if self.mode == "Comparative":
@@ -562,8 +564,12 @@ def load_from_folder(event):
         app_state.encode_reward = has_reward
         contingency_widget.value = suggested_contingency
         app_state.contingency = suggested_contingency
-        criterion_widget.value = suggested_criterion
-        app_state.criterion = suggested_criterion
+        # Only meaningful for the trial-count criterion; for the performance-based
+        # orders the number is a count of rewards or runs, not a trial index.
+        if app_state.criterion_order == 0:
+            criterion_widget.value = suggested_criterion
+            app_state.criterion = suggested_criterion
+        update_criterion_shortfall()
 
         # Auto-detect block_aware: enable if data has multiple blocks/sessions
         # (column 0) and contingency-filtered data spans multiple blocks
@@ -741,8 +747,10 @@ def parse_spreadsheet(event):
                 app_state.contingency = suggested_cont
 
         min_len = min(len(s) for s in choice_streams)
-        criterion_widget.value = min_len
-        app_state.criterion = min_len
+        if app_state.criterion_order == 0:
+            criterion_widget.value = min_len
+            app_state.criterion = min_len
+        update_criterion_shortfall()
 
         data_status.object = (
             f"**Loaded {app_state.n_subjects} subjects** from spreadsheet. "
@@ -820,6 +828,26 @@ criterion_widget = pn.widgets.IntInput(
     value=200, start=10, end=5000, step=10,
     description="Number of trials per subject used for sequence counting. Should not exceed the minimum trial count across subjects.",
 )
+CRITERION_ORDER_OPTIONS = {
+    "Trials (standard)": 0,
+    "Rewards": 1,
+    "2 rewarded in a row": 2,
+    "3 rewarded in a row": 3,
+    "4 rewarded in a row": 4,
+    "5 rewarded in a row": 5,
+    "6 rewarded in a row": 6,
+}
+criterion_order_widget = pn.widgets.Select(
+    name="Count criterion in units of",
+    options=list(CRITERION_ORDER_OPTIONS), value="Trials (standard)",
+    description=(
+        "What the criterion counts. Trials is the standard choice and gives every "
+        "subject the same amount of data. The other options stop each subject once "
+        "it has achieved that many rewards, or that many runs of consecutive "
+        "rewarded choices, which matches subjects on performance instead of "
+        "exposure and therefore gives them different numbers of trials."
+    ),
+)
 resample_widget = pn.widgets.IntInput(
     name="Bootstrap resamples (M)",
     value=10000, start=100, end=50000, step=100,
@@ -853,6 +881,9 @@ def sync_params(*events):
             app_state.seq_len_max = e.new
         elif e.obj is criterion_widget:
             app_state.criterion = e.new
+        elif e.obj is criterion_order_widget:
+            app_state.criterion_order = CRITERION_ORDER_OPTIONS[e.new]
+            relabel_criterion_widget()
         elif e.obj is resample_widget:
             app_state.resample_number = e.new
         elif e.obj is encode_reward_widget:
@@ -862,13 +893,80 @@ def sync_params(*events):
         elif e.obj is block_aware_widget:
             app_state.block_aware = e.new
     update_resource_estimate()
+    update_criterion_shortfall()
 
 for w in [num_arms_widget, seq_len_max_widget, criterion_widget,
-          resample_widget, encode_reward_widget, contingency_widget,
-          block_aware_widget]:
+          criterion_order_widget, resample_widget, encode_reward_widget,
+          contingency_widget, block_aware_widget]:
     w.param.watch(sync_params, "value")
 
 resource_estimate_pane = pn.pane.Alert("", alert_type="light", visible=False)
+
+criterion_shortfall_pane = pn.pane.Alert("", alert_type="warning", visible=False)
+
+
+def relabel_criterion_widget():
+    """Keep the criterion label honest about what the number counts."""
+    order = app_state.criterion_order
+    if order == 0:
+        criterion_widget.name = "Trials per subject (criterion)"
+    elif order == 1:
+        criterion_widget.name = "Rewards per subject (criterion)"
+    else:
+        criterion_widget.name = f"Runs of {order} rewarded choices (criterion)"
+    update_criterion_shortfall()
+
+
+def update_criterion_shortfall():
+    """Warn when subjects cannot reach a performance-based criterion.
+
+    A subject that falls short is not truncated, it contributes every trial it
+    has, so the weakest subjects end up contributing the most data. That is worth
+    surfacing before a run rather than discovering afterwards.
+    """
+    if not app_state.data_loaded or app_state.criterion_order == 0:
+        criterion_shortfall_pane.visible = False
+        return
+
+    from pycbas.core import subject_criteria
+    from pycbas import CBASParams
+    try:
+        criteria = subject_criteria(
+            app_state.subjects_data,
+            CBASParams(num_arms=app_state.num_arms,
+                       seq_len_max=app_state.seq_len_max,
+                       criterion=app_state.criterion,
+                       criterion_order=app_state.criterion_order),
+            contingency=app_state.contingency,
+            block_aware=app_state.block_aware,
+        )
+    except Exception as exc:
+        criterion_shortfall_pane.object = f"Could not evaluate the criterion: {exc}"
+        criterion_shortfall_pane.alert_type = "danger"
+        criterion_shortfall_pane.visible = True
+        return
+
+    short = int(np.sum(~np.isfinite(criteria)))
+    reached = criteria[np.isfinite(criteria)]
+    criterion_shortfall_pane.visible = True
+
+    if short:
+        criterion_shortfall_pane.alert_type = "warning"
+        criterion_shortfall_pane.object = (
+            f"**{short} of {len(criteria)} subjects never reach this criterion.** "
+            "They are not truncated, so they contribute every trial they have, "
+            "which means the weakest subjects contribute the most data. Lower the "
+            "count, or exclude them before running."
+        )
+    elif len(reached):
+        criterion_shortfall_pane.alert_type = "light"
+        criterion_shortfall_pane.object = (
+            f"All {len(criteria)} subjects reach this criterion. Trials used per "
+            f"subject range {int(reached.min())} to {int(reached.max())}, median "
+            f"{int(np.median(reached))}. Counts are not normalised by trial count, "
+            "so a wide range means subjects contribute unequal amounts of data."
+        )
+
 
 def update_resource_estimate():
     if not app_state.data_loaded:
@@ -1544,8 +1642,9 @@ main_content = pn.Column(
     pn.pane.Markdown("## 3. Configure parameters"),
     pn.Row(
         pn.Column(num_arms_widget, seq_len_max_widget, pn.Row(encode_reward_widget, encode_reward_tooltip), width=300),
-        pn.Column(criterion_widget, resample_widget, contingency_widget, pn.Row(block_aware_widget, block_aware_tooltip), width=300),
+        pn.Column(criterion_widget, criterion_order_widget, resample_widget, contingency_widget, pn.Row(block_aware_widget, block_aware_tooltip), width=300),
     ),
+    criterion_shortfall_pane,
     resource_estimate_pane,
     pn.layout.Divider(),
 

@@ -25,6 +25,16 @@ alternation contingencies rather than the exploration phase.
 
 The exploration phase, where the contingency fields are blank and every arm can
 pay, is block 0 and is excluded from analysis.
+
+One known divergence from Igor, harmless on the lesion cohort but worth recording.
+`assign_contingency_blocks` increments at the exact trial where the arm pair
+changes, whereas Igor's `wConting` works session by session and increments at
+most once per session, assigning a whole session to the new block even if the
+change happened partway through. The two agree whenever a contingency change
+coincides with a session boundary. In the hippocampal lesion cohort no session
+contains a mid-session change, so the implementations cannot differ there, which
+is consistent with the criterion values matching exactly. Data containing
+mid-session changes would need this reconciled.
 """
 
 from dataclasses import dataclass
