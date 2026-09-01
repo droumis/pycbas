@@ -17,7 +17,7 @@ from pycbas import (
     run_cbas_comparative,
 )
 
-DATA_DIR = Path(__file__).parent.parent / "igor_cbas" / "data"
+from conftest import IGOR_DATA_DIR as DATA_DIR, require_reference_path
 
 
 # --- Unit tests with synthetic data ---
@@ -161,8 +161,7 @@ class TestFindKFWER:
 
 def load_rat_data():
     """Load all rat data files and return (subjects_data, group_labels)."""
-    if not DATA_DIR.exists():
-        pytest.skip("Igor data directory not found")
+    require_reference_path(DATA_DIR, "Igor reference data")
 
     subjects_data = []
     group_labels = []
@@ -184,8 +183,7 @@ def load_rat_data():
 
 class TestLoadSubjectData:
     def test_loads_file(self):
-        if not DATA_DIR.exists():
-            pytest.skip("Igor data directory not found")
+        require_reference_path(DATA_DIR, "Igor reference data")
         f = sorted(DATA_DIR.glob("*.txt"))[0]
         data = load_subject_data(f)
         assert data.ndim == 2
@@ -194,8 +192,7 @@ class TestLoadSubjectData:
         assert set(np.unique(data[:, 2])).issubset({0, 1})
 
     def test_extract_stream_correct_length(self):
-        if not DATA_DIR.exists():
-            pytest.skip("Igor data directory not found")
+        require_reference_path(DATA_DIR, "Igor reference data")
         f = sorted(DATA_DIR.glob("femaleControl*"))[0]
         data = load_subject_data(f)
         stream = extract_choice_stream(data, contingency=2, num_arms=6)
@@ -205,8 +202,7 @@ class TestLoadSubjectData:
 
 class TestBuildCountMatrix:
     def test_small_subset(self):
-        if not DATA_DIR.exists():
-            pytest.skip("Igor data directory not found")
+        require_reference_path(DATA_DIR, "Igor reference data")
         subjects_data, group_labels = load_rat_data()
         params = CBASParams(seq_len_max=2, criterion=100)
         sequences, count_matrix = build_count_matrix(subjects_data[:6], params)
@@ -223,8 +219,7 @@ class TestIntegrationSmall:
     """Run CBAS on a small subset with reduced parameters to validate the pipeline."""
 
     def test_pipeline_runs(self):
-        if not DATA_DIR.exists():
-            pytest.skip("Igor data directory not found")
+        require_reference_path(DATA_DIR, "Igor reference data")
         subjects_data, group_labels = load_rat_data()
 
         params = CBASParams(
@@ -241,8 +236,7 @@ class TestIntegrationSmall:
 
     def test_finds_some_significant(self):
         """With real group differences, CBAS should find significant sequences."""
-        if not DATA_DIR.exists():
-            pytest.skip("Igor data directory not found")
+        require_reference_path(DATA_DIR, "Igor reference data")
         subjects_data, group_labels = load_rat_data()
 
         params = CBASParams(
@@ -255,8 +249,7 @@ class TestIntegrationSmall:
 
     def test_no_signal_with_same_group(self):
         """Comparing a group to itself should yield few/no significant sequences."""
-        if not DATA_DIR.exists():
-            pytest.skip("Igor data directory not found")
+        require_reference_path(DATA_DIR, "Igor reference data")
         subjects_data, group_labels = load_rat_data()
 
         control_indices = np.where(group_labels == 0)[0]

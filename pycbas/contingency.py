@@ -123,7 +123,8 @@ class SubjectRecord:
         return out
 
 
-def assign_contingency_blocks(session, centre, left_outer):
+def assign_contingency_blocks(session, centre, left_outer,
+                              allow_mid_session_change=False):
     """Number contingencies by contiguous block, the way Igor's wConting does.
 
     The counter increments whenever the (centre, left_outer) pair changes from
@@ -133,9 +134,41 @@ def assign_contingency_blocks(session, centre, left_outer):
     Args:
         session: per-trial session labels
         centre, left_outer: per-trial arm identities, with -1 marking blank
+        allow_mid_session_change: permit a contingency change partway through a
+            session, accepting a known divergence from Igor. See below.
 
     Returns:
         (per-trial block index array, list of ContingencyBlock)
+
+    Raises:
+        ValueError: if a session contains more than one contingency and
+            `allow_mid_session_change` is False.
+
+    Why the mid-session case raises
+    -------------------------------
+    This function and Igor's `wConting` agree exactly as long as every
+    contingency change coincides with a session boundary, which is true of every
+    session in the hippocampal lesion cohort and is why the derived criterion
+    values match the Igor reference on every subject-contingency pair.
+
+    They disagree when a change happens partway through a session:
+
+        this function   splits the session at the exact trial, so trials before
+                        the change stay with the old contingency
+        Igor            works session by session and increments at most once per
+                        session, assigning the whole session to the new
+                        contingency including trials that ran under the old one
+
+    Neither is obviously wrong. Attributing trials to the contingency actually in
+    force is the more literal reading, and Igor's is coarser. But agreement with
+    the reference implementation is what makes results comparable, so the
+    disagreement has to be resolved deliberately rather than absorbed silently.
+
+    Failing loudly matters because the symptom is invisible: counts would differ
+    from Igor's with no error, no warning, and nothing in the output to indicate
+    which convention produced them. Pass `allow_mid_session_change=True` only if
+    you have decided to accept this function's convention and do not need to
+    match Igor on that data.
     """
     session = np.asarray(session)
     centre = np.asarray(centre)
@@ -157,12 +190,30 @@ def assign_contingency_blocks(session, centre, left_outer):
         block_of_trial[i] = current
         blocks[current].sessions.append(session[i])
 
+    if not allow_mid_session_change:
+        # A session spanning more than one block means the contingency changed
+        # partway through it, which is the one case where this function and Igor
+        # disagree. See the note in the docstring above.
+        offenders = [int(s) for s in np.unique(session)
+                     if len(np.unique(block_of_trial[session == s])) > 1]
+        if offenders:
+            shown = ", ".join(str(s) for s in offenders[:5])
+            more = f" and {len(offenders) - 5} more" if len(offenders) > 5 else ""
+            raise ValueError(
+                f"contingency changes partway through session(s) {shown}{more}. "
+                "This function splits the session at the exact trial, while Igor's "
+                "wConting assigns the whole session to the new contingency, so "
+                "results would silently diverge from the reference implementation. "
+                "Decide which convention you want, then pass "
+                "allow_mid_session_change=True to accept this one."
+            )
+
     for b in blocks:
         b.sessions = np.unique(np.asarray(b.sessions))
     return block_of_trial, blocks
 
 
-def load_subject_data_with_contingencies(filepath):
+def load_subject_data_with_contingencies(filepath, allow_mid_session_change=False):
     """Load one subject from the multi-contingency text format.
 
     The format carries a one-line header and nine comma-separated columns:
@@ -170,6 +221,11 @@ def load_subject_data_with_contingencies(filepath):
     flags. Only the first five are used; the algorithm never reads the rest.
 
     Rows with a blank choice or reward are dropped, matching Igor.
+
+    Args:
+        filepath: path to one subject's file
+        allow_mid_session_change: forwarded to `assign_contingency_blocks`, which
+            raises by default when a contingency changes partway through a session.
 
     Returns:
         SubjectRecord
@@ -193,7 +249,8 @@ def load_subject_data_with_contingencies(filepath):
     session = np.array(sessions, dtype=np.int64)
     choice = np.array(choices, dtype=np.int64)
     reward = np.array(rewards, dtype=np.int64)
-    block, blocks = assign_contingency_blocks(session, centres, lefts)
+    block, blocks = assign_contingency_blocks(
+        session, centres, lefts, allow_mid_session_change=allow_mid_session_change)
     return SubjectRecord(session, choice, reward, block, blocks)
 
 

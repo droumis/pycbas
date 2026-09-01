@@ -20,8 +20,7 @@ from pycbas.contingency import (assign_contingency_blocks,
                                 load_subject_data_with_contingencies,
                                 load_cohort_info)
 
-DATA_DIR = Path(__file__).parent.parent / "data" / "rats_AllHipLesionData"
-REFERENCE = Path(__file__).parent.parent / "igor_cbas" / "allTrialToPerfect.txt"
+from conftest import LESION_COHORT_DIR, CRITERION_REFERENCE  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
@@ -135,6 +134,34 @@ class TestContingencyBlocks:
             np.array([0]), np.array([3]), np.array([1]))
         assert blocks[0].right_outer == 5
 
+    def test_mid_session_change_raises(self):
+        """The one case where this segmentation and Igor's wConting disagree.
+
+        Igor gives the whole session to the new contingency; this splits it at the
+        exact trial. Failing loudly is the point, because the divergence would
+        otherwise be invisible in the output.
+        """
+        session = np.array([0, 0, 1, 1, 1])
+        centre = np.array([2, 2, 2, 3, 3])
+        left = np.array([1, 1, 1, 2, 2])
+        with pytest.raises(ValueError, match="partway through session"):
+            assign_contingency_blocks(session, centre, left)
+
+    def test_mid_session_change_can_be_opted_into(self):
+        session = np.array([0, 0, 1, 1, 1])
+        centre = np.array([2, 2, 2, 3, 3])
+        left = np.array([1, 1, 1, 2, 2])
+        block, _ = assign_contingency_blocks(session, centre, left,
+                                             allow_mid_session_change=True)
+        assert list(block) == [0, 0, 0, 1, 1], "session 1 is split at the change"
+
+    def test_boundary_change_does_not_raise(self):
+        session = np.array([0, 0, 1, 1])
+        centre = np.array([2, 2, 3, 3])
+        left = np.array([1, 1, 2, 2])
+        block, _ = assign_contingency_blocks(session, centre, left)
+        assert list(block) == [0, 0, 1, 1]
+
 
 # ---------------------------------------------------------------------------
 # Pipeline wiring
@@ -228,13 +255,13 @@ class TestPipelineWiring:
 # Reference: exact reproduction of Kastner's Igor output
 # ---------------------------------------------------------------------------
 
-def _load_reference():
+def _load_reference(path):
     """Parse allTrialToPerfect: one row per subject, one column per contingency.
 
     Column 0 is the exploration contingency and is always blank. A blank in any
     other column means the subject did not reach the criterion.
     """
-    text = REFERENCE.read_bytes().decode("utf-8").replace("\r", "\n")
+    text = path.read_bytes().decode("utf-8").replace("\r", "\n")
     rows = [l for l in text.split("\n") if l.strip(",").strip()]
     reference = {}
     for subject, line in enumerate(rows):
@@ -252,8 +279,8 @@ REFERENCE_COUNT = 100
 
 
 @pytest.fixture(scope="module")
-def computed():
-    files = [f for f in DATA_DIR.glob("an*.txt") if f.stem != "anInfo"]
+def computed(lesion_cohort_dir):
+    files = [f for f in lesion_cohort_dir.glob("an*.txt") if f.stem != "anInfo"]
     files.sort(key=lambda p: int(p.stem[2:]))
     out = {}
     for path in files:
@@ -265,8 +292,6 @@ def computed():
     return out
 
 
-@pytest.mark.skipif(not DATA_DIR.is_dir() or not REFERENCE.exists(),
-                    reason="unpublished lesion cohort or Igor reference not present")
 class TestAgainstIgorReference:
     """Kastner's stated setting: 4th order, 100 runs of four rewarded choices."""
 
@@ -276,8 +301,8 @@ class TestAgainstIgorReference:
         per_subject = {s: sum(1 for a, _ in computed if a == s) for s in subjects}
         assert set(per_subject.values()) == {6}, "every subject runs six contingencies"
 
-    def test_every_value_matches_igor(self, computed):
-        reference = _load_reference()
+    def test_every_value_matches_igor(self, computed, criterion_reference_file):
+        reference = _load_reference(criterion_reference_file)
         shared = sorted(set(reference) & set(computed))
         assert len(shared) == 1332
 
@@ -291,17 +316,17 @@ class TestAgainstIgorReference:
             + "; ".join(f"subject {a} block {b}: igor={r} ours={c}"
                         for (a, b), r, c in mismatches[:5]))
 
-    def test_non_reachers_agree(self, computed):
+    def test_non_reachers_agree(self, computed, criterion_reference_file):
         """Agreement on who failed matters as much as agreement on the values."""
-        reference = _load_reference()
+        reference = _load_reference(criterion_reference_file)
         shared = sorted(set(reference) & set(computed))
         igor_missed = {k for k in shared if np.isinf(reference[k])}
         ours_missed = {k for k in shared if np.isinf(computed[k])}
         assert igor_missed == ours_missed
         assert len(igor_missed) == 151
 
-    def test_cohort_info_parses(self):
-        info = load_cohort_info(DATA_DIR / "anInfo.txt")
+    def test_cohort_info_parses(self, lesion_cohort_dir):
+        info = load_cohort_info(lesion_cohort_dir / "anInfo.txt")
         assert len(info) == 222
         lesion = [r["lesion"] for r in info]
         assert lesion.count("Control") == 111

@@ -20,7 +20,11 @@ hatchling = ">=1.21"
 
 [tasks]
 install = "pip install -e . --no-deps --no-build-isolation"
-test = { cmd = "python -m pytest tests/test_cbas.py -v", depends-on = ["install"] }
+test = { cmd = "python -m pytest tests/ -q -ra", depends-on = ["install"] }
+# For maintainers holding the untracked reference datasets: turns "data absent"
+# skips into failures, so a mistyped path cannot hide as a silent skip. Anyone
+# without those datasets should use `test`, which skips them normally.
+test-reference = { cmd = "python -m pytest tests/ -q -ra", depends-on = ["install"], env = { PYCBAS_REQUIRE_REFERENCE_DATA = "1" } }
 
 validate = "python scripts/validate.py"
 figures = "python scripts/validate.py --figures-only"
