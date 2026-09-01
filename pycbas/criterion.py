@@ -41,7 +41,21 @@ __all__ = [
     "criterion_trial",
     "reached_criterion",
     "criterion_trials_by_subject",
+    "as_enumeration_cutoff",
 ]
+
+
+def as_enumeration_cutoff(criterion, n_trials):
+    """Convert a criterion to the integer cutoff the enumerators accept.
+
+    `criterion_trial` can return `inf`, and the enumerators build a `range` from
+    the cutoff, so it has to be an int. Passing the subject's trial count for an
+    infinite criterion is equivalent to no cutoff, because both enumerators take
+    the minimum of the cutoff and the last admissible start position.
+    """
+    if not np.isfinite(criterion):
+        return int(n_trials)
+    return int(criterion)
 
 
 def perfect_run_starts(reward_blocks, order):

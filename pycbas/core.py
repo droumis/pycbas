@@ -3,6 +3,48 @@
 import numpy as np
 from .io import (extract_choice_stream, extract_choice_streams_by_block,
                  enumerate_sequences, enumerate_sequences_block_aware)
+from .criterion import criterion_trial, as_enumeration_cutoff
+
+
+def reward_blocks(subj_data, contingency=2, block_aware=False):
+    """Per-subject reward arrays in the same coordinate system as enumeration.
+
+    The criterion index has to mean the same thing as the enumeration's start
+    position, so the block structure must match. With `block_aware` the stream is
+    split by session, exactly as `extract_choice_streams_by_block` splits it, and
+    a run of rewarded trials cannot span a session. Without it the stream is one
+    block, matching the pooled enumeration, where sequences may span sessions.
+    """
+    if contingency is None:
+        data = subj_data
+    else:
+        data = subj_data[subj_data[:, 3] == contingency]
+
+    rewards = data[:, 2]
+    if not block_aware:
+        return [rewards]
+    sessions = data[:, 0]
+    return [rewards[sessions == s] for s in np.unique(sessions)]
+
+
+def subject_criteria(subjects_data, params, contingency=2, block_aware=False):
+    """Per-subject criterion trial index, with `inf` where a subject fell short.
+
+    Exposed because the shortfall is worth reporting rather than absorbing. A
+    subject with an infinite criterion contributes every window it has, so with a
+    higher-order criterion the weakest subjects contribute the most data. In the
+    hippocampal lesion cohort that affects 6 to 16 percent of subjects per
+    contingency, unevenly across groups.
+
+    Returns:
+        float array of length n_subjects.
+    """
+    order = getattr(params, "criterion_order", 0)
+    return np.array([
+        criterion_trial(reward_blocks(d, contingency, block_aware),
+                        order, params.criterion)
+        for d in subjects_data
+    ], dtype=np.float64)
 
 
 def build_count_matrix(subjects_data, params, contingency=2, encode_reward=True,
@@ -23,21 +65,31 @@ def build_count_matrix(subjects_data, params, contingency=2, encode_reward=True,
         count_matrix: ndarray of shape (n_subjects, n_sequences) with usage counts
     """
     n_subjects = len(subjects_data)
+    order = getattr(params, "criterion_order", 0)
     all_seq_counts = []
     for subj_data in subjects_data:
         subj_counts = {}
         if block_aware:
             block_streams = extract_choice_streams_by_block(
                 subj_data, contingency, params.num_arms, encode_reward=encode_reward)
+            n_trials = sum(len(b) for b in block_streams)
+            cutoff = as_enumeration_cutoff(
+                criterion_trial(reward_blocks(subj_data, contingency, True),
+                                order, params.criterion),
+                n_trials)
             for seq_len in range(1, params.seq_len_max + 1):
                 seq_counts = enumerate_sequences_block_aware(
-                    block_streams, seq_len, params.criterion)
+                    block_streams, seq_len, cutoff)
                 subj_counts.update(seq_counts)
         else:
             stream = extract_choice_stream(subj_data, contingency, params.num_arms,
                                            encode_reward=encode_reward)
+            cutoff = as_enumeration_cutoff(
+                criterion_trial(reward_blocks(subj_data, contingency, False),
+                                order, params.criterion),
+                len(stream))
             for seq_len in range(1, params.seq_len_max + 1):
-                seq_counts = enumerate_sequences(stream, seq_len, params.criterion)
+                seq_counts = enumerate_sequences(stream, seq_len, cutoff)
                 subj_counts.update(seq_counts)
         all_seq_counts.append(subj_counts)
 

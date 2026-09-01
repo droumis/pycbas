@@ -11,6 +11,9 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+from pycbas import CBASParams, build_count_matrix, extract_choice_stream
+from pycbas.io import enumerate_sequences
+from pycbas.core import reward_blocks, subject_criteria
 from pycbas.criterion import (perfect_run_starts, criterion_trial,
                               reached_criterion, criterion_trials_by_subject)
 from pycbas.contingency import (assign_contingency_blocks,
@@ -131,6 +134,94 @@ class TestContingencyBlocks:
         _, blocks = assign_contingency_blocks(
             np.array([0]), np.array([3]), np.array([1]))
         assert blocks[0].right_outer == 5
+
+
+# ---------------------------------------------------------------------------
+# Pipeline wiring
+# ---------------------------------------------------------------------------
+
+def _subject(choices, rewards, sessions=None, contingency=2):
+    """Build a subject array in the published 4-column layout."""
+    n = len(choices)
+    if sessions is None:
+        sessions = np.zeros(n, dtype=int)
+    return np.column_stack([sessions, choices, rewards,
+                            np.full(n, contingency)]).astype(np.int32)
+
+
+class TestPipelineWiring:
+    def test_order_zero_matches_the_historical_path(self):
+        """The default must reproduce a direct enumerate_sequences call."""
+        rng = np.random.default_rng(0)
+        choices = rng.integers(0, 3, 200)
+        rewards = (choices == 2).astype(int)
+        subj = _subject(choices, rewards)
+        params = CBASParams(num_arms=3, seq_len_max=3, criterion=50)
+
+        seqs, counts = build_count_matrix([subj], params, contingency=2)
+        stream = extract_choice_stream(subj, 2, 3, encode_reward=True)
+        expected = enumerate_sequences(stream, 2, 50)
+        idx = seqs.index(next(iter(expected)))
+        assert counts[0, idx] == expected[next(iter(expected))]
+
+    def test_order_one_stops_at_the_nth_reward(self):
+        rewards = np.array([0, 1, 0, 1, 0, 1, 0, 1])
+        choices = np.arange(8) % 3
+        subj = _subject(choices, rewards)
+        params = CBASParams(num_arms=3, seq_len_max=1, criterion=3,
+                            criterion_order=1)
+        crit = subject_criteria([subj], params, contingency=2)
+        assert crit[0] == 5, "third reward is at trial index 5"
+
+    def test_order_one_yields_fewer_counts_than_order_zero(self):
+        rng = np.random.default_rng(1)
+        choices = rng.integers(0, 3, 300)
+        rewards = (choices == 2).astype(int)
+        subj = _subject(choices, rewards)
+        low = CBASParams(num_arms=3, seq_len_max=2, criterion=10,
+                         criterion_order=1)
+        high = CBASParams(num_arms=3, seq_len_max=2, criterion=200,
+                          criterion_order=0)
+        _, few = build_count_matrix([subj], low, contingency=2)
+        _, many = build_count_matrix([subj], high, contingency=2)
+        assert few.sum() < many.sum()
+
+    def test_subject_short_of_criterion_reports_inf(self):
+        subj = _subject(np.zeros(20, dtype=int), np.zeros(20, dtype=int))
+        params = CBASParams(num_arms=3, seq_len_max=1, criterion=5,
+                            criterion_order=1)
+        crit = subject_criteria([subj], params, contingency=2)
+        assert np.isinf(crit[0])
+
+    def test_inf_criterion_counts_every_window(self):
+        """A subject that never reaches criterion is not truncated."""
+        choices = np.zeros(30, dtype=int)
+        subj = _subject(choices, np.zeros(30, dtype=int))
+        unreachable = CBASParams(num_arms=3, seq_len_max=1, criterion=99,
+                                 criterion_order=1)
+        no_cutoff = CBASParams(num_arms=3, seq_len_max=1, criterion=10_000)
+        _, a = build_count_matrix([subj], unreachable, contingency=2)
+        _, b = build_count_matrix([subj], no_cutoff, contingency=2)
+        assert a.sum() == b.sum() == 30
+
+    def test_reward_blocks_follow_the_enumeration_structure(self):
+        sessions = np.array([0, 0, 0, 1, 1])
+        subj = _subject(np.arange(5) % 3, np.ones(5, dtype=int), sessions)
+        pooled = reward_blocks(subj, 2, block_aware=False)
+        split = reward_blocks(subj, 2, block_aware=True)
+        assert len(pooled) == 1 and len(pooled[0]) == 5
+        assert [len(b) for b in split] == [3, 2]
+
+    def test_block_aware_criterion_respects_sessions(self):
+        """A run cannot span sessions when the enumeration cannot either."""
+        sessions = np.array([0, 0, 1, 1])
+        subj = _subject(np.zeros(4, dtype=int), np.ones(4, dtype=int), sessions)
+        params = CBASParams(num_arms=3, seq_len_max=1, criterion=1,
+                            criterion_order=3)
+        assert np.isinf(subject_criteria([subj], params, contingency=2,
+                                         block_aware=True)[0])
+        assert subject_criteria([subj], params, contingency=2,
+                                block_aware=False)[0] == 0
 
 
 # ---------------------------------------------------------------------------
