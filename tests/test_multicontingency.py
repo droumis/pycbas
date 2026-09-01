@@ -16,7 +16,8 @@ from pycbas import CBASParams
 from pycbas.contingency import (SubjectRecord, assign_contingency_blocks,
                                 build_multicontingency_count_matrix,
                                 shared_contingency_blocks,
-                                load_cohort_with_contingencies)
+                                load_cohort_with_contingencies,
+                                load_subject_data_with_contingencies)
 from pycbas.criterion import criterion_trial, as_enumeration_cutoff
 from pycbas.io import enumerate_sequences_block_aware
 from pycbas.pipeline import run_cbas_multicontingency
@@ -296,3 +297,51 @@ class TestLesionCohort:
         assert counts.shape == (30, len(sequences))
         assert counts.sum() > 0
         assert (counts.sum(axis=1) > 0).all(), "every subject contributes counts"
+
+
+class TestHeaderDetection:
+    """The export has shipped both with and without a header line.
+
+    Unconditionally skipping the first line drops a real trial when no header is
+    present, which shifts every later trial index and silently changes the
+    criterion. Detection has to be based on the content of the line.
+    """
+
+    # Session 0 is exploration throughout and session 1 alternation throughout.
+    # Mixing the two inside one session is a mid-session contingency change, which
+    # assign_contingency_blocks rightly refuses.
+    ROWS = ["0,2,1,,,0,72,1,1",
+            "0,5,1,,,246,450,1,1",
+            "1,4,0,3,2,609,735,1,1",
+            "1,3,1,3,2,900,980,1,1"]
+
+    def _load(self, tmp_path, text):
+        fp = tmp_path / "an0.txt"
+        fp.write_text(text)
+        return load_subject_data_with_contingencies(fp)
+
+    def test_headerless_file_keeps_every_trial(self, tmp_path):
+        rec = self._load(tmp_path, "\n".join(self.ROWS) + "\n")
+        assert len(rec) == 4, "first data row must not be eaten as a header"
+        assert rec.choice[0] == 2
+        assert rec.reward[0] == 1
+
+    def test_header_is_still_skipped(self, tmp_path):
+        header = "session,choice,reward,centre,left,t1,t2,f1,f2"
+        rec = self._load(tmp_path, header + "\n" + "\n".join(self.ROWS) + "\n")
+        assert len(rec) == 4
+        assert rec.choice[0] == 2
+
+    def test_both_forms_agree(self, tmp_path):
+        bare = self._load(tmp_path, "\n".join(self.ROWS) + "\n")
+        with_header = self._load(
+            tmp_path, "anInfo\n" + "\n".join(self.ROWS) + "\n")
+        assert np.array_equal(bare.choice, with_header.choice)
+        assert np.array_equal(bare.reward, with_header.reward)
+        assert np.array_equal(bare.session, with_header.session)
+
+    def test_blank_choice_or_reward_still_dropped(self, tmp_path):
+        rows = self.ROWS + ["1,,1,3,2,1100,1200,1,1",
+                            "1,3,,3,2,1300,1400,1,1"]
+        rec = self._load(tmp_path, "\n".join(rows) + "\n")
+        assert len(rec) == 4, "blank choice/reward rows are dropped, matching Igor"

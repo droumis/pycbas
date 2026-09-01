@@ -219,9 +219,14 @@ def assign_contingency_blocks(session, centre, left_outer,
 def load_subject_data_with_contingencies(filepath, allow_mid_session_change=False):
     """Load one subject from the multi-contingency text format.
 
-    The format carries a one-line header and nine comma-separated columns:
-    session, choice, reward, centre arm, left outer arm, two timestamps, and two
-    flags. Only the first five are used; the algorithm never reads the rest.
+    The format has nine comma-separated columns: session, choice, reward, centre
+    arm, left outer arm, two timestamps, and two flags. Only the first five are
+    used; the algorithm never reads the rest.
+
+    A one-line header may or may not be present: successive exports of the same
+    cohort have differed. It is therefore detected rather than assumed, because
+    unconditionally skipping the first line silently discards a real trial when no
+    header is there, which shifts every subsequent trial index.
 
     Rows with a blank choice or reward are dropped, matching Igor.
 
@@ -237,7 +242,14 @@ def load_subject_data_with_contingencies(filepath, allow_mid_session_change=Fals
     with open(filepath) as fh:
         lines = fh.readlines()
 
-    for line in lines[1:]:                      # skip the header line
+    if lines:
+        first_field = lines[0].split(",")[0].strip()
+        try:
+            int(first_field)
+        except ValueError:
+            lines = lines[1:]                   # a header, not a trial
+
+    for line in lines:
         parts = line.rstrip("\n").split(",")
         if len(parts) < 5 or not parts[0].strip():
             continue

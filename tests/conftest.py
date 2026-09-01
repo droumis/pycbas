@@ -32,8 +32,26 @@ REPO_ROOT = __import__("pathlib").Path(__file__).parent.parent
 #: Igor's published reference data, used by the cross-validation in test_cbas.py.
 IGOR_DATA_DIR = REPO_ROOT / "igor_cbas" / "data"
 
+
+def _first_existing(*candidates):
+    """First candidate that exists, else the first, so the error names one path.
+
+    Successive drops of the lesion cohort have used different capitalisation of
+    the directory name. That resolves silently on case-insensitive macOS and then
+    skips, equally silently, on a case-sensitive filesystem. Listing the known
+    spellings keeps the behaviour the same on both.
+    """
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+    return candidates[0]
+
+
 #: Kastner's unpublished multi-contingency lesion cohort.
-LESION_COHORT_DIR = REPO_ROOT / "data" / "rats_AllHipLesionData"
+LESION_COHORT_DIR = _first_existing(
+    REPO_ROOT / "data" / "rats_allHipLesionData",
+    REPO_ROOT / "data" / "rats_AllHipLesionData",
+)
 
 #: Igor's allTrialToPerfect output for the 4th order / 100 criterion setting.
 CRITERION_REFERENCE = REPO_ROOT / "igor_cbas" / "allTrialToPerfect.txt"
