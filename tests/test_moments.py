@@ -257,3 +257,38 @@ def test_paired_one_sample_form_is_order_independent():
         assert np.array_equal((Dp * Dp).sum(axis=0), ssq)
         assert np.array_equal(sem_from_sums(Dp.sum(axis=0),
                                            (Dp * Dp).sum(axis=0), n), base)
+
+
+def test_every_stepdown_entry_point_is_callable():
+    """All four entry points, called. This is here because one of them was not.
+
+    Threading `tie_rtol` through the step-down cores updated three signatures and
+    missed `find_k_fwer_k1`, whose body then referenced a name that did not exist.
+    It is exported and documented, and no test called it, so a NameError on every
+    invocation survived to the point of release. Nothing here checks a number; the
+    only claim is that each function runs.
+    """
+    from pycbas.stepdown import (find_k_fwer, find_k_fwer_chunked,
+                                 find_k_fwer_k1, romano_wolf_stepdown)
+
+    rng = np.random.default_rng(9)
+    n0, n1, n_seq = 8, 7, 60
+    counts = rng.integers(0, 4, size=(n0 + n1, n_seq)).astype(np.float64)
+    grp = [np.arange(n0), np.arange(n0, n0 + n1)]
+    stats = compute_test_stats(counts, grp)
+    params = CBASParams(resample_number=40)
+    null, dirs = bootstrap_test_stats(counts, grp, params,
+                                      rng=np.random.default_rng(0))
+
+    for name, call in (
+        ("romano_wolf_stepdown",
+         lambda: romano_wolf_stepdown(stats, null, null_directions=dirs, k=1)),
+        ("find_k_fwer",
+         lambda: find_k_fwer(stats, null, 0.5, 0.05, null_directions=dirs)),
+        ("find_k_fwer_k1",
+         lambda: find_k_fwer_k1(stats, null, 0.5, 0.05, null_directions=dirs)),
+        ("find_k_fwer_chunked",
+         lambda: find_k_fwer_chunked(stats, counts, grp, params)),
+    ):
+        out = call()
+        assert out is not None, name

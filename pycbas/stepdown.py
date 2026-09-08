@@ -289,7 +289,8 @@ def find_k_fwer(test_stats, null_matrix, alpha=0.5, gamma=0.05, null_directions=
     return p_values, k
 
 
-def find_k_fwer_k1(test_stats, null_matrix, alpha=0.5, gamma=0.05, null_directions=None):
+def find_k_fwer_k1(test_stats, null_matrix, alpha=0.5, gamma=0.05,
+                   null_directions=None, tie_rtol=0.0):
     """Conservative variant: always report k=1 p-values.
 
     This is the standard Romano-Wolf (max-based) step-down without the
