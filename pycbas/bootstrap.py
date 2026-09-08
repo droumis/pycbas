@@ -2,6 +2,7 @@
 
 import numpy as np
 from ._numba import njit, prange
+from ._moments import sigma_from_sums_scalar
 
 
 @njit(cache=True, parallel=True)
@@ -18,27 +19,28 @@ def _bootstrap_parallel(count_matrix, boot_indices_0, boot_indices_1, n0, n1, n_
 
     for m in prange(M):
         for s in range(n_seq):
+            # Raw sums, not centred deviations: integer sums are exact in
+            # float64 and exact integer addition is associative, so these are
+            # bitwise identical whatever order the subjects are drawn in. That
+            # is what lets the step-down compare against the observed statistic
+            # with `>=`. See pycbas/_moments.py.
             sum0 = 0.0
             sum1 = 0.0
+            sq0 = 0.0
+            sq1 = 0.0
             for i in range(n0):
-                sum0 += count_matrix[boot_indices_0[m, i], s]
+                x = count_matrix[boot_indices_0[m, i], s]
+                sum0 += x
+                sq0 += x * x
             for i in range(n1):
-                sum1 += count_matrix[boot_indices_1[m, i], s]
+                x = count_matrix[boot_indices_1[m, i], s]
+                sum1 += x
+                sq1 += x * x
             mean0 = sum0 / n0
             mean1 = sum1 / n1
 
-            var0 = 0.0
-            var1 = 0.0
-            for i in range(n0):
-                diff = count_matrix[boot_indices_0[m, i], s] - mean0
-                var0 += diff * diff
-            for i in range(n1):
-                diff = count_matrix[boot_indices_1[m, i], s] - mean1
-                var1 += diff * diff
-
-            sem0 = np.sqrt(var0 / (n0 * (n0 - 1)))
-            sem1 = np.sqrt(var1 / (n1 * (n1 - 1)))
-            sigma = np.sqrt(sem0 * sem0 + sem1 * sem1)
+            sigma = sigma_from_sums_scalar(sum0, sq0, n0 * 1.0, sum1, sq1,
+                                           n1 * 1.0)
 
             if sigma > 0.0:
                 delta_centered = (mean0 - mean1) - obs_delta[s]
@@ -204,27 +206,28 @@ def _bootstrap_chunk_into(count_matrix, boot_indices_0, boot_indices_1,
             col_2s = sorted_col_indices[ci]
             seq_idx = col_2s // 2
 
+            # Raw sums, not centred deviations: integer sums are exact in
+            # float64 and exact integer addition is associative, so these are
+            # bitwise identical whatever order the subjects are drawn in. That
+            # is what lets the step-down compare against the observed statistic
+            # with `>=`. See pycbas/_moments.py.
             sum0 = 0.0
             sum1 = 0.0
+            sq0 = 0.0
+            sq1 = 0.0
             for i in range(n0):
-                sum0 += count_matrix[boot_indices_0[m, i], seq_idx]
+                x = count_matrix[boot_indices_0[m, i], seq_idx]
+                sum0 += x
+                sq0 += x * x
             for i in range(n1):
-                sum1 += count_matrix[boot_indices_1[m, i], seq_idx]
+                x = count_matrix[boot_indices_1[m, i], seq_idx]
+                sum1 += x
+                sq1 += x * x
             mean0 = sum0 / n0
             mean1 = sum1 / n1
 
-            var0 = 0.0
-            var1 = 0.0
-            for i in range(n0):
-                diff = count_matrix[boot_indices_0[m, i], seq_idx] - mean0
-                var0 += diff * diff
-            for i in range(n1):
-                diff = count_matrix[boot_indices_1[m, i], seq_idx] - mean1
-                var1 += diff * diff
-
-            sem0 = np.sqrt(var0 / (n0 * (n0 - 1)))
-            sem1 = np.sqrt(var1 / (n1 * (n1 - 1)))
-            sigma = np.sqrt(sem0 * sem0 + sem1 * sem1)
+            sigma = sigma_from_sums_scalar(sum0, sq0, n0 * 1.0, sum1, sq1,
+                                           n1 * 1.0)
 
             val = -np.inf
             d = np.int8(-1)

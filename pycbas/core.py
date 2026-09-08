@@ -4,6 +4,7 @@ import numpy as np
 from .io import (extract_choice_stream, extract_choice_streams_by_block,
                  enumerate_sequences, enumerate_sequences_block_aware)
 from .criterion import criterion_trial, as_enumeration_cutoff
+from ._moments import sigma_from_sums
 
 
 def reward_blocks(subj_data, contingency=2, block_aware=False):
@@ -124,19 +125,26 @@ def compute_test_stats(count_matrix, group_indices):
     grp0 = group_indices[0]
     grp1 = group_indices[1]
 
-    counts0 = count_matrix[grp0]
-    counts1 = count_matrix[grp1]
+    counts0 = np.ascontiguousarray(count_matrix[grp0], dtype=np.float64)
+    counts1 = np.ascontiguousarray(count_matrix[grp1], dtype=np.float64)
+
 
     n0 = len(grp0)
     n1 = len(grp1)
 
-    mean0 = counts0.mean(axis=0)
-    mean1 = counts1.mean(axis=0)
-    sem0 = counts0.std(axis=0, ddof=1) / np.sqrt(n0)
-    sem1 = counts1.std(axis=0, ddof=1) / np.sqrt(n1)
+    # Built from raw sums, and combined by `_moments.sigma_from_sums`, so that
+    # this agrees bitwise with the bootstrap for any sequence whose resampled
+    # multiset has the same sums. See pycbas/_moments.py for why that matters:
+    # the step-down's `>=` is an equality test on a large block of resamples
+    # whenever a statistic is an exact small rational, which is common for rare
+    # sequences. Do not rewrite this as `.mean()` and `.std()`.
+    sum0 = counts0.sum(axis=0)
+    sum1 = counts1.sum(axis=0)
+    sq0 = (counts0 * counts0).sum(axis=0)
+    sq1 = (counts1 * counts1).sum(axis=0)
 
-    delta = mean0 - mean1
-    sigma = np.sqrt(sem0**2 + sem1**2)
+    delta = sum0 / n0 - sum1 / n1
+    sigma = sigma_from_sums(sum0, sq0, float(n0), sum1, sq1, float(n1))
 
     n_seq = count_matrix.shape[1]
     stats = np.full(n_seq * 2, np.nan)
@@ -184,7 +192,12 @@ def compute_test_stats_correlative(count_matrix, covariate):
 
         rho = (np.sum(X * Y) - n * X_bar * Y_bar) / np.sqrt(ss_X * ss_Y)
 
-        tau_num = np.sqrt(np.sum(X_dev ** 2 * Y_dev ** 2) / n)
+        # (x_dev * y_dev) ** 2, not (x_dev ** 2) * (y_dev ** 2): the two are not
+        # bitwise equal, and `_bootstrap_correlative_parallel` uses the former.
+        # The correlative null is a permutation null, so permuting only within a
+        # tied block of the covariate gives a mathematically identical statistic;
+        # the step-down's `>=` then decides on rounding. See pycbas/_moments.py.
+        tau_num = np.sqrt(np.sum((X_dev * Y_dev) ** 2) / n)
         tau_den = np.sqrt(ss_X / n) * np.sqrt(ss_Y / n)
         tau = tau_num / tau_den
 
