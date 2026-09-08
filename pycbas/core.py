@@ -1,10 +1,16 @@
 """Count matrix construction and test statistics."""
 
+import warnings
+
 import numpy as np
 from .io import (extract_choice_stream, extract_choice_streams_by_block,
                  enumerate_sequences, enumerate_sequences_block_aware)
 from .criterion import criterion_trial, as_enumeration_cutoff
 from ._moments import sigma_from_sums
+
+#: One warning per session is enough: this is a property of the caller's data,
+#: not of any single call.
+_WARNED_NON_INTEGER = False
 
 
 def reward_blocks(subj_data, contingency=2, block_aware=False):
@@ -128,6 +134,23 @@ def compute_test_stats(count_matrix, group_indices):
     counts0 = np.ascontiguousarray(count_matrix[grp0], dtype=np.float64)
     counts1 = np.ascontiguousarray(count_matrix[grp1], dtype=np.float64)
 
+    # Warned here rather than in the step-down because this is the one place every
+    # path passes through that can see the matrix. `find_k_fwer` only ever receives
+    # the null, so it cannot detect this for itself.
+    global _WARNED_NON_INTEGER
+    if not _WARNED_NON_INTEGER:
+        finite = count_matrix[np.isfinite(count_matrix)]
+        if finite.size and not np.all(finite == np.rint(finite)):
+            _WARNED_NON_INTEGER = True
+            warnings.warn(
+                "count matrix is not integer-valued. Observed and bootstrap "
+                "statistics are then not guaranteed to agree bitwise, so the "
+                "step-down's `null >= observed` can discard the resamples that "
+                "represent the observed value, which adds false positives. Pass "
+                "tie_rtol=pycbas._moments.tie_rtol_for(matrix) to the step-down, "
+                "or pass the integer count matrix instead if the normalising "
+                "denominator is common to every subject.",
+                RuntimeWarning, stacklevel=2)
 
     n0 = len(grp0)
     n1 = len(grp1)

@@ -61,7 +61,8 @@ import numpy as np
 
 from ._numba import njit
 
-__all__ = ["sigma_from_sums", "sigma_from_sums_scalar", "sem_from_sums"]
+__all__ = ["sigma_from_sums", "sigma_from_sums_scalar", "sem_from_sums",
+           "tie_rtol_for"]
 
 # The two functions below are the same arithmetic in the same order, one for
 # whole arrays and one scalar for use inside the numba bootstrap kernels. The only
@@ -111,3 +112,49 @@ def sem_from_sums(total, ssq, n):
     """
     a = (n * ssq - total * total) / (n * n * (n - 1.0))
     return np.sqrt(np.maximum(a, 0.0))
+
+
+#: Rounding budget for the derived tie tolerance, in units of `n * eps`.
+#:
+#: Sequential summation of `n` terms has relative error bounded by about
+#: `n * eps`, and the statistic applies a handful of further operations, so a few
+#: multiples of that bound covers the accumulated difference between two orderings.
+#: 8 is deliberately loose: at n=105 it gives 1.9e-13, while genuinely distinct
+#: statistics in this project differ by order 1e-4 relative, eleven orders of
+#: magnitude larger. Nothing here is tuned to a dataset.
+TIE_ULP_BUDGET = 8.0
+
+
+def tie_rtol_for(matrix):
+    """Relative tolerance the step-down needs for this matrix, possibly zero.
+
+    Returns exactly 0.0 when the matrix is integer-valued, because then the sums
+    are exact, the observed and null statistics agree bitwise, and a strict
+    comparison is correct. There is nothing to tolerate and tolerating anything
+    would be arbitrary.
+
+    For a non-integer matrix, such as one normalised to rates, the sums are no
+    longer order-independent and two orderings of the same values disagree in the
+    last places. Returns a bound derived from the summation error, not a tuned
+    constant. Without it the step-down's `>=` silently discards the whole block of
+    null replications that represent the observed value, which lowers the adjusted
+    p-value and adds false positives.
+
+    Detection is deliberately conservative: only exactly integer-valued matrices
+    are recognised. Some non-integer matrices are also safe, integers divided by a
+    power of two among them, but proving that in general needs the common scale and
+    the magnitudes, and a needlessly applied tolerance is harmless while a missed
+    one is not. The cost of a false negative is a slack of order 1e-13 relative,
+    against a spacing between distinct statistics of order 1e-4.
+
+    Note that `t` is scale-invariant, so a caller normalising by a denominator
+    common to every subject can pass the integer matrix instead and keep the exact
+    guarantee for free.
+    """
+    a = np.asarray(matrix)
+    if not np.all(np.isfinite(a)):
+        a = a[np.isfinite(a)]
+    if a.size and np.all(a == np.rint(a)):
+        return 0.0
+    n = a.shape[0] if a.ndim else 1
+    return TIE_ULP_BUDGET * n * np.finfo(np.float64).eps

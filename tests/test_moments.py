@@ -24,7 +24,7 @@ import pytest
 
 from pycbas import CBASParams, compute_test_stats
 from pycbas._moments import (sem_from_sums, sigma_from_sums,
-                             sigma_from_sums_scalar)
+                             sigma_from_sums_scalar, tie_rtol_for)
 from pycbas.bootstrap import (_bootstrap_chunk_into, _bootstrap_parallel,
                               bootstrap_test_stats)
 
@@ -173,6 +173,66 @@ def test_variance_numerator_is_exact_for_integer_counts(scale):
         y = rng.permutation(x)
         assert y.sum() == total
         assert (y * y).sum() == sq
+
+
+def test_tie_rtol_is_zero_for_integer_matrices_and_positive_otherwise():
+    """Integer input is exact, so the tolerance must be exactly zero there."""
+    rng = np.random.default_rng(6)
+    counts = rng.integers(0, 500, size=(105, 200)).astype(np.float64)
+    assert tie_rtol_for(counts) == 0.0
+    assert tie_rtol_for(counts.astype(np.int64)) == 0.0
+    # Detection is conservative by design: integers over a power of two are in
+    # fact safe, but are not recognised, and get a harmless slack instead.
+    assert 0.0 < tie_rtol_for(counts / 1024.0) < 1e-9
+
+    rates = counts / counts.sum(axis=1, keepdims=True).clip(min=1)
+    rtol = tie_rtol_for(rates)
+    assert rtol > 0.0
+    # derived, not tuned: far above one ULP, far below the spacing of distinct
+    # statistics, which is order 1e-4 relative on real data
+    assert 1e-15 < rtol < 1e-9
+
+
+def test_rate_matrix_ties_are_counted_with_the_derived_tolerance():
+    """The regime with no exactness guarantee must still not drop its own ties.
+
+    A rate-normalised matrix loses order-independence, so an observed statistic
+    and a null replication representing the same value can differ in the last
+    places. With tie_rtol=0 the step-down discards them; with the derived value it
+    does not. This pins that the derived tolerance is doing its job.
+    """
+    from pycbas.stepdown import _stepdown_core_directional
+
+    rng = np.random.default_rng(7)
+    n0, n1, n_seq = 30, 28, 240
+    counts = np.zeros((n0 + n1, n_seq))
+    for s in range(n_seq):
+        counts[rng.choice(n0, size=rng.integers(1, 5), replace=False), s] = 1.0
+    denom = counts.sum(axis=1, keepdims=True)
+    denom[denom == 0] = 1.0
+    rates = counts / denom
+    grp = [np.arange(n0), np.arange(n0, n0 + n1)]
+
+    observed = compute_test_stats(rates, grp)
+    defined = ~np.isnan(observed)
+    assert defined.sum() > 0
+
+    # a permuted-order resample of the real groups: same values, same statistic
+    out = np.full((1, 2 * n_seq), -np.inf)
+    out_dir = np.full((1, 2 * n_seq), np.int8(-1), dtype=np.int8)
+    _bootstrap_chunk_into(
+        np.ascontiguousarray(rates), rng.permutation(grp[0]).reshape(1, -1),
+        rng.permutation(grp[1]).reshape(1, -1), n0, n1, np.zeros(n_seq),
+        np.arange(2 * n_seq, dtype=np.int64), 0, 1, out, out_dir)
+
+    rtol = tie_rtol_for(rates)
+    obs = observed[defined]
+    nul = out[0][defined]
+    strict_dropped = int((nul < obs).sum())
+    tolerant_dropped = int((nul < obs - np.abs(obs) * rtol).sum())
+    # the point of the tolerance: it recovers what strict comparison discards
+    assert tolerant_dropped == 0
+    assert strict_dropped > 0, "expected the rate matrix to expose the problem"
 
 
 def test_paired_one_sample_form_is_order_independent():

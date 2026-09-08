@@ -5,8 +5,9 @@ from ._numba import njit, prange
 from .bootstrap import _bootstrap_chunk_into
 
 
+
 @njit(cache=True, parallel=True)
-def _stepdown_core(sorted_stats, null_sub, k, max_pval):
+def _stepdown_core(sorted_stats, null_sub, k, max_pval, tie_rtol):
     """Numba-accelerated inner loop of Romano-Wolf step-down.
 
     Args:
@@ -48,9 +49,12 @@ def _stepdown_core(sorted_stats, null_sub, k, max_pval):
                 comparison_val[m] = buf[k - 1]
 
         current_stat = sorted_stats[step]
+        # tie_rtol is 0 for integer counts, where observed and null agree
+        # bitwise. See pycbas._moments.tie_rtol_for.
+        threshold = current_stat - abs(current_stat) * tie_rtol
         count = 0
         for m in range(M):
-            if comparison_val[m] >= current_stat:
+            if comparison_val[m] >= threshold:
                 count += 1
         p_val = (count + 1) / (M + 1)
 
@@ -70,7 +74,8 @@ def _stepdown_core(sorted_stats, null_sub, k, max_pval):
 
 
 @njit(cache=True, parallel=True)
-def _stepdown_core_directional(sorted_stats, null_sub, dir_sub, obs_directions, k, max_pval):
+def _stepdown_core_directional(sorted_stats, null_sub, dir_sub, obs_directions, k,
+                               max_pval, tie_rtol):
     """Step-down with direction-conditional removal (matches David's Igor).
 
     In David's implementation, a sequence is only removed from a bootstrap row
@@ -112,9 +117,12 @@ def _stepdown_core_directional(sorted_stats, null_sub, dir_sub, obs_directions, 
 
     for step in range(n_valid):
         current_stat = sorted_stats[step]
+        # tie_rtol is 0 for integer counts, where observed and null agree
+        # bitwise. See pycbas._moments.tie_rtol_for.
+        threshold = current_stat - abs(current_stat) * tie_rtol
         count = 0
         for m in range(M):
-            if comparison_val[m] >= current_stat:
+            if comparison_val[m] >= threshold:
                 count += 1
         p_val = (count + 1) / (M + 1)
 
@@ -187,7 +195,8 @@ def _prepare_null_sub(test_stats, null_matrix, null_directions=None):
     return sorted_stats, sorted_indices, null_sub, obs_directions, dir_sub
 
 
-def romano_wolf_stepdown(test_stats, null_matrix, null_directions=None, k=1):
+def romano_wolf_stepdown(test_stats, null_matrix, null_directions=None, k=1,
+                         tie_rtol=0.0):
     """Apply Romano-Wolf step-down procedure with k-FWER.
 
     Args:
@@ -204,9 +213,10 @@ def romano_wolf_stepdown(test_stats, null_matrix, null_directions=None, k=1):
 
     if dir_sub is not None:
         step_p_values = _stepdown_core_directional(
-            sorted_stats, null_sub, dir_sub, obs_directions, k, 1.0)
+            sorted_stats, null_sub, dir_sub, obs_directions, k, 1.0,
+            tie_rtol)
     else:
-        step_p_values = _stepdown_core(sorted_stats, null_sub, k, 1.0)
+        step_p_values = _stepdown_core(sorted_stats, null_sub, k, 1.0, tie_rtol)
 
     p_values = np.full_like(test_stats, np.nan)
     for i in range(len(sorted_indices)):
@@ -215,21 +225,22 @@ def romano_wolf_stepdown(test_stats, null_matrix, null_directions=None, k=1):
     return p_values
 
 
-def _count_rejections_directional(sorted_stats, null_sub, dir_sub, obs_directions, k, alpha):
+def _count_rejections_directional(sorted_stats, null_sub, dir_sub, obs_directions, k,
+                                  alpha, tie_rtol):
     """Fast rejection count with directional removal."""
     step_p_values = _stepdown_core_directional(
-        sorted_stats, null_sub, dir_sub, obs_directions, k, alpha)
+        sorted_stats, null_sub, dir_sub, obs_directions, k, alpha, tie_rtol)
     return int(np.sum(step_p_values < alpha))
 
 
-def _count_rejections(sorted_stats, null_sub, k, alpha):
+def _count_rejections(sorted_stats, null_sub, k, alpha, tie_rtol):
     """Fast rejection count -- stops as soon as p >= alpha."""
-    step_p_values = _stepdown_core(sorted_stats, null_sub, k, alpha)
+    step_p_values = _stepdown_core(sorted_stats, null_sub, k, alpha, tie_rtol)
     return int(np.sum(step_p_values < alpha))
 
 
 def find_k_fwer(test_stats, null_matrix, alpha=0.5, gamma=0.05, null_directions=None,
-                return_history=False):
+                return_history=False, tie_rtol=0.0):
     """Compute adjusted p-values with FDP control via iterative k-FWER.
 
     Iterates: run step-down at current k -> count rejections -> update k ->
@@ -253,9 +264,9 @@ def find_k_fwer(test_stats, null_matrix, alpha=0.5, gamma=0.05, null_directions=
     for _ in range(100):
         if dir_sub is not None:
             rejections = _count_rejections_directional(
-                sorted_stats, null_sub, dir_sub, obs_directions, k, alpha)
+                sorted_stats, null_sub, dir_sub, obs_directions, k, alpha, tie_rtol)
         else:
-            rejections = _count_rejections(sorted_stats, null_sub, k, alpha)
+            rejections = _count_rejections(sorted_stats, null_sub, k, alpha, tie_rtol)
         k_history.append({"k": k, "rejections": int(rejections)})
         if rejections < (k / gamma) - 1:
             break
@@ -264,9 +275,10 @@ def find_k_fwer(test_stats, null_matrix, alpha=0.5, gamma=0.05, null_directions=
 
     if dir_sub is not None:
         step_p_values = _stepdown_core_directional(
-            sorted_stats, null_sub, dir_sub, obs_directions, k, 1.0)
+            sorted_stats, null_sub, dir_sub, obs_directions, k, 1.0,
+            tie_rtol)
     else:
-        step_p_values = _stepdown_core(sorted_stats, null_sub, k, 1.0)
+        step_p_values = _stepdown_core(sorted_stats, null_sub, k, 1.0, tie_rtol)
 
     p_values = np.full_like(test_stats, np.nan)
     for i in range(len(sorted_indices)):
@@ -288,9 +300,10 @@ def find_k_fwer_k1(test_stats, null_matrix, alpha=0.5, gamma=0.05, null_directio
 
     if dir_sub is not None:
         step_p_values = _stepdown_core_directional(
-            sorted_stats, null_sub, dir_sub, obs_directions, 1, 1.0)
+            sorted_stats, null_sub, dir_sub, obs_directions, 1, 1.0,
+            tie_rtol)
     else:
-        step_p_values = _stepdown_core(sorted_stats, null_sub, 1, 1.0)
+        step_p_values = _stepdown_core(sorted_stats, null_sub, 1, 1.0, tie_rtol)
 
     p_values = np.full_like(test_stats, np.nan)
     for i in range(len(sorted_indices)):
@@ -303,7 +316,8 @@ def find_k_fwer_k1(test_stats, null_matrix, alpha=0.5, gamma=0.05, null_directio
 
 
 def find_k_fwer_chunked(test_stats, count_matrix, group_indices, params,
-                        chunk_size=500, rng=None, return_history=False):
+                        chunk_size=500, rng=None, return_history=False,
+                        tie_rtol=0.0):
     """Memory-efficient CBAS: generates bootstrap directly into null_sub in chunks.
 
     Instead of allocating the full null matrix (M x 2S) and then extracting the
@@ -319,6 +333,14 @@ def find_k_fwer_chunked(test_stats, count_matrix, group_indices, params,
         chunk_size: bootstrap rows generated per chunk (default 500)
         rng: numpy random Generator (default: seeded at 42)
         return_history: if True, return k_history as third element
+        tie_rtol: relative slack on the step-down's `null >= observed`. Zero,
+            which is correct for an integer count matrix: there the observed and
+            bootstrap statistics agree bitwise and there is nothing to tolerate.
+            A non-integer matrix has no such guarantee and wants
+            `pycbas._moments.tie_rtol_for(matrix)`, which is experimental and
+            deliberately not part of the public API. Defaulting to zero rather
+            than deriving it keeps this function's behaviour independent of the
+            input dtype, and identical to `find_k_fwer` on the same data.
 
     Returns (g_values, k_final) or (g_values, k_final, k_history).
     """
@@ -372,7 +394,7 @@ def find_k_fwer_chunked(test_stats, count_matrix, group_indices, params,
     k_history = []
     for _ in range(100):
         step_p_values = _stepdown_core_directional(
-            sorted_stats, null_sub, dir_sub, obs_directions, k, alpha)
+            sorted_stats, null_sub, dir_sub, obs_directions, k, alpha, tie_rtol)
         rejections = int(np.sum(step_p_values < alpha))
         k_history.append({"k": k, "rejections": rejections})
         if rejections < (k / gamma) - 1:
@@ -381,7 +403,8 @@ def find_k_fwer_chunked(test_stats, count_matrix, group_indices, params,
         k = k + 1 if new_k == k else new_k
 
     step_p_values = _stepdown_core_directional(
-        sorted_stats, null_sub, dir_sub, obs_directions, k, 1.0)
+        sorted_stats, null_sub, dir_sub, obs_directions, k, 1.0,
+        tie_rtol)
 
     p_values = np.full_like(test_stats, np.nan)
     for i in range(n_valid):
