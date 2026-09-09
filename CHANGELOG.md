@@ -46,6 +46,7 @@ Read the Fixed section before comparing new output against old.
   hypothesis set and bitwise in the adjusted p-values, on a single-contingency and a
   multi-contingency run.
 
+- `pycbas --version`, and `python -m pycbas` as an equivalent to the console script.
 - `pycbas.__version__`, and the version now has one source, `pycbas/__init__.py`, which
   `pyproject.toml` reads. Reading it the other way round reports whatever was last
   installed, which is misleading when a release can change numerical output.
@@ -78,6 +79,10 @@ Read the Fixed section before comparing new output against old.
   step-down functions accept a `tie_rtol` for that case.
 
 - `find_k_fwer_k1` raised `NameError` on every call.
+- `python -m pycbas.cli` did nothing: the module defined `main()` and never called it,
+  so it exited silently with no output and no error.
+- The GUI launcher passed panel's `--autoreload`, a development flag, so the first thing
+  a new user saw was a `FutureWarning` about the watchfiles package.
 - The correlative statistic's tau numerator used `sum(X_dev**2 * Y_dev**2)` where the
   bootstrap used `sum((x_dev * y_dev)**2)`; these are not bitwise equal. Aligned. Full
   exactness is not reachable for a real-valued covariate, so the correlative path

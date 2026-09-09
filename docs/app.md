@@ -9,6 +9,10 @@ pip install 'pycbas[gui]'
 pycbas gui
 ```
 
+`python -m pycbas gui` is equivalent, and `pycbas --version` prints the installed
+version. There is no analysis subcommand: an analysis is run either from Python, which
+[the guide](guide.md) covers, or from this app.
+
 To use a different port:
 
 ```bash

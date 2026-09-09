@@ -1,9 +1,13 @@
 """Command-line interface for pyCBAS.
 
 Usage:
-    pycbas gui              # launch the interactive GUI
-    pycbas gui --port 5008  # custom port
-    pycbas --help           # show help
+    pycbas gui               # launch the interactive GUI
+    pycbas gui --port 5008   # custom port
+    pycbas --version         # print the installed version
+    pycbas --help            # show help
+
+There is no analysis subcommand: an analysis is either run from Python, which the
+guide covers, or from the GUI. `python -m pycbas` is equivalent to `pycbas`.
 """
 
 import argparse
@@ -22,10 +26,16 @@ def _find_open_port(start=5007, end=5099):
 
 
 def main():
+    from . import __version__
+
     parser = argparse.ArgumentParser(
         prog="pycbas",
         description="pyCBAS — Choice-Wide Behavioral Association Study",
     )
+    # Worth having, because 0.2.0 changed numerical output at ties: "which version
+    # produced this result" is a question users need to be able to answer.
+    parser.add_argument("--version", action="version",
+                        version=f"pycbas {__version__}")
     subparsers = parser.add_subparsers(dest="command")
 
     gui_parser = subparsers.add_parser("gui", help="Launch the interactive GUI")
@@ -55,9 +65,17 @@ def launch_gui(args):
 
     port = args.port if args.port else _find_open_port()
 
-    cmd = ["panel", "serve", str(app_path), "--autoreload", "--port", str(port)]
+    # No --autoreload: it is a development flag, and panel emits a FutureWarning
+    # about watchfiles that would otherwise be the first thing a new user sees.
+    cmd = ["panel", "serve", str(app_path), "--port", str(port)]
     if not args.no_browser:
         cmd.append("--show")
 
     print(f"Starting pyCBAS GUI on http://localhost:{port}")
     sys.exit(subprocess.call(cmd))
+
+
+if __name__ == "__main__":
+    # So that `python -m pycbas.cli` works rather than doing nothing at all, which is
+    # what it did before: the module defined main() and never called it.
+    main()
