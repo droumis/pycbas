@@ -95,6 +95,16 @@ that. Subjects that
 fall short are not truncated, so they contribute every trial they have. See
 [higher-order criteria](guide.md#higher-order-criteria) for the caveats.
 
+<!-- Screenshot: parameters with multi-contingency data loaded, showing the subject
+     filter, the contingency block selector and the shortfall report. Synthetic
+     cohort. -->
+![Parameters with multi-contingency data](img/gui-parameters-multicontingency.png)
+
+The screenshot above shows the same step with multi-contingency data loaded and a
+4th-order criterion selected: the criterion has been relabelled to say what it counts,
+the subject filter and block selector have appeared, and the shortfall report is
+warning that some subjects never reach the criterion. The cohort is synthetic.
+
 #### Who falls short of the criterion
 
 At any order above 0 the app reports how many subjects never reach the criterion. This
