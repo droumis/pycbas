@@ -70,6 +70,14 @@ class CBASApp(param.Parameterized):
     contingency = param.Integer(default=1, bounds=(0, 10), doc="Trial condition filter")
     block_aware = param.Boolean(default=False, doc="Sequences cannot span block/session boundaries")
 
+    # --- Multi-contingency ---
+    # Populated only when the folder holds the multi-contingency format, which
+    # carries a contingency block structure per subject rather than a single
+    # stream. `records` and `subjects_data` are mutually exclusive.
+    records = param.List(default=[], doc="SubjectRecord list (multi-contingency)")
+    available_blocks = param.List(default=[], doc="Blocks shared by every subject")
+    selected_blocks = param.List(default=[], doc="Blocks to include in the analysis")
+
     # --- Run state ---
     running = param.Boolean(default=False)
     progress_value = param.Integer(default=0)
@@ -128,7 +136,17 @@ class CBASApp(param.Parameterized):
             criterion_order=self.criterion_order,
             resample_number=self.resample_number,
         )
-        if self.mode == "Comparative":
+        if self.records:
+            # Each contingency is its own hypothesis set, corrected jointly, so
+            # `blocks` changes the size of the hypothesis space rather than
+            # subsetting a result. chunked is left at its default for that reason.
+            from pycbas.pipeline import run_cbas_multicontingency
+            self.result = run_cbas_multicontingency(
+                self.records, self.group_labels, params,
+                blocks=list(self.selected_blocks) or None,
+                encode_reward=self.encode_reward,
+            )
+        elif self.mode == "Comparative":
             self.result = run_cbas_comparative(
                 self.subjects_data, self.group_labels, params,
                 contingency=self.contingency,
@@ -312,6 +330,93 @@ folder_load_button = pn.widgets.Button(
 )
 
 
+def _try_load_multicontingency(folder_path, info_file):
+    """Load the multi-contingency format, or return False to fall through.
+
+    Group membership comes from the info table's `lesion` column, whose values are
+    strings rather than the 0/1 codes the published format uses. A blank means the
+    subject had surgery but no lesion was evident, which is neither group, so those
+    subjects are dropped rather than guessed at.
+    """
+    from pycbas.contingency import (load_cohort_with_contingencies,
+                                    shared_contingency_blocks)
+    try:
+        records, info = load_cohort_with_contingencies(folder_path)
+    except Exception:
+        return False
+    if not records or not info or len(records) != len(info):
+        return False
+
+    group_col = next((c for c in ("lesion", "group", "label", "condition")
+                      if c in info[0]), None)
+    if group_col is None:
+        return False
+
+    def to_group(value):
+        if value is None:
+            return None
+        v = str(value).strip().lower()
+        if v in ("0", "control", "ctrl", "sham", "wt", "wildtype"):
+            return 0
+        if v in ("1", "lesion", "exp", "experimental", "ko", "knockout", "mutant"):
+            return 1
+        if "control" in v:
+            return 0
+        if "lesion" in v:
+            return 1
+        return None
+
+    keep, labels = [], []
+    for record, row in zip(records, info):
+        g = to_group(row.get(group_col))
+        if g is not None:
+            keep.append(record)
+            labels.append(g)
+    dropped = len(records) - len(keep)
+    if len(keep) < 2 or len(set(labels)) < 2:
+        return False
+
+    try:
+        blocks = shared_contingency_blocks(keep)
+    except Exception as exc:
+        data_status.object = (
+            f"**Multi-contingency data loaded, but the contingency blocks do not "
+            f"line up:** {exc}")
+        data_status.alert_type = "danger"
+        return True
+
+    app_state.subjects_data = []
+    app_state.records = keep
+    app_state.available_blocks = list(blocks)
+    app_state.selected_blocks = list(blocks)
+    app_state.group_labels = np.asarray(labels, dtype=np.int32)
+    app_state.n_subjects = len(keep)
+    app_state.mode = "Comparative"
+    app_state.encode_reward = True
+    app_state.block_aware = True
+
+    n_arms = max(int(r.choice.max()) for r in keep) + 1
+    app_state.num_arms = max(2, n_arms)
+
+    block_selector.options = list(blocks)
+    block_selector.value = list(blocks)
+    block_row.visible = True
+    app_state.data_loaded = True
+
+    note = f", {dropped} without a usable group label skipped" if dropped else ""
+    n0 = int(np.sum(np.asarray(labels) == 0))
+    data_status.object = (
+        f"**Loaded {len(keep)} subjects** from `{folder_path.name}/` in "
+        f"multi-contingency format ({n0} group 0, {len(keep) - n0} group 1{note}). "
+        f"Contingency blocks shared by every subject: "
+        f"{', '.join(str(b) for b in blocks)}. Each selected block is counted as its "
+        f"own hypothesis set and all of them are corrected together, so adding a "
+        f"block enlarges the hypothesis space rather than splitting the result."
+    )
+    data_status.alert_type = "success"
+    return True
+
+
 def load_from_folder(event):
     selected = folder_selector.value
     if not selected:
@@ -334,6 +439,14 @@ def load_from_folder(event):
         import re
 
         info_files = list(folder_path.glob("*Info.txt"))
+
+        # --- Mode 0: the multi-contingency format ---
+        # Tried first because its info table has two header lines and string
+        # values, which the single-header parser below reads as malformed. Failing
+        # over rather than detecting by filename keeps this robust to a folder that
+        # merely looks similar: if the real loader cannot parse it, fall through.
+        if info_files and _try_load_multicontingency(folder_path, info_files[0]):
+            return
 
         if info_files:
             # --- Mode 1: Info file present ---
@@ -527,6 +640,10 @@ def load_from_folder(event):
             source_desc = f"groups from filenames: {grp_desc}"
 
         # --- Common: set state and auto-detect params ---
+        app_state.records = []
+        app_state.available_blocks = []
+        app_state.selected_blocks = []
+        block_row.visible = False
         app_state.subjects_data = subjects_data
 
         set_detected_mode(labels_or_scores)
@@ -865,6 +982,25 @@ contingency_widget = pn.widgets.IntInput(
     value=1, start=0, end=10, step=1,
     description="Only trials matching this value in the contingency column are used. Filters by task condition, not session.",
 )
+block_selector = pn.widgets.MultiChoice(
+    name="Contingency blocks to include",
+    options=[], value=[],
+    description=(
+        "Temporal contingency blocks, not the contingency filter above. Each block "
+        "selected is counted as its own hypothesis set and all of them are corrected "
+        "together, so adding a block enlarges the hypothesis space rather than "
+        "splitting the result. Only blocks every subject ran are offered."),
+)
+#: Hidden until multi-contingency data is loaded, since it is meaningless otherwise.
+block_row = pn.Column(block_selector, visible=False)
+
+
+def _sync_selected_blocks(event):
+    app_state.selected_blocks = list(event.new)
+
+
+block_selector.param.watch(_sync_selected_blocks, "value")
+
 block_aware_widget = pn.widgets.Checkbox(
     name="Block-aware (sequences cannot span sessions)",
     value=False,
@@ -1126,6 +1262,26 @@ run_button.on_click(on_run_click)
 # --- Results ---
 results_tabs = pn.Column()
 
+def _split_sequence(entry):
+    """(block, symbols) for one entry of `result.sequences`.
+
+    The multi-contingency pipeline keys columns by `(block, sequence)` because the
+    same arm sequence under two contingencies is two hypotheses. Everything else
+    keys by the sequence alone. The display code should not have to know which
+    pipeline produced the result, so it goes through here.
+    """
+    if (len(entry) == 2 and isinstance(entry[1], tuple)):
+        return entry[0], entry[1]
+    return None, entry
+
+
+def _seq_label(entry, join="-"):
+    """Human-readable label, carrying the contingency block when there is one."""
+    block, symbols = _split_sequence(entry)
+    body = join.join(str(x) for x in symbols)
+    return f"c{block}: {body}" if block is not None else body
+
+
 def build_results_tabs():
     result = app_state.result
     if result is None:
@@ -1136,6 +1292,18 @@ def build_results_tabs():
     # --- Summary tab ---
     n_seq = len(result.sequences)
     n_sig = result.n_significant
+
+    # An empty hypothesis space is a configuration error, not a null result, and it
+    # used to render as "0 significant" after dividing by zero out of sight. The
+    # usual cause is a contingency filter matching no trials.
+    if n_seq == 0:
+        return pn.Tabs(("Summary", pn.pane.Alert(
+            "**No sequences were counted, so nothing was tested.** This is a "
+            "configuration problem rather than a null result. The usual cause is a "
+            "contingency filter that matches no trials: check it against the "
+            "contingency column in your data. A criterion longer than every "
+            "subject's stream, or a sequence length longer than the data, will do "
+            "the same.", alert_type="danger")))
     summary_md = f"""
 ## Results Summary
 
@@ -1143,7 +1311,7 @@ def build_results_tabs():
 |--------|-------|
 | Subjects | {app_state.n_subjects} |
 | Sequences tested | {n_seq:,} |
-| Significant sequences | {n_sig} ({n_sig/n_seq*100:.1f}%) |
+| Significant sequences | {n_sig} ({n_sig / n_seq * 100:.1f}%) |
 | k (k-FWER) | {result.k_final} |
 | Mode | {app_state.mode} |
 """
@@ -1177,7 +1345,8 @@ def build_results_tabs():
 def make_manhattan_plot(result):
     n_seq = len(result.sequences)
     g_values = result.g_values
-    seq_lengths = np.array([len(s) for s in result.sequences])
+    seq_lengths = np.array([len(_split_sequence(s)[1])
+                            for s in result.sequences])
     unique_lens = sorted(set(seq_lengths))
 
     length_colors = ["#00e5ff", "#0099ff", "#0044dd", "#00aa44",
@@ -1211,7 +1380,7 @@ def make_manhattan_plot(result):
 
         if not np.isnan(best_g) and best_g > 0:
             neg_log = -np.log10(best_g)
-            seq_str = "-".join(str(x) for x in result.sequences[i])
+            seq_str = _seq_label(result.sequences[i])
             points_data.append({
                 "x": x_pos[i],
                 "neg_log_g": neg_log,
@@ -1298,7 +1467,7 @@ def make_top_sequences_plot(result, n_top=20):
         else:
             continue
 
-        seq_str = "-".join(str(x) for x in seq)
+        seq_str = _seq_label(seq)
         rows.append({
             "sequence": seq_str,
             "t_stat": float(t_val) if not np.isnan(t_val) else 0.0,
@@ -1431,7 +1600,7 @@ def make_sig_table(result):
             continue
 
         rows.append({
-            "Sequence": " → ".join(str(x) for x in seq),
+            "Sequence": _seq_label(seq, join=" → "),
             "Length": len(seq),
             "Direction": direction,
             "g-value": round(g_val, 6),
@@ -1456,7 +1625,7 @@ def make_download_section(result):
         pos_t = result.test_stats[i * 2]
         neg_t = result.test_stats[i * 2 + 1]
         rows.append({
-            "sequence": "-".join(str(x) for x in seq),
+            "sequence": _seq_label(seq),
             "length": len(seq),
             "t_positive": pos_t if not np.isnan(pos_t) else "",
             "t_negative": neg_t if not np.isnan(neg_t) else "",
@@ -1644,6 +1813,7 @@ main_content = pn.Column(
         pn.Column(num_arms_widget, seq_len_max_widget, pn.Row(encode_reward_widget, encode_reward_tooltip), width=300),
         pn.Column(criterion_widget, criterion_order_widget, resample_widget, contingency_widget, pn.Row(block_aware_widget, block_aware_tooltip), width=300),
     ),
+    block_row,
     criterion_shortfall_pane,
     resource_estimate_pane,
     pn.layout.Divider(),
