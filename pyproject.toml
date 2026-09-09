@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "pycbas"
-version = "0.1.0"
+version = "0.2.0"
 description = "Choice-Wide Behavioral Association Study — identify behavioral sequences that differ between groups or correlate with continuous measures"
 readme = "README.md"
 license = "MIT"

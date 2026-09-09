@@ -332,7 +332,7 @@ def find_k_fwer_chunked(test_stats, count_matrix, group_indices, params,
         group_indices: [grp0_indices, grp1_indices]
         params: CBASParams
         chunk_size: bootstrap rows generated per chunk (default 500)
-        rng: numpy random Generator (default: seeded at 42)
+        rng: numpy random Generator (default: seeded at 2)
         return_history: if True, return k_history as third element
         tie_rtol: relative slack on the step-down's `null >= observed`. Zero,
             which is correct for an integer count matrix: there the observed and

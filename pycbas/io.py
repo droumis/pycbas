@@ -4,7 +4,7 @@ import numpy as np
 
 
 def load_subject_data(filepath):
-    """Load a single subject's data file. Returns (session, choice, reward, contingency) arrays."""
+    """Load a single subject's data file. Returns one (n_trials, 4) int32 array of session, choice, reward, contingency."""
     rows = []
     with open(filepath) as f:
         for line in f:

@@ -240,7 +240,7 @@ code {
 
 <p>This happens for every subject independently. At the end, you have a matrix where each row is a subject and each column is a sequence, and the values are how many times that subject produced that pattern.</p>
 
-<div class="insight">The <code>criterion</code> parameter limits how much of the stream to use. Only windows starting at positions 0 through criterion (inclusive) are counted. This ensures all subjects contribute the same amount of data regardless of how long their sessions were.</div>
+<div class="insight">The <code>criterion</code> parameter limits how much of the stream to use. Only windows starting at positions 0 through criterion (inclusive) are counted. So subjects with at least <code>criterion</code> trials all contribute the same amount; shorter subjects contribute what they have, and with a performance-based criterion the subjects who never reach it contribute everything.</div>
 
 <!-- ============ STEP 2: TEST STATS ============ -->
 <h2><span class="step-number">2</span> Measuring Group Differences</h2>

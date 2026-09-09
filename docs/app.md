@@ -68,21 +68,47 @@ Parameters are auto-configured from the loaded data:
 | Number of arms | Max choice value in data |
 | Encode reward | Whether reward column has non-zero values |
 | Contingency filter | Distinct contingency values present |
-| Criterion | Min trial count per subject (filtered by contingency) |
+| Criterion | Min trial count per subject (filtered by contingency), at criterion order 0 only |
 | Block aware | Multiple sessions/blocks detected in data |
 
 **Max sequence length** and **bootstrap resamples** must be set manually as they depend on the research question.
 
-The resource estimate shows the actual number of observed sequences (not the worst-case theoretical space), estimated memory, runtime, and a verdict based on your system's available RAM.
+The resource estimate shows the number of hypotheses the run will actually test, not
+the worst-case theoretical space, along with estimated memory, runtime, and a verdict
+based on your system's available RAM. It honours the criterion order, the contingency
+filter and the block-aware setting, and for multi-contingency data it honours the
+selected blocks, so it moves when you change any of them.
 
 **Count criterion in units of** leaves the criterion as a trial count by default. The
 other options stop each subject once it has earned that many rewards, or produced that
 many runs of consecutive rewarded choices, which matches subjects on performance rather
-than on exposure. Choosing one changes the criterion label to match, disables the
-auto-detected trial count since the number no longer means trials, and reports how many
-subjects fail to reach the criterion along with the spread of trials used. Subjects that
+than on exposure. Choosing one changes the criterion label and its help text to match, switches its
+spinner to single steps since a performance level is usually a much smaller number than
+a trial count, skips the auto-detected trial count at load time, and reports how many
+subjects fail to reach the criterion along with the spread of trials used. Note that
+switching the order after loading does not re-run auto-detection, so an inherited trial
+count will be reinterpreted as a performance level: the shortfall report is what catches
+that. Subjects that
 fall short are not truncated, so they contribute every trial they have. See
 [higher-order criteria](guide.md#higher-order-criteria) for the caveats.
+
+### Several contingencies
+
+If the folder holds the multi-contingency format, where each subject's sessions are
+divided into contingency blocks, the app detects it on load and adds a **Contingency
+blocks to include** selector listing the blocks every subject ran. All of them are
+selected by default.
+
+This is not the contingency filter above it, which picks trials by a column value.
+Each block selected here is counted as its own set of hypotheses and all of them are
+corrected together, so the same arm sequence under two contingencies is two
+hypotheses, and adding a block enlarges the hypothesis space rather than splitting the
+result. Watch the resource estimate as you change the selection.
+
+Group membership comes from the info table's group column. Subjects whose group field
+is blank are skipped, and the load message says how many.
+
+Results are labelled with the block they belong to, as `c3: 2-4-2`.
 
 ### Step 4: Run analysis
 

@@ -213,7 +213,10 @@ Count all subsequences of a given length with start position <= criterion.
 enumerate_sequences_block_aware(block_streams, seq_len, criterion)
 ```
 
-Count sequences within blocks, never crossing block boundaries. The criterion limits the total number of positions counted across all blocks.
+Count sequences within blocks, never crossing block boundaries. The criterion is a
+maximum global start position in the concatenated stream, inclusive; positions that
+cannot start a sequence within their own block still advance that global position. So
+it is not the same as a cap on how many sequences are counted.
 
 **Returns** dict mapping sequence tuple to count.
 
@@ -327,19 +330,41 @@ Run iterative k-FWER to convergence and return the final adjusted p-values.
 
 ```python
 find_k_fwer_chunked(test_stats, count_matrix, group_indices, params,
-                    chunk_size=500, rng=None)
+                    chunk_size=500, rng=None, return_history=False, tie_rtol=0.0)
 ```
 
-Memory-efficient variant that generates bootstrap directly into the null submatrix in row-chunks. Produces identical results to `find_k_fwer`.
+Memory-efficient variant that generates bootstrap directly into the null submatrix in
+row-chunks. Produces results identical to `find_k_fwer(..., null_directions=...)`; it
+always applies direction-conditional removal, so it does not match a call to
+`find_k_fwer` that omits the directions.
 
 **Returns** `(g_values, k_final)`.
+
+---
+
+### `tie_rtol` on the step-down functions
+
+`romano_wolf_stepdown`, `find_k_fwer`, `find_k_fwer_k1` and `find_k_fwer_chunked` all
+accept `tie_rtol`, a relative slack on the `null >= observed` comparison. It defaults
+to `0.0`, which is correct for an integer count matrix: there the observed and
+bootstrap statistics agree bitwise, so the comparison is exact and tolerating anything
+would be arbitrary.
+
+A non-integer matrix, such as one normalised to rates, has no such guarantee, and a
+strict comparison then discards the resamples that represent the observed value, which
+adds false positives. `compute_test_stats` warns once when it sees such a matrix.
+Passing the integer count matrix is the better fix where the normalising denominator is
+common to all subjects, since the statistic is scale-invariant. Otherwise a derived
+bound is available as `pycbas._moments.tie_rtol_for(matrix)`; it is private and
+experimental rather than part of the supported surface.
 
 ---
 
 ### `find_k_fwer_k1`
 
 ```python
-find_k_fwer_k1(test_stats, null_matrix, alpha=0.5, gamma=0.05, null_directions=None)
+find_k_fwer_k1(test_stats, null_matrix, alpha=0.5, gamma=0.05,
+               null_directions=None, tie_rtol=0.0)
 ```
 
 Conservative variant that always uses k=1 (standard FWER). Useful for comparison and debugging.

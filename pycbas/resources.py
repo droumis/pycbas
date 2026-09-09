@@ -23,15 +23,27 @@ def estimate_resources(num_arms, seq_len_max, n_subjects=None, n_observed=None,
 
     n_valid = n_observed if n_observed is not None else S
 
-    full_null_bytes = M * 2 * S * 8
-    chunked_bytes = M * 2 * n_valid * 8
+    # The step-down holds one entry per (resample, hypothesis): a float64 magnitude
+    # and an int8 direction, so nine bytes, not sixteen. And there is one column per
+    # one-sided hypothesis, which is one per sequence rather than two, because only
+    # the observed direction has a defined statistic. An earlier version doubled the
+    # columns and omitted the directions, overestimating by about 1.8x.
+    PER_ENTRY = 8 + 1
+    # Chunked: only the sorted submatrix is allocated.
+    chunked_bytes = M * n_valid * PER_ENTRY
+    # Unchunked: the full-width null exists at the same time as the extracted
+    # submatrix, so peak holds both.
+    full_null_bytes = M * (S + n_valid) * PER_ENTRY
 
     full_null_gb = full_null_bytes / (1024**3)
     chunked_gb = chunked_bytes / (1024**3)
 
-    rat_cols = 2 * 16483
-    rat_time = 13.0
-    est_time = rat_time * (2 * n_valid) / rat_cols
+    # Calibrated on the published rat validation: 16,376 hypotheses with a defined
+    # statistic, timed end to end. Linear in the hypothesis count, which is the
+    # dominant term for both the bootstrap and the step-down.
+    rat_cols = 16376
+    rat_time = 12.3
+    est_time = rat_time * n_valid / rat_cols
 
     if chunked_gb < 1.0:
         verdict = "TRIVIAL"

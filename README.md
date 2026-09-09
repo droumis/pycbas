@@ -78,9 +78,29 @@ params = CBASParams(
     resample_number=10000,
 )
 
-result = run_cbas_comparative(subjects_data, group_labels, params)
+# `contingency` selects trials by the contingency column and defaults to 2. Pass the
+# value your data uses, or None for all trials; a value matching no trials counts no
+# sequences and reports nothing significant.
+result = run_cbas_comparative(subjects_data, group_labels, params, contingency=2)
 print(f"{result.n_significant} significant sequences (k={result.k_final})")
 ```
+
+### Several contingencies at once
+
+When subjects run more than one task contingency, each becomes its own set of
+hypotheses and the multiplicity correction runs over all of them together, so the
+same arm sequence under two contingencies is two hypotheses.
+
+```python
+from pycbas import load_cohort_with_contingencies, run_cbas_multicontingency
+
+records, info = load_cohort_with_contingencies("path/to/cohort")
+result = run_cbas_multicontingency(records, group_labels, params, blocks=[1, 2, 3])
+```
+
+`result.sequences` is then keyed by `(block, sequence)`. Counting several
+contingencies multiplies the hypothesis space, so check `estimate_resources` before
+a long run.
 
 ### Correlative mode (continuous covariate)
 
@@ -109,8 +129,24 @@ print_resource_estimate(est)
 | `resample_number` | 10,000 | Bootstrap resamples M |
 | `alpha` | 0.5 | Significance threshold for FDP control |
 | `gamma` | 0.05 | FDP tolerance |
-| `centering` | False | Center bootstrap null (False matches Igor) |
+| `centering` | False | Center bootstrap null (False matches the Igor reference) |
+| `criterion_order` | 0 | What `criterion` counts: 0 trials, 1 rewards, k runs of k rewarded choices |
+
+`criterion` and `criterion_order` work together. At order 0 the criterion is a trial
+index. At order 1 it is a number of rewarded trials, and at order k a number of runs
+of k consecutive rewarded choices, so each subject's stream is truncated where it
+reaches that level of performance rather than at a fixed length. Subjects who never
+reach it keep all their data, which means the weakest subjects can contribute the
+most; `subject_criteria` reports who fell short.
+
+These are arguments to the pipeline functions rather than fields of `CBASParams`:
+
+| Argument | Default | Description |
+|---|---|---|
+| `contingency` | 2 | Only trials whose contingency column equals this are used. `None` uses all trials |
+| `encode_reward` | False | Encode reward into the symbol alphabet, doubling it |
 | `block_aware` | False | Prevent sequences from spanning block/session boundaries |
+| `chunked` | True | Generate the bootstrap null in row-chunks to reduce peak memory |
 
 ## Performance
 
@@ -118,9 +154,9 @@ print_resource_estimate(est)
 |---|---|---|---|---|
 | Flies (2-arm, L=10) | 1,566 | 2,046 | ~21s | ~560 MB |
 | Humans (6-arm, L=4) | 1,413 | 408 | ~3s | ~155 MB |
-| Rats (6-arm, L=6) | 105 | 16,378 | ~11s | ~3.6 GB |
+| Rats (6-arm, L=6) | 105 | 16,378 | ~12s | ~3.6 GB |
 
-Timings on Apple M-series. The chunked pipeline (`chunked=True`, default) trades ~30% more time for ~40% less memory. Bootstrap and step-down are parallelized via numba. Set `NUMBA_DISABLE_JIT=1` to disable for debugging.
+Timings on Apple M-series. The chunked pipeline (`chunked=True`, default) trades roughly 30% more time for roughly half the peak memory. Bootstrap and step-down are parallelized via numba. Set `NUMBA_DISABLE_JIT=1` to disable for debugging.
 
 ## Validation
 

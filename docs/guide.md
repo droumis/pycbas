@@ -209,7 +209,7 @@ Pipeline functions (`run_cbas_comparative`, `run_cbas_correlative`) also accept:
 
 **encode_reward** should be True when reward is informative and not fully determined by the choice. Set False for deterministic tasks where the choice symbol already encodes the outcome (e.g. a two-alternative forced choice where left always means stimulus A).
 
-**seq_len_max** controls how many sequences exist in the hypothesis space. The total is `sum(A^l for l in 1..L)` where A is the effective alphabet. For 12 symbols and L=6, that's about 2 million sequences. In practice, only observed sequences are tested, which is much smaller.
+**seq_len_max** controls how many sequences exist in the hypothesis space. The total is `sum(A^l for l in 1..L)` where A is the effective alphabet. For 12 symbols and L=6, that's about 3.3 million sequences. In practice, only observed sequences are tested, which is much smaller.
 
 **criterion** should match the minimum usable trial count across your subjects. If some subjects have only 300 trials, set criterion to 300 or less.
 
@@ -253,12 +253,14 @@ trial they have, so the weakest subjects contribute the most data. Check for thi
 before running:
 
 ```python
-from pycbas.core import subject_criteria
+from pycbas import subject_criteria
 import numpy as np
 
 criteria = subject_criteria(subjects_data, params, contingency=2, block_aware=True)
-print(f"{np.sum(~np.isfinite(criteria))} subjects never reached the criterion")
-print(f"trials used: {np.nanmin(criteria):.0f} to {np.nanmax(criteria[np.isfinite(criteria)]):.0f}")
+reached = criteria[np.isfinite(criteria)]
+print(f"{criteria.size - reached.size} of {criteria.size} never reached the criterion")
+if reached.size:
+    print(f"trials used: {reached.min():.0f} to {reached.max():.0f}")
 ```
 
 The interactive app shows the same information automatically once a higher order is
@@ -346,7 +348,7 @@ single-contingency estimate.
 
 The main memory cost is the bootstrap null matrix (M rows by number of valid test statistics). For large hypothesis spaces (e.g. rats with 16,378 sequences), this can reach several GB.
 
-The `chunked=True` option (default in `run_cbas_comparative`) generates the bootstrap in row-chunks directly into the sorted submatrix, avoiding the full intermediate allocation. This uses about 40% less peak memory at the cost of about 30% more time.
+The `chunked=True` option (default in `run_cbas_comparative`) generates the bootstrap in row-chunks directly into the sorted submatrix, avoiding the full intermediate allocation. This uses roughly half the peak memory at the cost of about 30% more time.
 
 ```python
 # Lower memory (default)

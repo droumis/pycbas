@@ -165,24 +165,49 @@ class CBASApp(param.Parameterized):
     _observed_cache_val = param.Integer(default=0)
 
     def _count_observed_sequences(self):
+        """The hypothesis count the run will actually test.
+
+        This has to honour `criterion_order` and `block_aware`, and go through the
+        same builders the pipeline uses. An earlier version passed `criterion`
+        straight to `enumerate_sequences` as a trial index whatever the order, and
+        left `criterion_order` out of the cache key, so switching to a
+        performance-based criterion changed the real hypothesis count while the
+        estimate did not move at all.
+        """
         cache_key = (
-            self.num_arms, self.seq_len_max, self.criterion,
-            self.contingency, self.encode_reward, self.n_subjects,
+            self.num_arms, self.seq_len_max, self.criterion, self.criterion_order,
+            self.contingency, self.encode_reward, self.block_aware,
+            self.n_subjects, tuple(self.selected_blocks), len(self.records),
         )
         if cache_key == self._observed_cache_key:
             return self._observed_cache_val
 
-        from pycbas.io import extract_choice_stream, enumerate_sequences
-        all_seqs = set()
-        for subj_data in self.subjects_data:
-            stream = extract_choice_stream(
-                subj_data, self.contingency, self.num_arms,
-                encode_reward=self.encode_reward)
-            for seq_len in range(1, self.seq_len_max + 1):
-                counts = enumerate_sequences(stream, seq_len, self.criterion)
-                all_seqs.update(counts.keys())
+        from pycbas import CBASParams
+        params = CBASParams(
+            num_arms=self.num_arms, seq_len_max=self.seq_len_max,
+            criterion=self.criterion, criterion_order=self.criterion_order,
+        )
+        try:
+            if self.records:
+                from pycbas.contingency import build_multicontingency_count_matrix
+                sequences, _counts = build_multicontingency_count_matrix(
+                    self.records, params,
+                    blocks=list(self.selected_blocks) or None,
+                    encode_reward=self.encode_reward)
+                n = len(sequences)
+            else:
+                from pycbas.core import build_count_matrix
+                sequences, _counts = build_count_matrix(
+                    self.subjects_data, params, contingency=self.contingency,
+                    encode_reward=self.encode_reward,
+                    block_aware=self.block_aware)
+                n = len(sequences)
+        except Exception:
+            # An estimate is a convenience; a failure here must not block the run,
+            # which reports the real error itself.
+            n = 0
         self._observed_cache_key = cache_key
-        self._observed_cache_val = len(all_seqs)
+        self._observed_cache_val = n
         return self._observed_cache_val
 
     def get_resource_estimate(self):
@@ -943,7 +968,7 @@ seq_len_max_widget = pn.widgets.IntInput(
 criterion_widget = pn.widgets.IntInput(
     name="Trials per subject (criterion)",
     value=200, start=10, end=5000, step=10,
-    description="Number of trials per subject used for sequence counting. Should not exceed the minimum trial count across subjects.",
+    description="How much of each subject's stream to count. What it counts depends on the order below: trials, rewarded trials, or runs of consecutive rewarded choices. At order 0 it should not exceed the minimum trial count across subjects.",
 )
 CRITERION_ORDER_OPTIONS = {
     "Trials (standard)": 0,
@@ -1046,10 +1071,29 @@ def relabel_criterion_widget():
     order = app_state.criterion_order
     if order == 0:
         criterion_widget.name = "Trials per subject (criterion)"
+        criterion_widget.description = (
+            "How many trials of each subject's stream to count. Should not exceed "
+            "the minimum trial count across subjects.")
     elif order == 1:
         criterion_widget.name = "Rewards per subject (criterion)"
+        criterion_widget.description = (
+            "How many rewarded trials to count up to. Each subject's stream is "
+            "truncated where it reaches this many rewards, so subjects contribute "
+            "unequal numbers of trials. Subjects that never reach it are not "
+            "truncated at all.")
     else:
         criterion_widget.name = f"Runs of {order} rewarded choices (criterion)"
+        criterion_widget.description = (
+            f"How many runs of {order} consecutive rewarded choices to count up "
+            f"to. This is a performance level, not a trial count, so it is usually "
+            f"a much smaller number. Subjects that never reach it are not "
+            f"truncated and end up contributing the most data.")
+    # A count of one is meaningful for a performance criterion and unreachable with
+    # a step of ten, which suits trial indices only.
+    if order == 0:
+        criterion_widget.start, criterion_widget.step = 10, 10
+    else:
+        criterion_widget.start, criterion_widget.step = 1, 1
     update_criterion_shortfall()
 
 
