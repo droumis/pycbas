@@ -2,7 +2,7 @@
 
 A contingency in the spatial alternation task is the set of three arms that can
 pay: a centre arm and two outer arms. Subjects run several contingencies in
-sequence, and Kastner's convention is that each is analysed separately, so the
+sequence, and the published convention is that each is analysed separately, so the
 same arm sequence under two contingencies is two hypotheses rather than one.
 
 Two facts about the format make this less obvious than it sounds.
@@ -10,31 +10,27 @@ Two facts about the format make this less obvious than it sounds.
 The file identifies a contingency by centre arm and left outer arm, not by an
 index. The right outer arm is implied. Critically, **the same arm pair can recur
 later in the experiment**, and a recurrence is a separate contingency rather
-than a continuation of the earlier one. In the hippocampal lesion cohort every
-subject runs six contingency blocks drawn from only five distinct arm pairs,
-because the arms 2-3-4 configuration appears twice. Keying on the arm pair
-therefore silently merges two contingencies; identity has to come from a block
-counter over sessions, which is what `assign_contingency_blocks` provides and
-what Igor's `wConting` does.
+than a continuation of the earlier one. A design can easily run more contingency
+blocks than it has distinct arm pairs. Keying on the arm pair therefore silently
+merges the recurrences; identity has to come from a block counter over sessions,
+which is what `assign_contingency_blocks` provides and what Igor's `wConting`
+does.
 
 Rows whose arm or reward field is blank are dropped rather than treated as gaps,
 matching Igor, where a blank becomes NaN and `zapNaNs` removes it. Dropping
-closes the stream, so a run of rewarded trials can span the removed trial. In
-the lesion cohort there are 100 such rows and all of them fall inside
-alternation contingencies rather than the exploration phase.
+closes the stream, so a run of rewarded trials can span the removed trial.
 
 The exploration phase, where the contingency fields are blank and every arm can
 pay, is block 0 and is excluded from analysis.
 
-One known divergence from Igor, harmless on the lesion cohort but worth recording.
-`assign_contingency_blocks` increments at the exact trial where the arm pair
-changes, whereas Igor's `wConting` works session by session and increments at
-most once per session, assigning a whole session to the new block even if the
-change happened partway through. The two agree whenever a contingency change
-coincides with a session boundary. In the hippocampal lesion cohort no session
-contains a mid-session change, so the implementations cannot differ there, which
-is consistent with the criterion values matching exactly. Data containing
-mid-session changes would need this reconciled.
+One known divergence from Igor, worth recording. `assign_contingency_blocks`
+increments at the exact trial where the arm pair changes, whereas Igor's
+`wConting` works session by session and increments at most once per session,
+assigning a whole session to the new block even if the change happened partway
+through. The two agree whenever a contingency change coincides with a session
+boundary, and only then. Rather than diverge silently, the loader raises on
+mid-session changes; see `assign_contingency_blocks`. Data containing them would
+need this reconciled first.
 """
 
 from dataclasses import dataclass
@@ -150,9 +146,8 @@ def assign_contingency_blocks(session, centre, left_outer,
     Why the mid-session case raises
     -------------------------------
     This function and Igor's `wConting` agree exactly as long as every
-    contingency change coincides with a session boundary, which is true of every
-    session in the hippocampal lesion cohort and is why the derived criterion
-    values match the Igor reference on every subject-contingency pair.
+    contingency change coincides with a session boundary. Where that holds, the
+    derived criterion values match the Igor reference exactly.
 
     They disagree when a change happens partway through a session:
 
@@ -272,7 +267,7 @@ def load_subject_data_with_contingencies(filepath, allow_mid_session_change=Fals
 def shared_contingency_blocks(records):
     """Validate that a block index means the same thing for every subject.
 
-    Kastner's convention counts each contingency separately, so a column of the
+    The published convention counts each contingency separately, so a column of the
     count matrix is identified by (block, sequence). That is only coherent if
     block 3 refers to the same three arms for every subject, which is what Igor
     checks when it prints "Contingencies not aligned".
@@ -287,8 +282,8 @@ def shared_contingency_blocks(records):
     zero means "produced this sequence zero times" rather than "was not measured".
     Igor represents it as NaN and its statistic ignores NaN, giving a per-sequence
     n. pycbas has no NaN support in the statistic or the bootstrap yet, so this
-    raises instead of silently writing zeros. Every subject in the hippocampal
-    lesion cohort runs all six contingencies, so the case does not arise there.
+    raises instead of silently writing zeros. The case does not arise when every
+    subject runs every contingency.
 
     Returns:
         sorted list of block indices common to all subjects

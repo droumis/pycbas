@@ -32,7 +32,7 @@ Cross-species validation of the CBAS reimplementation against Kastner et al. (20
 - **6 arms, seq_len_max=6, criterion=800, M=10,000, block_aware=True**
 - 572/16,378 significant (k=29) — **exact match** with David
 - 105 subjects (55 control, 50 lesion), all_published cohort (genotype==0, lesion known)
-- Test statistics match David's Igor within 1e-6 on all 16,376 overlapping sequences
+- Test statistics match the Igor reference within 1e-6 on all 16,376 overlapping sequences
 - All 572 significant sequences identical between pycbas and Igor
 - Runtime: ~11s | Peak RAM: ~3.6 GB
 
@@ -40,7 +40,7 @@ Cross-species validation of the CBAS reimplementation against Kastner et al. (20
 
 ## Algorithm notes
 
-Three key fixes brought us into exact alignment with David's Igor implementation:
+Three key fixes brought us into exact alignment with the Igor reference implementation:
 
 1. **Magnitude-based null** — Store |t| per sequence per bootstrap row (not direction-specific). This fixed humans from 69→31 (exact match).
 

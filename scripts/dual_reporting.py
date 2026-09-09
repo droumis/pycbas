@@ -5,7 +5,7 @@ Produces a figure showing:
   Left: Manhattan at adaptive k (everything pegged at ceiling)
   Right: Manhattan at k=1 (nice spread, ranking preserved)
 
-This is the concrete implementation of the suggestion for David.
+This is the concrete implementation of the suggestion made upstream.
 """
 
 import numpy as np

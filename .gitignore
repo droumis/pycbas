@@ -46,3 +46,8 @@ notes.md
 # otherwise the protection does not travel with the repository and `git add -A`
 # on another checkout would stage an unpublished cohort.
 data/
+
+# Agent/contributor notes for this working copy. Guidance for whoever has access to
+# the private analysis repo, not part of the published package, so it stays local.
+AGENTS.md
+CLAUDE.md

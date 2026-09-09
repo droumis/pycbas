@@ -76,9 +76,9 @@ def _stepdown_core(sorted_stats, null_sub, k, max_pval, tie_rtol):
 @njit(cache=True, parallel=True)
 def _stepdown_core_directional(sorted_stats, null_sub, dir_sub, obs_directions, k,
                                max_pval, tie_rtol):
-    """Step-down with direction-conditional removal (matches David's Igor).
+    """Step-down with direction-conditional removal (matches the Igor reference).
 
-    In David's implementation, a sequence is only removed from a bootstrap row
+    In the Igor reference, a sequence is only removed from a bootstrap row
     if the bootstrap went the SAME direction as the observed stat being processed.
     If the bootstrap went the other direction, that sequence's magnitude stays
     active for subsequent k-th largest computations.
@@ -245,10 +245,10 @@ def find_k_fwer(test_stats, null_matrix, alpha=0.5, gamma=0.05, null_directions=
 
     Iterates: run step-down at current k -> count rejections -> update k ->
     repeat until convergence. Reports p-values from the CONVERGED k (full
-    step-down, not early-stopped). This matches David's Igor implementation.
+    step-down, not early-stopped). This matches the Igor reference implementation.
 
     When null_directions is provided, uses direction-conditional removal in the
-    step-down (matching David's behavior: only remove a sequence from a bootstrap
+    step-down (matching the Igor reference's behaviour: only remove a sequence from a bootstrap
     row if the bootstrap went the same direction as the observed stat).
 
     Convergence: stop when rejections < (k / gamma) - 1.

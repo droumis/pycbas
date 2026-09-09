@@ -1,8 +1,8 @@
 """Tests for higher-order criteria.
 
 Two layers. The synthetic tests run everywhere and pin the semantics that are
-easy to get wrong. The reference test reproduces Kastner's Igor output exactly,
-and skips when the unpublished lesion cohort is absent, following the same
+easy to get wrong. The reference test reproduces the Igor reference output exactly,
+and skips when the multi-contingency cohort is absent, following the same
 pattern as the Igor cross-validation in test_cbas.py.
 """
 
@@ -252,7 +252,7 @@ class TestPipelineWiring:
 
 
 # ---------------------------------------------------------------------------
-# Reference: exact reproduction of Kastner's Igor output
+# Reference: exact reproduction of the Igor reference output
 # ---------------------------------------------------------------------------
 
 def _load_reference(path):
@@ -273,7 +273,7 @@ def _load_reference(path):
     return reference
 
 
-# Kastner's stated setting: 4th order, 100 runs of four rewarded choices.
+# The reference setting: 4th order, 100 runs of four rewarded choices.
 REFERENCE_ORDER = 4
 REFERENCE_COUNT = 100
 
@@ -293,7 +293,7 @@ def computed(lesion_cohort_dir):
 
 
 class TestAgainstIgorReference:
-    """Kastner's stated setting: 4th order, 100 runs of four rewarded choices."""
+    """The reference setting: 4th order, 100 runs of four rewarded choices."""
 
     def test_cohort_shape(self, computed):
         subjects = {s for s, _ in computed}

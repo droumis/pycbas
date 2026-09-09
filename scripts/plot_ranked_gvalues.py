@@ -1,7 +1,7 @@
 """
 Generate ranked ζ-value plots for all species.
 
-For species with David's (Igor) ground truth results, shows agreement/disagreement.
+For species with the Igor reference results, shows agreement/disagreement.
 For species without, shows significant vs not significant.
 
 Outputs: results/<species>/figures/ranked_gvalues.png

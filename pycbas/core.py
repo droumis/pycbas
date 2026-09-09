@@ -39,9 +39,9 @@ def subject_criteria(subjects_data, params, contingency=2, block_aware=False):
 
     Exposed because the shortfall is worth reporting rather than absorbing. A
     subject with an infinite criterion contributes every window it has, so with a
-    higher-order criterion the weakest subjects contribute the most data. In the
-    hippocampal lesion cohort that affects 6 to 16 percent of subjects per
-    contingency, unevenly across groups.
+    higher-order criterion the weakest subjects contribute the most data, and the
+    shortfall is often uneven across groups. Check it on your own data rather than
+    assuming it is negligible.
 
     Returns:
         float array of length n_subjects.

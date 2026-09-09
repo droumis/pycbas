@@ -1,8 +1,8 @@
 # Rat CBAS Validation Report
 
-## Validation against David's Igor implementation
+## Validation against the Igor reference implementation
 
-Test statistics were compared sequence-by-sequence against David's Igor output (`ratTestStats.txt`). Of 16,376 overlapping sequences, 100.0000% match within 1e-6, with a maximum absolute difference of 2.66e-07. This run found 572 significant sequences with k=29.
+Test statistics were compared sequence-by-sequence against the Igor reference output (`ratTestStats.txt`). Of 16,376 overlapping sequences, 100.0000% match within 1e-6, with a maximum absolute difference of 2.66e-07. This run found 572 significant sequences with k=29.
 
 ## Results
 

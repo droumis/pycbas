@@ -4,7 +4,7 @@ The criterion decides how much of each subject's stream enters the count matrix.
 `enumerate_sequences` and `enumerate_sequences_block_aware` take it as a maximum
 start position, so a criterion is always ultimately a trial index.
 
-Orders, following Kastner's Igor implementation:
+Orders, following the Igor reference implementation:
 
     order 0   a fixed trial index, the only mode pycbas supported historically
     order 1   the trial where the subject has earned `count` rewards
@@ -27,7 +27,7 @@ windows instead shifts every value by a few percent, which is small enough to
 look plausible and wrong everywhere.
 
 A subject who never reaches `count` gets `inf`, which the enumeration reads as
-"no cutoff", so that subject contributes every window it has. Kastner confirmed
+"no cutoff", so that subject contributes every window it has. The reference implementation confirms
 this is current intended behaviour, with the caveat that a fixed criterion is
 only strictly appropriate when every subject in every group reaches it. Callers
 that want those subjects excluded should test for `inf` themselves;

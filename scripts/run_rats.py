@@ -5,8 +5,9 @@ Compares control vs hippocampal lesion rats. 6-arm maze with reward encoding
 (12 symbols), first 800 choices per rat.
 
 Paper params: num_arms=6, seq_len_max=6, criterion=800, M=10,000, block_aware=True
-Validated: test stats match David's Igor within 1e-6 on all 16,376 sequences.
-Result: 568/16,378 significant (k=29). David gets 572 with his RNG; 4 borderline sequences.
+Validated: test stats match the Igor reference within 1e-6 on all 16,376 sequences.
+The significance count is seed-dependent and is not a reproduction claim; the
+test-statistic agreement above is the claim to rely on.
 
 Cohort membership comes from data/rats/anInfo.txt (see rat_cohorts.py):
   - all_published (default): 55 control + 50 lesion = 105 subjects
@@ -179,7 +180,7 @@ def compare_to_igor(seq_strs, test_stats, n_sig, k_final):
     diffs = np.array([abs(igor[k] - ours[k]) for k in shared])
     within = float((diffs < 1e-6).mean()) * 100.0
     return (
-        "Test statistics were compared sequence-by-sequence against David's Igor "
+        "Test statistics were compared sequence-by-sequence against the Igor reference "
         f"output (`ratTestStats.txt`). Of {len(shared):,} overlapping sequences, "
         f"{within:.4f}% match within 1e-6, with a maximum absolute difference of "
         f"{diffs.max():.3g}. This run found {n_sig} significant sequences with "
@@ -235,7 +236,7 @@ def write_report(data, timings):
 
     report = f"""# Rat CBAS Validation Report
 
-## Validation against David's Igor implementation
+## Validation against the Igor reference implementation
 
 {igor_line}
 

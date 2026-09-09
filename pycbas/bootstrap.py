@@ -59,7 +59,7 @@ def bootstrap_test_stats(count_matrix, group_indices, params, rng=None):
 
     When params.centering=True, uses Clarke et al. (2020) eq 5:
         t*_s,m = (d*_s,m - d_s) / s*_s,m
-    When params.centering=False (default, matches David's Igor implementation):
+    When params.centering=False (default, matches the Igor reference implementation):
         t*_s,m = d*_s,m / s*_s,m
 
     Returns:

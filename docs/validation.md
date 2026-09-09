@@ -10,7 +10,7 @@ pycbas is validated against the original Igor Pro implementation by David Kastne
 | Humans | Correlative | 1,413 | 408 | 31 (7.6%) | 31 (7.6%) | 2 |
 | Rats | Comparative | 105 | 16,378 | 572 (3.5%) | 572 (3.5%) | 29 |
 
-All three species produce exact significance-count matches with David's Igor implementation.
+All three species produce exact significance-count matches with the Igor reference implementation.
 
 ## Fly validation
 
@@ -28,7 +28,7 @@ Exact match: 31/408 significant sequences with k=2.
 
 Spatial alternation task (comparative mode, control vs hippocampal lesion). Parameters: 6 arms, L=6, criterion=800, M=10,000, block_aware=True. Subjects filtered by genotype==0 and lesion in [0,1], yielding 105 rats (55 control, 50 lesion).
 
-572/16,378 significant sequences with k=29, matching David exactly. Test statistics match
+572/16,378 significant sequences with k=29, matching the reference exactly. Test statistics match
 within 1e-6 on all 16,376 overlapping sequences (max difference 2.7e-7). All 572
 significant sequences are identical between pycbas and Igor. The `block_aware` option
 applies the criterion to global stream position while preventing sequences from spanning

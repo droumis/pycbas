@@ -6,7 +6,7 @@ Produces a diagnostic figure showing:
   Panel B: Test statistic vs null separation as f(N)
   Panel C: The k-iteration trajectory (rejections vs k at each N)
 
-This is designed to convey to David how the adaptive k-FWER behaves
+This is designed to convey how the adaptive k-FWER behaves
 in the high-power regime (large N, pervasive effect).
 """
 

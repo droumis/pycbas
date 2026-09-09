@@ -1,15 +1,15 @@
 """
-Compare CBAS step-down approaches against David's ground truth.
+Compare CBAS step-down approaches against the Igor reference's output.
 
 Approach A (Paper/Clarke): Centered bootstrap + k=1 step-down p-values
-Approach B (Igor/David):   Uncentered bootstrap + converged-k step-down p-values
+Approach B (Igor reference):   Uncentered bootstrap + converged-k step-down p-values
 
 Key finding: Both approaches use the same algorithm. The only difference
-causing the fly gap (our ~1602 vs David's 1605) is the random number generator.
-David's Igor `enoise()` with per-draw seeding produces a slightly different
+causing the fly gap (our ~1602 vs the reference's 1605) is the random number generator.
+the Igor reference's `enoise()` with per-draw seeding produces a slightly different
 bootstrap null that converges at a different k in the k-FWER iteration.
 
-With our RNG at k=17, we get R=1602 — essentially matching David's 1605.
+With our RNG at k=17, we get R=1602 — essentially matching the reference's 1605.
 """
 
 import time
@@ -45,7 +45,7 @@ def parse_david_file(path, max_seq_len):
 
 @njit(cache=True, parallel=True)
 def _bootstrap_no_centering(count_matrix, boot_indices_0, boot_indices_1, n0, n1, n_seq, M):
-    """Bootstrap WITHOUT centering — matches David's Igor implementation."""
+    """Bootstrap WITHOUT centering — matches the Igor reference implementation."""
     null_stats = np.full((M, n_seq * 2), np.nan)
 
     for m in prange(M):
@@ -85,7 +85,7 @@ def _bootstrap_no_centering(count_matrix, boot_indices_0, boot_indices_1, n0, n1
 
 
 def david_kfwer_iteration(sorted_stats, null_sub, alpha=0.5, gamma=0.05):
-    """David's k-FWER iteration from his Igor code.
+    """the Igor reference's k-FWER iteration.
 
     Iterates k, reports p-values from the converged k's step-down.
     Stop condition: R < k/gamma - 1
@@ -150,13 +150,13 @@ def run_approach_a(count_matrix, group_indices, params, sequences):
 
 
 def run_approach_b(count_matrix, group_indices, params, sequences):
-    """Approach B: Uncentered bootstrap + converged-k step-down (David's Igor).
+    """Approach B: Uncentered bootstrap + converged-k step-down (the Igor reference).
 
-    Also shows what k gives ~1605 (David's result) for reference.
+    Also shows what k gives ~1605 (the reference result) for reference.
     """
     print("\n" + "=" * 70)
     print("APPROACH B: Uncentered bootstrap + converged-k step-down")
-    print("  (matches David's Igor implementation)")
+    print("  (matches the Igor reference implementation)")
     print("=" * 70)
 
     test_stats = compute_test_stats(count_matrix, group_indices)
@@ -195,19 +195,19 @@ def run_approach_b(count_matrix, group_indices, params, sequences):
     print(f"  Step-down time (k=1): {t_sd:.1f}s")
     print(f"  Significant (k=1, no centering): {n_sig_k1}")
 
-    # Show k-scan to find where R ≈ David's 1605
+    # Show k-scan to find where R ≈ the reference's 1605
     print(f"\n  k-scan (R at each k, looking for ~1605):")
     for k in [1, 5, 10, 15, 17, 18, 20, 25, 30]:
         step_p = _stepdown_core(sorted_stats, null_sub, k, params.alpha)
         R = int(np.sum(step_p < params.alpha))
-        marker = " <-- closest to David's 1605" if abs(R - 1605) < 10 else ""
+        marker = " <-- closest to the reference's 1605" if abs(R - 1605) < 10 else ""
         print(f"    k={k:3d} -> R={R}{marker}")
 
-    # Use k=17 (closest to David's 1605) for final p-values
+    # Use k=17 (closest to the reference's 1605) for final p-values
     best_k = 17
     step_p_best = _stepdown_core(sorted_stats, null_sub, best_k, 1.0)
     n_sig_best = int(np.sum(step_p_best < params.alpha))
-    print(f"\n  Using k={best_k} (closest match to David): {n_sig_best} significant")
+    print(f"\n  Using k={best_k} (closest match to the reference): {n_sig_best} significant")
 
     g_values = np.full_like(test_stats, np.nan)
     for i in range(len(sorted_indices)):
@@ -217,7 +217,7 @@ def run_approach_b(count_matrix, group_indices, params, sequences):
 
 
 def compare_with_david(g_values, test_stats, david_seqs, sequences, alpha, label):
-    """Compare g-values against David's ground truth."""
+    """Compare g-values against the Igor reference's output."""
     n_seq = len(sequences)
     seq_to_idx = {s: i for i, s in enumerate(sequences)}
 
@@ -236,12 +236,12 @@ def compare_with_david(g_values, test_stats, david_seqs, sequences, alpha, label
     only_ours = our_sig - david_sig
     only_david = david_sig - our_sig
 
-    print(f"\n  {label} vs David:")
+    print(f"\n  {label} vs reference:")
     print(f"    Ours significant: {len(our_sig)}")
-    print(f"    David significant: {len(david_sig)}")
+    print(f"    reference significant: {len(david_sig)}")
     print(f"    Both: {len(both)}")
     print(f"    Only ours (overcalled): {len(only_ours)}")
-    print(f"    Only David (missed): {len(only_david)}")
+    print(f"    Only reference (missed): {len(only_david)}")
 
     # P-value correlation for shared sequences
     if both:
@@ -258,7 +258,7 @@ def compare_with_david(g_values, test_stats, david_seqs, sequences, alpha, label
             our_ps = np.array(our_ps)
             david_ps = np.array(david_ps)
             ratio = our_ps / np.where(david_ps > 0, david_ps, 1e-10)
-            print(f"    P-value ratio (ours/David) for shared: "
+            print(f"    P-value ratio (ours/reference) for shared: "
                   f"median={np.median(ratio):.3f}, mean={np.mean(ratio):.3f}")
 
     return {"both": len(both), "only_ours": len(only_ours), "only_david": len(only_david)}
@@ -317,13 +317,13 @@ def run_fly_comparison():
     print(f"Sequences: {len(sequences)}")
 
     david_fly = parse_david_file(NOTES_DIR / "flyCBASsigSeq.txt", max_seq_len=10)
-    print(f"David's significant: {len(david_fly)}")
+    print(f"reference significant: {len(david_fly)}")
 
     # Run both approaches
     g_a, k_a, stats_a = run_approach_a(count_matrix, group_indices, params, sequences)
     g_b, k_b, stats_b = run_approach_b(count_matrix, group_indices, params, sequences)
 
-    # Compare each with David
+    # Compare each with the reference
     results_a = compare_with_david(g_a, stats_a, david_fly, sequences, params.alpha, "Approach A")
     results_b = compare_with_david(g_b, stats_b, david_fly, sequences, params.alpha, "Approach B")
 
@@ -348,7 +348,7 @@ def run_human_comparison():
     print(f"Sequences: {len(sequences)}")
 
     david_human = parse_david_file(NOTES_DIR / "humanCBASsigSeq.txt", max_seq_len=4)
-    print(f"David's significant: {len(david_human)}")
+    print(f"reference significant: {len(david_human)}")
 
     from pycbas import compute_test_stats_correlative, bootstrap_test_stats_correlative
 
@@ -370,7 +370,7 @@ def run_human_comparison():
     for it in iterations:
         print(f"    k={it['k']:4d} -> R={it['R']:5d}")
 
-    # Compare with David using k=1
+    # Compare with the reference using k=1
     g_values = np.full_like(test_stats, np.nan)
     for i in range(len(sorted_indices)):
         g_values[sorted_indices[i]] = step_p_k1[i]
@@ -389,7 +389,7 @@ def run_human_comparison():
     both = our_sig & david_sig
     only_ours = our_sig - david_sig
     only_david = david_sig - our_sig
-    print(f"\n  vs David (k=1): Both={len(both)}, Only ours={len(only_ours)}, Only David={len(only_david)}")
+    print(f"\n  vs the reference (k=1): Both={len(both)}, Only ours={len(only_ours)}, Only the reference={len(only_david)}")
 
 
 def print_summary(fly_results):
@@ -397,7 +397,7 @@ def print_summary(fly_results):
     print("SUMMARY")
     print("=" * 70)
     print(f"""
-David's fly significant sequences: {fly_results['david_total']}
+reference fly significant sequences: {fly_results['david_total']}
 
 Approach A (Centered + k=1):
   - Bootstrap null centered by subtracting observed delta (Clarke et al. 2020 eq 5)
@@ -405,19 +405,19 @@ Approach A (Centered + k=1):
   - Null fill rate: ~5% (centering pushes most draws to opposite direction)
   - Result: Both={fly_results['approach_a']['both']}, Overcalled={fly_results['approach_a']['only_ours']}, Missed={fly_results['approach_a']['only_david']}
 
-Approach B (Uncentered + converged-k, matching David's algorithm):
+Approach B (Uncentered + converged-k, matching the reference's algorithm):
   - Bootstrap null NOT centered (matches Igor code get2waveCompStat, line 1146)
   - P-values from converged k-FWER (matches Igor code doResampleAndFindK, line 799)
   - Null fill rate: ~50%
-  - At k=17 we get R=1602, matching David's 1605 within RNG noise
+  - At k=17 we get R=1602, matching the reference's 1605 within RNG noise
   - Result: Both={fly_results['approach_b']['both']}, Overcalled={fly_results['approach_b']['only_ours']}, Missed={fly_results['approach_b']['only_david']}
 
 CONCLUSION: The remaining fly gap is entirely explained by RNG differences.
   - Our numpy RNG (seed=42) produces a null where k=17 gives R=1602
-  - David's Igor enoise() produces a null where his k-iteration converges at ~k=17 giving R=1605
+  - the Igor reference enoise() produces a null where his k-iteration converges at ~k=17 giving R=1605
   - The algorithm is identical; the 3-sequence difference is bootstrap noise
-  - Supporting evidence: David's min p-value = 1/10001 (consistent with M=10000, k>1 step-down)
-  - 91% of David's p-values are at the floor (0.0001) — confirms converged k > 1
+  - Supporting evidence: the reference's min p-value = 1/10001 (consistent with M=10000, k>1 step-down)
+  - 91% of the reference's p-values are at the floor (0.0001) — confirms converged k > 1
 """)
 
 

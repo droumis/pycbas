@@ -124,7 +124,7 @@ Timings on Apple M-series. The chunked pipeline (`chunked=True`, default) trades
 
 ## Validation
 
-Exact match with the original Igor implementation on flies (1,605/2,046, k=81) and humans (31/408, k=2). Test statistics match to floating-point precision. Rats (105 subjects, `block_aware=True`): 572/16,378 significant (k=29), exact match with David's Igor implementation. Test statistics agree within 1e-6 on all 16,376 overlapping sequences.
+Exact match with the original Igor implementation on flies (1,605/2,046, k=81) and humans (31/408, k=2). Test statistics match to floating-point precision. Rats (105 subjects, `block_aware=True`): 572/16,378 significant (k=29), exact match with the Igor reference implementation. Test statistics agree within 1e-6 on all 16,376 overlapping sequences.
 
 See [results/validation_summary.md](results/validation_summary.md) for details, or per-dataset reports:
 - [Flies](results/flies/validation_report.md)

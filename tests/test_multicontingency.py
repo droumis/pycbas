@@ -1,6 +1,6 @@
 """Tests for counting several contingencies as separate hypothesis sets.
 
-Kastner's convention: each contingency is analysed separately, so the same arm
+The published convention: each contingency is analysed separately, so the same arm
 sequence under two contingencies is two hypotheses, and the multiplicity
 correction runs over the concatenation. "If you have 100 sequences in the first
 contingency and 200 in the second, you are evaluating 300 sequences total."
@@ -102,7 +102,7 @@ class TestMultiContingencyCounts:
         assert isinstance(block, int) and isinstance(seq, tuple)
 
     def test_per_contingency_columns_sum_to_the_total(self, cohort):
-        """Kastner's 100 + 200 = 300."""
+        """The convention's 100 + 200 = 300."""
         params = CBASParams(num_arms=3, seq_len_max=2, criterion=10_000)
         sequences, counts = build_multicontingency_count_matrix(cohort, params)
         from collections import Counter
@@ -255,7 +255,7 @@ class TestPipeline:
 
 
 # ---------------------------------------------------------------------------
-# The unpublished lesion cohort
+# A multi-contingency cohort, supplied separately
 # ---------------------------------------------------------------------------
 
 @pytest.fixture(scope="module")
@@ -276,7 +276,7 @@ class TestLesionCohort:
         assert shared_contingency_blocks(records) == [1, 2, 3, 4, 5, 6]
 
     def test_block_one_and_five_share_arms_but_stay_separate(self, cohort):
-        """The recurrence Kastner confirmed should not be merged."""
+        """The recurrence the reference implementation does not merge."""
         records, _ = cohort
         blocks = {b.block: (b.centre, b.left_outer)
                   for b in records[0].alternation_blocks()}

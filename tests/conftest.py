@@ -1,7 +1,7 @@
 """Shared handling for tests that need data the repository cannot ship.
 
 Two datasets are referenced by the suite but tracked by neither repo: the Igor
-reference data under `igor_cbas/`, and the unpublished hippocampal lesion cohort
+reference data under `igor_cbas/`, and a multi-contingency cohort
 under `data/`. Tests depending on them skip when they are absent, which is what
 makes the suite runnable by anyone who clones the project.
 
@@ -47,7 +47,7 @@ def _first_existing(*candidates):
     return candidates[0]
 
 
-#: Kastner's unpublished multi-contingency lesion cohort.
+#: A multi-contingency cohort, not distributed with this package.
 LESION_COHORT_DIR = _first_existing(
     REPO_ROOT / "data" / "rats_allHipLesionData",
     REPO_ROOT / "data" / "rats_AllHipLesionData",
@@ -88,7 +88,7 @@ def igor_data_dir():
 
 @pytest.fixture(scope="session")
 def lesion_cohort_dir():
-    return require_reference_path(LESION_COHORT_DIR, "unpublished lesion cohort")
+    return require_reference_path(LESION_COHORT_DIR, "multi-contingency cohort")
 
 
 @pytest.fixture(scope="session")
