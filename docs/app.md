@@ -37,6 +37,9 @@ Three options for loading data:
 
 **Local folder** (default) — navigate to a folder on disk. The loader auto-detects:
 
+- The **multi-contingency format**, whose info table has two header lines and names its
+  groups in words. Recognising it switches the app into multi-contingency mode; see
+  [Several contingencies](#several-contingencies) below
 - An `*Info.txt` file (subject_id, label_or_score per line), matching subject data files by trailing ID number
 - Or group membership from filename prefixes (e.g. `control0.txt`, `lesion0.txt`). Recognized keywords: control/ctrl/sham/wt (group 0), lesion/exp/ko/mutant (group 1)
 
@@ -92,7 +95,19 @@ that. Subjects that
 fall short are not truncated, so they contribute every trial they have. See
 [higher-order criteria](guide.md#higher-order-criteria) for the caveats.
 
-### Several contingencies
+#### Who falls short of the criterion
+
+At any order above 0 the app reports how many subjects never reach the criterion. This
+is the most important number on the page and it is easy to misread as a data-quality
+note. A subject that falls short is **not** truncated: it contributes every trial it
+has, so the subjects performing worst contribute the most data, and if that is uneven
+across groups it is a confound rather than a nuisance.
+
+For multi-contingency data the criterion applies within each contingency, so the report
+counts subject-contingency pairs and also says how many subjects are affected in at
+least one contingency. Counting more contingencies means more chances to fall short.
+
+#### Several contingencies
 
 If the folder holds the multi-contingency format, where each subject's sessions are
 divided into contingency blocks, the app detects it on load and adds a **Contingency
@@ -146,6 +161,15 @@ Results are presented across several tabs:
 **Significant Sequences** — sortable, paginated table of all significant sequences with their g-values and directions.
 
 **Export** — download full results or significant-only as CSV.
+
+For multi-contingency runs every sequence label carries the contingency block it belongs
+to, as `c3: 2-4-2`, in the plots, the tables and the CSV. The same arm sequence appearing
+under two contingencies is two rows, because it is two hypotheses.
+
+One thing the Summary does not say: `alpha` is 0.5, which is not a conventional
+threshold. It controls the median false discovery proportion at `gamma`, so the
+significant count is not a count of near-certain findings and should be read against a
+matched null. See [the algorithm notes](algorithm.md#significance).
 
 ## Technical notes
 

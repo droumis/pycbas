@@ -38,6 +38,7 @@ from dataclasses import dataclass
 import numpy as np
 
 __all__ = [
+    "record_criteria",
     "ContingencyBlock",
     "SubjectRecord",
     "assign_contingency_blocks",
@@ -325,6 +326,50 @@ def shared_contingency_blocks(records):
             "to the blocks all subjects share by passing `blocks=`."
         )
     return sorted(common)
+
+
+def record_criteria(records, params, blocks=None):
+    """Criterion trial index per subject per contingency, `inf` where unreached.
+
+    The multi-contingency counterpart of `core.subject_criteria`, which cannot be
+    used here because it takes per-subject arrays rather than `SubjectRecord`s. The
+    criterion applies within each contingency, so a subject can reach it in one
+    contingency and fall short in another, and the answer is a matrix rather than a
+    vector.
+
+    This matters more here than in the single-contingency case, not less. A subject
+    that falls short is not truncated and contributes every window it has, so with a
+    higher-order criterion the weakest subjects contribute the most data. Counting
+    several contingencies multiplies the number of chances to fall short.
+
+    Args:
+        records: list of SubjectRecord
+        params: CBASParams; `criterion` and `criterion_order` are what matter
+        blocks: contingency blocks to evaluate, default all shared by every subject
+
+    Returns:
+        float array of shape (n_subjects, n_blocks), and the block list it used.
+    """
+    from .criterion import criterion_trial
+
+    available = shared_contingency_blocks(records)
+    if blocks is None:
+        blocks = available
+    else:
+        blocks = sorted(blocks)
+        unknown = [b for b in blocks if b not in available]
+        if unknown:
+            raise ValueError(
+                f"contingency block(s) {unknown} are not shared by all subjects; "
+                f"available: {available}")
+
+    order = getattr(params, "criterion_order", 0)
+    out = np.array([
+        [criterion_trial(record.reward_blocks_for(block), order, params.criterion)
+         for block in blocks]
+        for record in records
+    ], dtype=np.float64)
+    return out, list(blocks)
 
 
 def build_multicontingency_count_matrix(records, params, blocks=None,

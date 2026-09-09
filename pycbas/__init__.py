@@ -34,12 +34,14 @@ from .pipeline import (run_cbas_comparative, run_cbas_correlative,
 from .contingency import (load_subject_data_with_contingencies,
                           load_cohort_with_contingencies,
                           shared_contingency_blocks,
-                          build_multicontingency_count_matrix)
+                          build_multicontingency_count_matrix,
+                          record_criteria)
 from .criterion import criterion_trial, reached_criterion
 from .core import subject_criteria
 
 __all__ = [
     "__version__",
+    "record_criteria",
     "CBASParams",
     "CBASResult",
     "load_subject_data",

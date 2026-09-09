@@ -248,6 +248,10 @@ averages raw counts rather than rates, a subject that took twice as long has rou
 twice the counts. If time-to-criterion differs between your groups, that difference
 alone shifts every sequence.
 
+For multi-contingency data use `record_criteria`, which returns one criterion per
+subject per contingency, since the criterion applies within each one and a subject can
+reach it in one contingency and fall short in another.
+
 **Subjects that never reach the criterion are not truncated.** They contribute every
 trial they have, so the weakest subjects contribute the most data. Check for this
 before running:

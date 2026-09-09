@@ -27,7 +27,7 @@ Read the Fixed section before comparing new output against old.
 
   New: `load_cohort_with_contingencies`, `load_subject_data_with_contingencies`,
   `shared_contingency_blocks`, `build_multicontingency_count_matrix`,
-  `criterion_trial`, `subject_criteria`, `reached_criterion`.
+  `criterion_trial`, `subject_criteria`, `reached_criterion`, `record_criteria`.
 
   Counting several contingencies multiplies the hypothesis space, and the step-down's
   memory is linear in it, so check `estimate_resources` first.
@@ -36,6 +36,11 @@ Read the Fixed section before comparing new output against old.
   label, help text and step size following it. Multi-contingency folders are detected
   on load and get a contingency block selector and, where the info table offers one, a
   subject filter; results are labelled with their block.
+
+  The criterion shortfall report works for multi-contingency data too, via
+  `record_criteria`. It counts subject-contingency pairs and says how many subjects are
+  affected in at least one contingency, which is the group most exposed to the
+  falls-short hazard and previously the only one with no way to check it.
 
   The app's output is verified identical to the equivalent API call, both in the
   hypothesis set and bitwise in the adjusted p-values, on a single-contingency and a

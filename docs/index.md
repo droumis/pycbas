@@ -51,7 +51,7 @@ print(f"{result.n_significant} significant sequences (k={result.k_final})")
 - **New to CBAS?** The [Comparative Walkthrough](walkthrough.md) and [Correlative Walkthrough](walkthrough-correlative.md) build intuition for what the algorithm does and how to interpret results.
 - **Ready to run your own data?** The [User Guide](guide.md) covers data formats, parameter selection, and working with results.
 - **Want the math?** The [Algorithm](algorithm.md) page details the step-down procedure and k-FWER iteration.
-- **Prefer no code?** pyCBAS includes an [Interactive GUI](app.md) that handles data loading, parameter detection, and visualization.
+- **Prefer no code?** pyCBAS includes an [Interactive GUI](app.md) that handles data loading, parameter detection, higher-order criteria, several contingencies at once, and visualization.
 - **Building on pyCBAS?** The [API Reference](api.md) documents all public functions and classes.
 
 ## Performance

@@ -207,6 +207,26 @@ Count all subsequences of a given length with start position <= criterion.
 
 ---
 
+### `record_criteria`
+
+```python
+record_criteria(records, params, blocks=None)
+```
+
+Criterion trial index per subject per contingency, `inf` where a subject never reached
+it. The multi-contingency counterpart of `subject_criteria`, which takes per-subject
+arrays and so cannot be used on `SubjectRecord`s.
+
+The criterion applies within each contingency, so a subject can reach it in one and fall
+short in another, and the result is a matrix rather than a vector. Worth checking before
+a run: a subject that falls short is not truncated and contributes every window it has,
+so the weakest subjects contribute the most data, and counting more contingencies means
+more chances to fall short.
+
+**Returns** `(criteria, blocks)` where `criteria` has shape `(n_subjects, n_blocks)`.
+
+---
+
 ### `enumerate_sequences_block_aware`
 
 ```python

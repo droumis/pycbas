@@ -1208,18 +1208,29 @@ def update_criterion_shortfall():
         criterion_shortfall_pane.visible = False
         return
 
+    from pycbas import CBASParams, record_criteria
     from pycbas.core import subject_criteria
-    from pycbas import CBASParams
+    params = CBASParams(num_arms=app_state.num_arms,
+                        seq_len_max=app_state.seq_len_max,
+                        criterion=app_state.criterion,
+                        criterion_order=app_state.criterion_order)
+    per_contingency = None
     try:
-        criteria = subject_criteria(
-            app_state.subjects_data,
-            CBASParams(num_arms=app_state.num_arms,
-                       seq_len_max=app_state.seq_len_max,
-                       criterion=app_state.criterion,
-                       criterion_order=app_state.criterion_order),
-            contingency=app_state.contingency,
-            block_aware=app_state.block_aware,
-        )
+        if app_state.records:
+            # The criterion applies within each contingency, so a subject can reach
+            # it in one and fall short in another. Report the pairs, and separately
+            # how many subjects are affected at all, since one bad contingency is
+            # enough to make that subject contribute everything it has there.
+            per_contingency, blocks_used = record_criteria(
+                app_state.records, params,
+                blocks=list(app_state.selected_blocks) or None)
+            criteria = per_contingency.reshape(-1)
+        else:
+            criteria = subject_criteria(
+                app_state.subjects_data, params,
+                contingency=app_state.contingency,
+                block_aware=app_state.block_aware,
+            )
     except Exception as exc:
         criterion_shortfall_pane.object = f"Could not evaluate the criterion: {exc}"
         criterion_shortfall_pane.alert_type = "danger"
@@ -1230,21 +1241,31 @@ def update_criterion_shortfall():
     reached = criteria[np.isfinite(criteria)]
     criterion_shortfall_pane.visible = True
 
+    if per_contingency is not None:
+        unit = "subject-contingency pairs"
+        n_subj_short = int((~np.isfinite(per_contingency)).any(axis=1).sum())
+        extra = (f" That is {n_subj_short} of {per_contingency.shape[0]} subjects "
+                 f"affected in at least one of the {per_contingency.shape[1]} "
+                 f"contingencies.")
+    else:
+        unit = "subjects"
+        extra = ""
+
     if short:
         criterion_shortfall_pane.alert_type = "warning"
         criterion_shortfall_pane.object = (
-            f"**{short} of {len(criteria)} subjects never reach this criterion.** "
-            "They are not truncated, so they contribute every trial they have, "
-            "which means the weakest subjects contribute the most data. Lower the "
+            f"**{short} of {len(criteria)} {unit} never reach this criterion.**"
+            f"{extra} They are not truncated, so they contribute every trial they "
+            "have, which means the weakest contribute the most data. Lower the "
             "count, or exclude them before running."
         )
     elif len(reached):
         criterion_shortfall_pane.alert_type = "light"
         criterion_shortfall_pane.object = (
-            f"All {len(criteria)} subjects reach this criterion. Trials used per "
-            f"subject range {int(reached.min())} to {int(reached.max())}, median "
+            f"All {len(criteria)} {unit} reach this criterion. Trials used range "
+            f"{int(reached.min())} to {int(reached.max())}, median "
             f"{int(np.median(reached))}. Counts are not normalised by trial count, "
-            "so a wide range means subjects contribute unequal amounts of data."
+            "so a wide range means unequal amounts of data."
         )
 
 
