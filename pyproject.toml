@@ -2,9 +2,16 @@
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
+# The version lives in pycbas/__init__.py so that `pycbas.__version__` is always
+# correct, including from a source checkout or a stale editable install. Reading it
+# the other way round reports whatever was last installed, which is misleading now
+# that a release can change numerical output.
+[tool.hatch.version]
+path = "pycbas/__init__.py"
+
 [project]
 name = "pycbas"
-version = "0.2.0"
+dynamic = ["version"]
 description = "Choice-Wide Behavioral Association Study — identify behavioral sequences that differ between groups or correlate with continuous measures"
 readme = "README.md"
 license = "MIT"

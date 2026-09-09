@@ -34,7 +34,16 @@ Read the Fixed section before comparing new output against old.
 
 - **GUI support for both.** The criterion order is selectable, with the criterion's
   label, help text and step size following it. Multi-contingency folders are detected
-  on load and get a block selector; results are labelled with their block.
+  on load and get a contingency block selector and, where the info table offers one, a
+  subject filter; results are labelled with their block.
+
+  The app's output is verified identical to the equivalent API call, both in the
+  hypothesis set and bitwise in the adjusted p-values, on a single-contingency and a
+  multi-contingency run.
+
+- `pycbas.__version__`, and the version now has one source, `pycbas/__init__.py`, which
+  `pyproject.toml` reads. Reading it the other way round reports whatever was last
+  installed, which is misleading when a release can change numerical output.
 
 - `CHANGELOG.md`, which did not exist before.
 

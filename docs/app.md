@@ -108,6 +108,11 @@ result. Watch the resource estimate as you change the selection.
 Group membership comes from the info table's group column. Subjects whose group field
 is blank are skipped, and the load message says how many.
 
+If the info table has a column with a handful of distinct values, such as a genotype or
+an experiment number, a **Restrict subjects** selector offers it. Every value is
+selected on load, so nothing is dropped unless you ask, and the status line says what
+is currently included. Use it where a cohort mixes groups that should not be pooled.
+
 Results are labelled with the block they belong to, as `c3: 2-4-2`.
 
 ### Step 4: Run analysis

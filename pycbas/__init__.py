@@ -10,6 +10,13 @@ Reference: Kastner et al., "Choice-Wide Behavioral Association Study"
 Nature Communications (2026) https://www.nature.com/articles/s41467-026-76681-3
 """
 
+#: Single source of truth for the version; `pyproject.toml` reads it from here via
+#: hatch. Worth being able to check from Python: 0.2.0 changes numerical output at
+#: ties, so "which version produced this result" is a question users will need to
+#: answer.
+__version__ = "0.2.0"
+
+
 from .params import CBASParams, CBASResult
 from .io import (load_subject_data, extract_choice_stream, extract_choice_streams_by_block,
                  enumerate_sequences, enumerate_sequences_block_aware)
@@ -32,6 +39,7 @@ from .criterion import criterion_trial, reached_criterion
 from .core import subject_criteria
 
 __all__ = [
+    "__version__",
     "CBASParams",
     "CBASResult",
     "load_subject_data",

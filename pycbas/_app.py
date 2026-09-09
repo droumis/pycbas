@@ -75,6 +75,10 @@ class CBASApp(param.Parameterized):
     # carries a contingency block structure per subject rather than a single
     # stream. `records` and `subjects_data` are mutually exclusive.
     records = param.List(default=[], doc="SubjectRecord list (multi-contingency)")
+    _all_records = param.List(default=[], doc="Every labelled record, before filtering")
+    _all_labels = param.Array(default=np.array([]), doc="Labels for _all_records")
+    _all_filter_values = param.List(default=[], doc="Filter column value per record")
+    filter_column = param.String(default="", doc="Info column the filter applies to")
     available_blocks = param.List(default=[], doc="Blocks shared by every subject")
     selected_blocks = param.List(default=[], doc="Blocks to include in the analysis")
 
@@ -410,7 +414,24 @@ def _try_load_multicontingency(folder_path, info_file):
         data_status.alert_type = "danger"
         return True
 
+    # A column with a handful of distinct values is offered as a subject filter,
+    # rather than applied silently. Cohorts that mix genotypes or experiments should
+    # not be pooled by default, and should not be subsetted without saying so either.
+    filter_col = next((c for c in ("genotype", "geno", "strain", "experiment")
+                       if c in info[0]), None)
+    filter_values = []
+    if filter_col is not None:
+        filter_values = [str(row.get(filter_col)) for row, g in
+                         ((r, to_group(r.get(group_col))) for r in info) if g is not None]
+        distinct = sorted(set(filter_values))
+        if len(distinct) < 2 or len(distinct) > 12:
+            filter_col, filter_values = None, []
+    app_state.filter_column = filter_col or ""
+
     app_state.subjects_data = []
+    app_state._all_records = keep
+    app_state._all_labels = np.asarray(labels, dtype=np.int32)
+    app_state._all_filter_values = filter_values or [""] * len(keep)
     app_state.records = keep
     app_state.available_blocks = list(blocks)
     app_state.selected_blocks = list(blocks)
@@ -426,9 +447,22 @@ def _try_load_multicontingency(folder_path, info_file):
     block_selector.options = list(blocks)
     block_selector.value = list(blocks)
     block_row.visible = True
+    if filter_col is not None:
+        distinct = sorted(set(filter_values))
+        subject_filter.name = f"Restrict subjects by {filter_col}"
+        # Set options and value without firing the watcher's message, since the load
+        # message below is more informative on first load.
+        with param.parameterized.discard_events(subject_filter):
+            subject_filter.options = distinct
+            subject_filter.value = distinct
+        subject_filter_row.visible = True
+    else:
+        subject_filter_row.visible = False
     app_state.data_loaded = True
 
     note = f", {dropped} without a usable group label skipped" if dropped else ""
+    filter_note = (f" All {filter_col} values are included; use Restrict subjects to "
+                   f"analyse one at a time." if filter_col else "")
     n0 = int(np.sum(np.asarray(labels) == 0))
     data_status.object = (
         f"**Loaded {len(keep)} subjects** from `{folder_path.name}/` in "
@@ -437,6 +471,7 @@ def _try_load_multicontingency(folder_path, info_file):
         f"{', '.join(str(b) for b in blocks)}. Each selected block is counted as its "
         f"own hypothesis set and all of them are corrected together, so adding a "
         f"block enlarges the hypothesis space rather than splitting the result."
+        + filter_note
     )
     data_status.alert_type = "success"
     return True
@@ -669,6 +704,7 @@ def load_from_folder(event):
         app_state.available_blocks = []
         app_state.selected_blocks = []
         block_row.visible = False
+        subject_filter_row.visible = False
         app_state.subjects_data = subjects_data
 
         set_detected_mode(labels_or_scores)
@@ -1007,6 +1043,70 @@ contingency_widget = pn.widgets.IntInput(
     value=1, start=0, end=10, step=1,
     description="Only trials matching this value in the contingency column are used. Filters by task condition, not session.",
 )
+subject_filter = pn.widgets.MultiChoice(
+    name="Restrict subjects",
+    options=[], value=[],
+    description=(
+        "Analyse only subjects whose info-table value is selected. All values are "
+        "selected on load, so nothing is dropped unless you ask. Useful when a cohort "
+        "mixes groups that should not be pooled, such as several genotypes."),
+)
+subject_filter_row = pn.Column(subject_filter, visible=False)
+
+
+def _apply_subject_filter(event=None):
+    """Re-derive records, labels and shared blocks from the current selection."""
+    from pycbas.contingency import shared_contingency_blocks
+    keep_values = set(subject_filter.value)
+    if not keep_values:
+        data_status.object = ("**No subject groups selected**, so there is nothing to "
+                             "analyse. Select at least one value under Restrict "
+                             "subjects.")
+        data_status.alert_type = "warning"
+        app_state.data_loaded = False
+        return
+    pairs = [(r, int(l)) for r, l, v in zip(app_state._all_records,
+                                           app_state._all_labels,
+                                           app_state._all_filter_values)
+             if v in keep_values]
+    if len({l for _, l in pairs}) < 2:
+        data_status.object = ("**That selection leaves only one group.** A comparative "
+                             "analysis needs subjects in both groups.")
+        data_status.alert_type = "warning"
+        app_state.data_loaded = False
+        return
+    records = [r for r, _ in pairs]
+    labels = np.asarray([l for _, l in pairs], dtype=np.int32)
+    try:
+        blocks = shared_contingency_blocks(records)
+    except Exception as exc:
+        data_status.object = (f"**That selection has no contingency blocks common to "
+                              f"every subject:** {exc}")
+        data_status.alert_type = "danger"
+        app_state.data_loaded = False
+        return
+    app_state.records = records
+    app_state.group_labels = labels
+    app_state.n_subjects = len(records)
+    app_state.available_blocks = list(blocks)
+    kept = [b for b in block_selector.value if b in blocks] or list(blocks)
+    block_selector.options = list(blocks)
+    block_selector.value = kept
+    app_state.selected_blocks = kept
+    app_state.data_loaded = True
+    n0 = int(np.sum(labels == 0))
+    label = (f" ({app_state.filter_column}: "
+             f"{', '.join(str(v) for v in subject_filter.value)})"
+             if app_state.filter_column else "")
+    data_status.object = (
+        f"**{len(records)} subjects selected**{label}: {n0} group 0, "
+        f"{len(records) - n0} group 1. Contingency blocks shared by all of them: "
+        f"{', '.join(str(b) for b in blocks)}.")
+    data_status.alert_type = "success"
+
+
+subject_filter.param.watch(_apply_subject_filter, "value")
+
 block_selector = pn.widgets.MultiChoice(
     name="Contingency blocks to include",
     options=[], value=[],
@@ -1857,6 +1957,7 @@ main_content = pn.Column(
         pn.Column(num_arms_widget, seq_len_max_widget, pn.Row(encode_reward_widget, encode_reward_tooltip), width=300),
         pn.Column(criterion_widget, criterion_order_widget, resample_widget, contingency_widget, pn.Row(block_aware_widget, block_aware_tooltip), width=300),
     ),
+    subject_filter_row,
     block_row,
     criterion_shortfall_pane,
     resource_estimate_pane,
