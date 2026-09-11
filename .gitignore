@@ -15,8 +15,12 @@ site/
 # Pytest
 .pytest_cache/
 
+# Ruff
+.ruff_cache/
+
 # Coding agent local state and tool artifacts
 .claude/
+.kilo/
 .playwright-mcp/
 
 # OS
