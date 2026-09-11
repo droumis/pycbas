@@ -50,23 +50,50 @@ def test_unchunked_is_about_twice_chunked_not_a_multiple_of_sequence_space():
     assert est["memory_full_null_gb"] < 10, est["memory_full_null_gb"]
 
 
-def test_memory_and_time_are_both_linear_in_resample_number():
+def test_memory_is_linear_in_resample_number():
     small = estimate_resources(6, 6, n_observed=16376, resample_number=10000)
     large = estimate_resources(6, 6, n_observed=16376, resample_number=50000)
     assert large["memory_chunked_gb"] / small["memory_chunked_gb"] == pytest.approx(5, rel=1e-2)
-    assert large["est_time_seconds"] / small["est_time_seconds"] == pytest.approx(5, rel=1e-2)
 
 
-def test_time_is_linear_in_hypothesis_count():
+def test_time_grows_strongly_with_resample_number():
+    """M was omitted from the time estimate entirely, giving a ratio of exactly 1.
+
+    Not asserted as strict proportionality: the model carries a fixed cost that is
+    paid once and does not scale with M. Only the variable term does.
+    """
+    small = estimate_resources(6, 6, n_observed=16376, resample_number=10000)
+    large = estimate_resources(6, 6, n_observed=16376, resample_number=50000)
+    ratio = large["est_time_seconds"] / small["est_time_seconds"]
+    assert ratio > 3, ratio
+
+
+def test_time_grows_with_the_hypothesis_count():
     a = estimate_resources(6, 6, n_observed=8000, resample_number=10000)
     b = estimate_resources(6, 6, n_observed=16000, resample_number=10000)
-    assert b["est_time_seconds"] / a["est_time_seconds"] == pytest.approx(2, rel=1e-2)
+    assert b["est_time_seconds"] > a["est_time_seconds"]
 
 
-def test_time_keeps_its_calibration_point():
-    """The one measured point the model is fitted to must come back unchanged."""
-    est = estimate_resources(6, 6, n_observed=16376, resample_number=10000)
-    assert est["est_time_seconds"] == pytest.approx(12.3, abs=0.05)
+@pytest.mark.parametrize("n_observed,seq_len_max,published", [
+    (408, 4, 3.0),      # the human validation run
+    (16376, 6, 12.0),   # the rat validation run
+])
+def test_time_reproduces_both_published_calibration_points(n_observed, seq_len_max,
+                                                           published):
+    """Fitted to two measured runs, so both have to come back.
+
+    Fitted to one point through the origin, the model reported under a second for the
+    smaller of these, a run the app then visibly took several seconds to finish.
+    """
+    est = estimate_resources(6, seq_len_max, n_observed=n_observed,
+                             resample_number=10000)
+    assert est["est_time_seconds"] == pytest.approx(published, abs=0.15)
+
+
+def test_a_small_run_is_not_estimated_at_zero_seconds():
+    """There is a floor: no run is free, however few hypotheses it tests."""
+    est = estimate_resources(2, 2, n_observed=10, resample_number=1000)
+    assert est["est_time_seconds"] >= 1.0
 
 
 def test_sequence_space_is_the_fallback_when_the_count_is_unknown():

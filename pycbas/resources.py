@@ -51,15 +51,20 @@ def estimate_resources(num_arms, seq_len_max, n_subjects=None, n_observed=None,
     full_null_gb = full_null_bytes / (1024**3)
     chunked_gb = chunked_bytes / (1024**3)
 
-    # Calibrated on the published rat validation: 16,376 hypotheses with a defined
-    # statistic at M=10,000, timed end to end. Linear in the hypothesis count and
-    # linear in M, since the bootstrap fills M x n_valid entries and the step-down
-    # scans them. Leaving M out reported the same seconds for a run five times the
-    # size.
-    rat_cols = 16376
-    rat_resamples = 10000
-    rat_time = 12.3
-    est_time = rat_time * (n_valid / rat_cols) * (M / rat_resamples)
+    # Two terms, fitted to the two published validation runs at M=10,000: the human
+    # analysis, 408 hypotheses in about 3 seconds, and the rat analysis, 16,376 in
+    # about 12. A single point through the origin misses the fixed cost that
+    # dominates a small run -- compiling the kernels, building the count matrix --
+    # and reported "~0s" for a run the app then took several seconds to finish,
+    # which is a contradiction a user can see in one screen.
+    #
+    # Only the variable term scales with M: the bootstrap fills M x n_valid entries
+    # and the step-down scans them, while the fixed cost is paid once.
+    REF_RESAMPLES = 10000
+    FIXED_SECONDS = 2.8
+    SECONDS_PER_HYPOTHESIS = (12.0 - FIXED_SECONDS) / 16376
+    est_time = (FIXED_SECONDS
+                + SECONDS_PER_HYPOTHESIS * n_valid * (M / REF_RESAMPLES))
 
     if chunked_gb < 1.0:
         verdict = "TRIVIAL"

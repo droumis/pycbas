@@ -100,8 +100,21 @@ Read the Fixed section before comparing new output against old.
   peak is about twice the chunked one, as the documentation says. `n_observed` now
   overrides the worst case for both figures, as it always claimed to.
 - `estimate_resources` left `resample_number` out of its time estimate, reporting the
-  same seconds for a run five times the size. Time is linear in M and in the hypothesis
-  count; the measured calibration point is unchanged.
+  same seconds for a run five times the size.
+- The time estimate was a single measured point fitted through the origin, so it
+  under-reported every small run: the GUI offered "~0s" for an analysis it then took
+  several seconds to finish, on the same screen. It now carries a fixed cost as well as
+  a per-hypothesis one and reproduces both published validation runs.
+- **The GUI's plots took over the mouse wheel.** Bokeh makes wheel-zoom the active
+  scroll tool, so scrolling the page over a plot silently rescaled its axes instead of
+  moving the page, and a reader could not tell a wrecked view from a real one. This is
+  how the committed overview screenshot came to show a sequence axis running to ten
+  thousand and a negative `-log10(g-value)`, neither of which the code can produce. Zoom
+  remains in the toolbar, deliberately, with reset alongside it.
+- The Manhattan plot's axes were left to auto-range, spending most of the plot area on
+  regions that cannot hold a point: a g-value is at most 1, so `-log10(g)` is never
+  negative, and default padding on a log axis extended the sequence axis well past the
+  last sequence. Both axes are now fitted to the data.
 - The GUI resource estimate ignored `criterion_order` and `block_aware`, so switching to
   a performance-based criterion changed the real hypothesis count while the estimate did
   not move.

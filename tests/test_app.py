@@ -332,6 +332,50 @@ class TestResults:
         assert app.build_results_tabs() is not None
 
 
+class TestManhattanPlot:
+    """The figure in README.md, so its faults are the first thing anyone sees."""
+
+    @pytest.fixture
+    def rendered(self, loaded):
+        import holoviews as hv
+        app.seq_len_max_widget.value = 3
+        app.resample_widget.value = 200
+        app.block_selector.value = [1, 2, 3]
+        app.app_state.run_analysis()
+        column = app.make_manhattan_plot(app.app_state.result)
+        return hv.render(column[1].object), app.app_state.result
+
+    def test_the_wheel_is_not_bound_to_zoom(self, rendered):
+        """Otherwise scrolling the page over the plot rescales its axes instead.
+
+        This is not a cosmetic preference. Bokeh takes the scroll slot by default, so
+        a reader scrolling past the plot silently zooms it, and cannot tell the
+        wrecked view from the real one. It is how the committed overview screenshot
+        came to show a sequence axis running to ten thousand and a negative
+        -log10(g-value), neither of which this code can produce.
+        """
+        figure, _ = rendered
+        assert figure.toolbar.active_scroll is None
+        # still offered deliberately, with a reset to undo it
+        names = [type(t).__name__ for t in figure.toolbar.tools]
+        assert "WheelZoomTool" in names
+        assert "ResetTool" in names
+
+    def test_the_axes_are_fitted_to_the_data(self, rendered):
+        """Auto-ranging spent most of the plot area on regions with no points in them."""
+        figure, result = rendered
+        n_seq = len(result.sequences)
+
+        # a g-value is at most 1, so -log10(g) is never negative
+        assert figure.y_range.start > -0.1
+        assert figure.y_range.start <= 0, "room for the many sequences sitting at 0"
+
+        # the sequence axis stops near the last sequence rather than decades past it
+        assert figure.x_range.end < n_seq * 1.5, (figure.x_range.end, n_seq)
+        assert figure.x_range.end >= n_seq
+        assert 0 < figure.x_range.start <= 1, "the first sequence must be visible"
+
+
 # ---------------------------------------------------------------------------
 # Failure reporting
 # ---------------------------------------------------------------------------

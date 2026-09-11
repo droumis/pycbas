@@ -1575,6 +1575,23 @@ run_button.on_click(on_run_click)
 # --- Results ---
 results_tabs = pn.Column()
 
+def _no_scroll_zoom(plot, element):
+    """Bokeh hook: unbind the mouse wheel from zooming.
+
+    A plot embedded in a scrolling page is the default owner of the wheel, so
+    scrolling down the page over a plot zooms its axes instead of moving the page.
+    The reader then cannot tell a wrecked view from a real one, and neither can
+    anyone reading a screenshot of it afterwards: this is how the overview figure
+    came to show a sequence axis running to ten thousand and a negative
+    -log10(g-value), neither of which the code can produce.
+
+    `active_tools=[]` is not enough on its own, because bokeh resolves the scroll
+    slot to "auto" and picks wheel-zoom again. Zoom stays in the toolbar for anyone
+    who wants it, and the reset button restores the fitted view.
+    """
+    plot.state.toolbar.active_scroll = None
+
+
 def _split_sequence(entry):
     """(block, symbols) for one entry of `result.sequences`.
 
@@ -1746,12 +1763,27 @@ def make_manhattan_plot(result):
         color="black", line_dash="dotted", line_width=1,
     )
 
+    # Fit both axes to the data. Left to auto-range, the plot wastes most of its area
+    # on regions that cannot contain a point: a g-value is at most 1, so
+    # -log10(g) is never negative, and default padding on a log axis extends the
+    # sequence axis well past the last sequence.
+    y_top = max(float(df["neg_log_g"].max()), threshold) * 1.08 or 1.0
     plot = hv.Overlay(overlays) * hline
     plot = plot.opts(
         width=700, height=400,
         xlabel="Sequence (ranked by length)", ylabel="-log10(g-value)",
         title="Manhattan Plot",
         logx=True,
+        # 0.85 rather than 1 so the first sequence is not clipped by the axis line.
+        xlim=(0.85, n_seq * 1.03),
+        # A hair below zero for the same reason: many sequences sit exactly at 0.
+        ylim=(-0.02 * y_top, y_top),
+        # No active scroll tool. Bokeh makes wheel-zoom the active scroll tool by
+        # default, so a plot embedded in a scrolling page swallows the wheel and
+        # zooms instead: scrolling past this plot silently rescales its axes, and the
+        # reader cannot tell a wrecked view from the real one. Zoom stays available
+        # from the toolbar, deliberately.
+        active_tools=[], hooks=[_no_scroll_zoom],
     )
 
     legend_md = " | ".join(
@@ -1834,6 +1866,7 @@ def make_top_sequences_plot(result, n_top=20):
         title=f"Top {len(df)} Significant Sequences",
         invert_axes=True,
         show_legend=False,
+        active_tools=[], hooks=[_no_scroll_zoom],
     )
 
     legend_html = (
@@ -1873,9 +1906,11 @@ def make_k_convergence_plot(result):
 
     k_plot = (k_curve * k_scatter).opts(
         width=350, height=250, ylabel="k", title="k convergence",
+        active_tools=[], hooks=[_no_scroll_zoom],
     )
     rej_plot = (rej_curve * rej_scatter).opts(
         width=350, height=250, ylabel="Rejections", title="Rejections per iteration",
+        active_tools=[], hooks=[_no_scroll_zoom],
     )
 
     explanation = pn.pane.Markdown(
