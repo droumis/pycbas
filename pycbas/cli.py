@@ -65,9 +65,17 @@ def launch_gui(args):
 
     port = args.port if args.port else _find_open_port()
 
+    # Run panel through this interpreter rather than through whatever `panel` is
+    # first on PATH. Those are not always the same environment -- a conda base env
+    # ahead of an activated venv is enough -- and the failure is baffling: the server
+    # starts, the page loads, and then every callback dies with "No module named
+    # 'pycbas'" because the serving interpreter cannot see the package this process
+    # just imported successfully.
+    #
     # No --autoreload: it is a development flag, and panel emits a FutureWarning
     # about watchfiles that would otherwise be the first thing a new user sees.
-    cmd = ["panel", "serve", str(app_path), "--port", str(port)]
+    cmd = [sys.executable, "-m", "panel", "serve", str(app_path),
+           "--port", str(port)]
     if not args.no_browser:
         cmd.append("--show")
 
