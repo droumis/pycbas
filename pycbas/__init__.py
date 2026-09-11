@@ -37,7 +37,7 @@ from .contingency import (load_subject_data_with_contingencies,
                           build_multicontingency_count_matrix,
                           record_criteria)
 from .criterion import criterion_trial, reached_criterion
-from .core import subject_criteria
+from .core import subject_criteria, NonIntegerCountWarning
 
 __all__ = [
     "__version__",
@@ -52,6 +52,7 @@ __all__ = [
     "build_count_matrix",
     "compute_test_stats",
     "compute_test_stats_correlative",
+    "NonIntegerCountWarning",
     "bootstrap_test_stats",
     "bootstrap_test_stats_correlative",
     "romano_wolf_stepdown",

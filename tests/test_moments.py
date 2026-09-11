@@ -17,12 +17,12 @@ anti-conservative, so it cannot be dismissed as noise.
 See pycbas/_moments.py for why raw sums rather than centred deviations.
 """
 
-import sys
+import warnings
 
 import numpy as np
 import pytest
 
-from pycbas import CBASParams, compute_test_stats
+from pycbas import CBASParams, NonIntegerCountWarning, compute_test_stats
 from pycbas._moments import (sem_from_sums, sigma_from_sums,
                              sigma_from_sums_scalar, tie_rtol_for)
 from pycbas.bootstrap import (_bootstrap_chunk_into, _bootstrap_parallel,
@@ -193,6 +193,42 @@ def test_tie_rtol_is_zero_for_integer_matrices_and_positive_otherwise():
     assert 1e-15 < rtol < 1e-9
 
 
+def test_tie_rtol_scales_with_subjects_not_with_matrix_cells():
+    """`n` in `8 * n * eps` is the number of subjects, which is what it bounds.
+
+    The bug this pins: filtering non-finite entries flattened the array first, so
+    `n` became the count of surviving cells and the tolerance was inflated by
+    roughly the number of columns. A single NaN was enough to trigger it.
+    """
+    rng = np.random.default_rng(11)
+    rates = rng.random((105, 2000))
+    clean = tie_rtol_for(rates)
+
+    wide = rng.random((105, 20000))
+    assert tie_rtol_for(wide) == clean, "column count must not enter the bound"
+
+    taller = tie_rtol_for(rng.random((210, 2000)))
+    assert taller == pytest.approx(2 * clean), "doubling subjects doubles the bound"
+
+    with_nan = rates.copy()
+    with_nan[0, 0] = np.nan
+    assert tie_rtol_for(with_nan) == clean, "one NaN must not change the bound"
+
+
+def test_non_finite_entries_defeat_the_exactness_claim():
+    """A NaN or infinity propagates through the sums, so zero would be a lie."""
+    integral_with_nan = np.array([[1.0, 2.0], [3.0, np.nan]])
+    assert tie_rtol_for(integral_with_nan) > 0.0
+
+    integral_with_inf = np.array([[1.0, 2.0], [3.0, np.inf]])
+    assert tie_rtol_for(integral_with_inf) > 0.0
+
+    assert tie_rtol_for(np.full((10, 10), np.nan)) > 0.0
+
+    # the all-finite integer case is still exactly zero
+    assert tie_rtol_for(np.array([[1.0, 2.0], [3.0, 4.0]])) == 0.0
+
+
 def test_rate_matrix_ties_are_counted_with_the_derived_tolerance():
     """The regime with no exactness guarantee must still not drop its own ties.
 
@@ -201,7 +237,7 @@ def test_rate_matrix_ties_are_counted_with_the_derived_tolerance():
     places. With tie_rtol=0 the step-down discards them; with the derived value it
     does not. This pins that the derived tolerance is doing its job.
     """
-    from pycbas.stepdown import _stepdown_core_directional
+    from pycbas.stepdown import _prepare_null_sub, _stepdown_core_directional
 
     rng = np.random.default_rng(7)
     n0, n1, n_seq = 30, 28, 240
@@ -233,6 +269,63 @@ def test_rate_matrix_ties_are_counted_with_the_derived_tolerance():
     # the point of the tolerance: it recovers what strict comparison discards
     assert tolerant_dropped == 0
     assert strict_dropped > 0, "expected the rate matrix to expose the problem"
+
+    # And now through the step-down itself, which is where it matters and which an
+    # earlier version of this test imported without ever calling.
+    #
+    # The array comparison above shows that a rate matrix really does produce null
+    # values a few last places below the observed one. This builds a null out of
+    # exactly that: every row is the observed magnitude, two ULP low, in the observed
+    # direction. Each row therefore represents the observed value and an exact
+    # procedure must count all of them. A strict `>=` counts none.
+    magnitudes = np.where(np.isnan(observed[0::2]), observed[1::2], observed[0::2])
+    directions = np.where(np.isnan(observed[0::2]), np.int8(1), np.int8(0))
+    keep = ~np.isnan(magnitudes)
+    assert keep.sum() > 10, "precondition: enough defined statistics to be a test"
+
+    M = 200
+    null = np.tile(magnitudes, (M, 1))
+    for _ in range(2):
+        null = np.nextafter(null, -np.inf)
+    null_dirs = np.tile(directions, (M, 1)).astype(np.int8)
+
+    _, _, null_sub, obs_dirs, dir_sub = _prepare_null_sub(observed, null, null_dirs)
+    sorted_stats = np.sort(magnitudes[keep])[::-1].copy()
+
+    p_strict = _stepdown_core_directional(
+        sorted_stats, null_sub, dir_sub, obs_dirs, 1, 1.0, 0.0)
+    p_tolerant = _stepdown_core_directional(
+        sorted_stats, null_sub, dir_sub, obs_dirs, 1, 1.0, rtol)
+
+    # Strict: nothing in the null reaches the observed value, so the top hypothesis
+    # gets the floor, 1/(M+1). Tolerant: every row counts, so it gets 1.0.
+    assert p_strict[0] == pytest.approx(1 / (M + 1))
+    assert p_tolerant[0] == pytest.approx(1.0)
+    assert np.all(p_tolerant >= p_strict), "a tolerance can only add null matches"
+
+
+def test_non_integer_matrix_warns_once_with_its_own_category():
+    """The warning is the only thing telling a rates caller they have the bug.
+
+    It had no test, because it was gated on a module-level flag that could not be
+    reset: whichever test ran first consumed it and every later assertion saw
+    silence. Deduplication is the warnings module's job now, so this is observable.
+    """
+    rng = np.random.default_rng(12)
+    counts = rng.integers(0, 6, size=(12, 40)).astype(np.float64)
+    grp = [np.arange(6), np.arange(6, 12)]
+
+    with pytest.warns(NonIntegerCountWarning, match="not integer-valued"):
+        compute_test_stats(counts / 7.0, grp)
+
+    # Its own category, so a rates caller can silence this and nothing else.
+    assert issubclass(NonIntegerCountWarning, RuntimeWarning)
+
+    # An integer matrix must stay silent, whatever its dtype.
+    for matrix in (counts, counts.astype(np.int64)):
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", NonIntegerCountWarning)
+            compute_test_stats(matrix, grp)
 
 
 def test_paired_one_sample_form_is_order_independent():

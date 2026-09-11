@@ -128,10 +128,12 @@ TIE_ULP_BUDGET = 8.0
 def tie_rtol_for(matrix):
     """Relative tolerance the step-down needs for this matrix, possibly zero.
 
-    Returns exactly 0.0 when the matrix is integer-valued, because then the sums
-    are exact, the observed and null statistics agree bitwise, and a strict
+    Returns exactly 0.0 when every entry is finite and integer-valued, because then
+    the sums are exact, the observed and null statistics agree bitwise, and a strict
     comparison is correct. There is nothing to tolerate and tolerating anything
-    would be arbitrary.
+    would be arbitrary. A matrix holding any non-finite entry gets the tolerance
+    rather than zero: a NaN or infinity propagates through the sums, so no exactness
+    claim survives however integral the remaining values are.
 
     For a non-integer matrix, such as one normalised to rates, the sums are no
     longer order-independent and two orderings of the same values disagree in the
@@ -152,9 +154,17 @@ def tie_rtol_for(matrix):
     guarantee for free.
     """
     a = np.asarray(matrix)
-    if not np.all(np.isfinite(a)):
-        a = a[np.isfinite(a)]
+    # n is the number of subjects, which is what bounds the summation error: the
+    # statistic accumulates down rows. Taking it after flattening away non-finite
+    # entries counted matrix cells instead, inflating the tolerance by roughly the
+    # column count.
+    n = a.shape[0] if a.ndim else 1
+
+    finite = a[np.isfinite(a)] if not np.all(np.isfinite(a)) else a
+    if finite.size != a.size:
+        # A non-finite entry propagates through the sums, so no exactness claim can
+        # be made about this matrix whatever the remaining values look like.
+        return TIE_ULP_BUDGET * n * np.finfo(np.float64).eps
     if a.size and np.all(a == np.rint(a)):
         return 0.0
-    n = a.shape[0] if a.ndim else 1
     return TIE_ULP_BUDGET * n * np.finfo(np.float64).eps

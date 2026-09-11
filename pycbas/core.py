@@ -8,9 +8,14 @@ from .io import (extract_choice_stream, extract_choice_streams_by_block,
 from .criterion import criterion_trial, as_enumeration_cutoff
 from ._moments import sigma_from_sums
 
-#: One warning per session is enough: this is a property of the caller's data,
-#: not of any single call.
-_WARNED_NON_INTEGER = False
+
+class NonIntegerCountWarning(RuntimeWarning):
+    """The count matrix is not integer-valued, so tie handling is not exact.
+
+    Its own category so that callers who have decided to work in rates can silence
+    exactly this one with `warnings.filterwarnings`, without hiding every other
+    RuntimeWarning numpy might raise.
+    """
 
 
 def reward_blocks(subj_data, contingency=2, block_aware=False):
@@ -137,20 +142,23 @@ def compute_test_stats(count_matrix, group_indices):
     # Warned here rather than in the step-down because this is the one place every
     # path passes through that can see the matrix. `find_k_fwer` only ever receives
     # the null, so it cannot detect this for itself.
-    global _WARNED_NON_INTEGER
-    if not _WARNED_NON_INTEGER:
-        finite = count_matrix[np.isfinite(count_matrix)]
-        if finite.size and not np.all(finite == np.rint(finite)):
-            _WARNED_NON_INTEGER = True
-            warnings.warn(
-                "count matrix is not integer-valued. Observed and bootstrap "
-                "statistics are then not guaranteed to agree bitwise, so the "
-                "step-down's `null >= observed` can discard the resamples that "
-                "represent the observed value, which adds false positives. Pass "
-                "tie_rtol=pycbas._moments.tie_rtol_for(matrix) to the step-down, "
-                "or pass the integer count matrix instead if the normalising "
-                "denominator is common to every subject.",
-                RuntimeWarning, stacklevel=2)
+    #
+    # Deduplication is left to the warnings module, whose default filter already
+    # shows a given warning once per call site. A module-level "have I warned yet"
+    # flag did the same thing but could not be reset, so the warning was
+    # unobservable to a test that did not happen to run first, and untested as a
+    # result.
+    finite = count_matrix[np.isfinite(count_matrix)]
+    if finite.size and not np.all(finite == np.rint(finite)):
+        warnings.warn(
+            "count matrix is not integer-valued. Observed and bootstrap "
+            "statistics are then not guaranteed to agree bitwise, so the "
+            "step-down's `null >= observed` can discard the resamples that "
+            "represent the observed value, which adds false positives. Pass "
+            "tie_rtol=pycbas._moments.tie_rtol_for(matrix) to the step-down, "
+            "or pass the integer count matrix instead if the normalising "
+            "denominator is common to every subject.",
+            NonIntegerCountWarning, stacklevel=2)
 
     n0 = len(grp0)
     n1 = len(grp1)
