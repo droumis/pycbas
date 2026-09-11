@@ -6,6 +6,7 @@ Launch with: panel serve app.py --show
 Or install: pipx install pycbas[gui] && pycbas gui
 """
 
+import contextlib
 import io
 import sys
 import time
@@ -63,7 +64,13 @@ class CBASApp(param.Parameterized):
     # --- Parameters ---
     num_arms = param.Integer(default=2, bounds=(2, 20), doc="Number of choice symbols")
     seq_len_max = param.Integer(default=4, bounds=(2, 10), doc="Max sequence length")
-    criterion = param.Integer(default=200, bounds=(10, 5000), doc="Trials per subject to use")
+    # Lower bound 1, not 10: with a performance-based `criterion_order` the number
+    # counts rewards or runs rather than trials, and a count below ten is normal.
+    # `relabel_criterion_widget` raises the widget's own minimum back to 10 for the
+    # trial-count order, so the sensible floor is enforced where it depends on the
+    # order. Leaving this at 10 meant entering a small performance criterion raised
+    # ValueError inside the widget's watcher and took the app down.
+    criterion = param.Integer(default=200, bounds=(1, 5000), doc="Criterion count; units depend on criterion_order")
     criterion_order = param.Integer(default=0, bounds=(0, 8), doc="0 = trials, 1 = rewards, k = runs of k rewarded choices")
     resample_number = param.Integer(default=10000, bounds=(100, 50000), doc="Bootstrap resamples")
     encode_reward = param.Boolean(default=False, doc="Encode reward into symbols")
@@ -109,7 +116,6 @@ class CBASApp(param.Parameterized):
 
     def load_csv_files(self, file_contents_list, labels_or_scores):
         """Load from uploaded CSV file contents."""
-        from pycbas import load_subject_data
         self.subjects_data = []
         for content in file_contents_list:
             rows = []
@@ -166,7 +172,9 @@ class CBASApp(param.Parameterized):
             )
 
     _observed_cache_key = param.Parameter(default=None)
-    _observed_cache_val = param.Integer(default=0)
+    #: None when the count could not be determined, so the estimate falls back
+    #: to the worst case rather than reporting a hypothesis space of zero.
+    _observed_cache_val = param.Integer(default=None, allow_None=True)
 
     def _count_observed_sequences(self):
         """The hypothesis count the run will actually test.
@@ -208,8 +216,9 @@ class CBASApp(param.Parameterized):
                 n = len(sequences)
         except Exception:
             # An estimate is a convenience; a failure here must not block the run,
-            # which reports the real error itself.
-            n = 0
+            # which reports the real error itself. None rather than zero, so the
+            # estimate falls back to the worst case instead of reporting no memory.
+            n = None
         self._observed_cache_key = cache_key
         self._observed_cache_val = n
         return self._observed_cache_val
@@ -217,14 +226,26 @@ class CBASApp(param.Parameterized):
     def get_resource_estimate(self):
         from pycbas import estimate_resources
         n_observed = None
-        if self.data_loaded and self.subjects_data:
+        # `records` and `subjects_data` are mutually exclusive, and the
+        # multi-contingency loader sets `subjects_data` to []. Gating on
+        # `subjects_data` alone therefore skipped the count for every
+        # multi-contingency run and reported the enumerable sequence space as the
+        # hypothesis space, which is both wrong and insensitive to the block
+        # selection that determines the real count.
+        if self.data_loaded and (self.subjects_data or self.records):
             n_observed = self._count_observed_sequences()
+        # Each contingency block counts the sequence space again, so the ceiling the
+        # pane reports as "possible" has to be multiplied by the number of blocks.
+        # Otherwise it comes out below the observed count and the estimate reads as
+        # "3,542 of 1,884 possible".
+        n_sets = len(self.selected_blocks) if self.records else 1
         return estimate_resources(
             num_arms=self.num_arms,
             seq_len_max=self.seq_len_max,
             n_observed=n_observed,
             resample_number=self.resample_number,
             encode_reward=self.encode_reward,
+            n_hypothesis_sets=max(1, n_sets),
         )
 
 
@@ -359,6 +380,34 @@ folder_load_button = pn.widgets.Button(
 )
 
 
+def _has_two_header_info_table(info_file):
+    """Whether this info file is the multi-contingency format's two-header table.
+
+    That format opens with a title line and puts the column names on the second
+    line, which is why `load_cohort_info` reads line two for its columns. A
+    single-header table puts the column names first, and is what the loader below
+    this one handles. Distinguishing the two structurally, rather than by trying the
+    parser and catching everything, is what lets a genuine problem with
+    multi-contingency data be reported instead of silently mistaken for a different
+    format.
+    """
+    try:
+        lines = [line.strip() for line in
+                 info_file.read_text().splitlines() if line.strip()]
+    except OSError:
+        return False
+    if len(lines) < 3:
+        return False
+    return "," not in lines[0] and "," in lines[1]
+
+
+def _fail_multicontingency(message):
+    """Report a problem with data that is definitely the multi-contingency format."""
+    data_status.object = message
+    data_status.alert_type = "danger"
+    return True
+
+
 def _try_load_multicontingency(folder_path, info_file):
     """Load the multi-contingency format, or return False to fall through.
 
@@ -366,20 +415,37 @@ def _try_load_multicontingency(folder_path, info_file):
     strings rather than the 0/1 codes the published format uses. A blank means the
     subject had surgery but no lesion was evident, which is neither group, so those
     subjects are dropped rather than guessed at.
+
+    Returning False means "this is some other format, carry on"; returning True means
+    "handled", including when handling it meant reporting why it could not be loaded.
+    Once the info table is recognised as the two-header form, every failure takes the
+    second path, because falling through then produces "info file is empty or
+    malformed" from the single-header parser, which blames the wrong file and hides
+    the real diagnosis.
     """
     from pycbas.contingency import (load_cohort_with_contingencies,
                                     shared_contingency_blocks)
+    if not _has_two_header_info_table(info_file):
+        return False
+
     try:
         records, info = load_cohort_with_contingencies(folder_path)
-    except Exception:
-        return False
+    except Exception as exc:
+        return _fail_multicontingency(
+            f"**Could not load `{folder_path.name}/` as multi-contingency data:** "
+            f"{exc}")
     if not records or not info or len(records) != len(info):
-        return False
+        return _fail_multicontingency(
+            f"**`{folder_path.name}/` looks like multi-contingency data, but the "
+            f"subject files and `{info_file.name}` do not correspond one to one.**")
 
     group_col = next((c for c in ("lesion", "group", "label", "condition")
                       if c in info[0]), None)
     if group_col is None:
-        return False
+        return _fail_multicontingency(
+            f"**No group column in `{info_file.name}`.** A comparative analysis needs "
+            f"one of `lesion`, `group`, `label` or `condition`; the columns found "
+            f"were {', '.join(f'`{c}`' for c in info[0])}.")
 
     def to_group(value):
         if value is None:
@@ -403,16 +469,18 @@ def _try_load_multicontingency(folder_path, info_file):
             labels.append(g)
     dropped = len(records) - len(keep)
     if len(keep) < 2 or len(set(labels)) < 2:
-        return False
+        return _fail_multicontingency(
+            f"**Multi-contingency data loaded, but `{group_col}` does not define two "
+            f"groups.** {len(keep)} of {len(records)} subjects had a usable value, "
+            f"covering {len(set(labels))} group(s). A comparative analysis needs "
+            f"subjects in both.")
 
     try:
         blocks = shared_contingency_blocks(keep)
     except Exception as exc:
-        data_status.object = (
+        return _fail_multicontingency(
             f"**Multi-contingency data loaded, but the contingency blocks do not "
             f"line up:** {exc}")
-        data_status.alert_type = "danger"
-        return True
 
     # A column with a handful of distinct values is offered as a subject filter,
     # rather than applied silently. Cohorts that mix genotypes or experiments should
@@ -438,11 +506,21 @@ def _try_load_multicontingency(folder_path, info_file):
     app_state.group_labels = np.asarray(labels, dtype=np.int32)
     app_state.n_subjects = len(keep)
     app_state.mode = "Comparative"
-    app_state.encode_reward = True
-    app_state.block_aware = True
 
     n_arms = max(int(r.choice.max()) for r in keep) + 1
+
+    # Push these onto the widgets, not just onto the state. There is no reverse
+    # binding from state to widget, so setting only the state leaves the panel
+    # displaying something other than what the run will use, and the next edit of one
+    # of these widgets silently reverts the detected value. Reward encoding and
+    # block-awareness are both implied by this format rather than optional.
+    with _suspended_estimates():
+        num_arms_widget.value = max(2, n_arms)
+        encode_reward_widget.value = True
+        block_aware_widget.value = True
     app_state.num_arms = max(2, n_arms)
+    app_state.encode_reward = True
+    app_state.block_aware = True
 
     block_selector.options = list(blocks)
     block_selector.value = list(blocks)
@@ -450,9 +528,10 @@ def _try_load_multicontingency(folder_path, info_file):
     if filter_col is not None:
         distinct = sorted(set(filter_values))
         subject_filter.name = f"Restrict subjects by {filter_col}"
-        # Set options and value without firing the watcher's message, since the load
-        # message below is more informative on first load.
-        with param.parameterized.discard_events(subject_filter):
+        # Suspended, not event-discarded: the watcher would overwrite the load message
+        # below with a less informative one, but discarding the events would also stop
+        # panel pushing these to the browser, leaving the selector rendered empty.
+        with _suspended_estimates(), _suspended_subject_filter():
             subject_filter.options = distinct
             subject_filter.value = distinct
         subject_filter_row.visible = True
@@ -474,6 +553,12 @@ def _try_load_multicontingency(folder_path, info_file):
         + filter_note
     )
     data_status.alert_type = "success"
+    # The single-contingency paths call both of these at the end of their load; this
+    # one returns early and so has to do the same. Without them the resource estimate
+    # and the shortfall report stay blank until the user happens to touch one of the
+    # parameter widgets, which is exactly when they are most worth reading.
+    update_resource_estimate()
+    update_criterion_shortfall()
     return True
 
 
@@ -1054,8 +1139,25 @@ subject_filter = pn.widgets.MultiChoice(
 subject_filter_row = pn.Column(subject_filter, visible=False)
 
 
+_SUSPEND_SUBJECT_FILTER = False
+
+
+@contextlib.contextmanager
+def _suspended_subject_filter():
+    """Stop `_apply_subject_filter` running while a load populates the selector."""
+    global _SUSPEND_SUBJECT_FILTER
+    previous = _SUSPEND_SUBJECT_FILTER
+    _SUSPEND_SUBJECT_FILTER = True
+    try:
+        yield
+    finally:
+        _SUSPEND_SUBJECT_FILTER = previous
+
+
 def _apply_subject_filter(event=None):
     """Re-derive records, labels and shared blocks from the current selection."""
+    if _SUSPEND_SUBJECT_FILTER:
+        return
     from pycbas.contingency import shared_contingency_blocks
     keep_values = set(subject_filter.value)
     if not keep_values:
@@ -1103,6 +1205,11 @@ def _apply_subject_filter(event=None):
         f"{len(records) - n0} group 1. Contingency blocks shared by all of them: "
         f"{', '.join(str(b) for b in blocks)}.")
     data_status.alert_type = "success"
+    # Changing the selection changes the subjects, and therefore the hypothesis
+    # count and who falls short of the criterion. Both panes are recomputed rather
+    # than left showing the previous selection's numbers.
+    update_resource_estimate()
+    update_criterion_shortfall()
 
 
 subject_filter.param.watch(_apply_subject_filter, "value")
@@ -1122,6 +1229,10 @@ block_row = pn.Column(block_selector, visible=False)
 
 def _sync_selected_blocks(event):
     app_state.selected_blocks = list(event.new)
+    # Each block is its own hypothesis set, so this is the control with the largest
+    # effect on the hypothesis space. The estimate has to follow it.
+    update_resource_estimate()
+    update_criterion_shortfall()
 
 
 block_selector.param.watch(_sync_selected_blocks, "value")
@@ -1133,6 +1244,33 @@ block_aware_widget = pn.widgets.Checkbox(
 block_aware_tooltip = pn.widgets.TooltipIcon(
     value="When enabled, sequences are counted within blocks only and cannot span block/session boundaries. Enable for multi-session experiments.",
 )
+
+#: While true, `update_resource_estimate` and `update_criterion_shortfall` return
+#: immediately. Set by `_suspended_estimates` around a burst of widget updates.
+_SUSPEND_ESTIMATES = False
+
+
+@contextlib.contextmanager
+def _suspended_estimates():
+    """Defer the estimate and shortfall recomputation until a burst of edits is done.
+
+    A loader may touch half a dozen widgets, and each one would otherwise recompute
+    both panes, which means rebuilding the count matrix once per widget.
+
+    Note what this deliberately does not do: suppress the parameter events. Panel
+    pushes a widget's value to the browser through those same events, so setting a
+    value inside `param.parameterized.discard_events` updates the server and leaves
+    the page showing the old one. That is not a saving, it is the desynchronised
+    panel this was meant to fix.
+    """
+    global _SUSPEND_ESTIMATES
+    previous = _SUSPEND_ESTIMATES
+    _SUSPEND_ESTIMATES = True
+    try:
+        yield
+    finally:
+        _SUSPEND_ESTIMATES = previous
+
 
 def sync_params(*events):
     for e in events:
@@ -1204,6 +1342,8 @@ def update_criterion_shortfall():
     has, so the weakest subjects end up contributing the most data. That is worth
     surfacing before a run rather than discovering afterwards.
     """
+    if _SUSPEND_ESTIMATES:
+        return
     if not app_state.data_loaded or app_state.criterion_order == 0:
         criterion_shortfall_pane.visible = False
         return
@@ -1270,6 +1410,8 @@ def update_criterion_shortfall():
 
 
 def update_resource_estimate():
+    if _SUSPEND_ESTIMATES:
+        return
     if not app_state.data_loaded:
         resource_estimate_pane.visible = False
         return
@@ -1394,8 +1536,14 @@ def on_run_click(event):
                 app_state.run_analysis()
                 elapsed = time.perf_counter() - t0
                 pn.state.execute(lambda: finish_run(elapsed))
-            except Exception as e:
-                pn.state.execute(lambda: fail_run(str(e)))
+            except Exception as exc:
+                # Bind the message now. `except ... as e` unbinds `e` when the block
+                # ends, and `pn.state.execute` defers the callback onto the server's
+                # event loop when called from a background thread, so a lambda closing
+                # over `e` raised NameError there instead of reporting the failure:
+                # the run appeared to hang with the button stuck on "Running...".
+                message = str(exc)
+                pn.state.execute(lambda: fail_run(message))
 
         thread = threading.Thread(target=do_run, daemon=True)
         thread.start()
@@ -1445,6 +1593,18 @@ def _seq_label(entry, join="-"):
     block, symbols = _split_sequence(entry)
     body = join.join(str(x) for x in symbols)
     return f"c{block}: {body}" if block is not None else body
+
+
+def _seq_len(entry):
+    """Number of symbols in one entry of `result.sequences`.
+
+    Never use `len(entry)` for this. A multi-contingency entry is
+    `(block, (symbols...))`, so `len` is 2 for every hypothesis regardless of its
+    actual length, which is how the Manhattan plot's colours, the significance
+    table's Length column and the exported CSV's `length` column all came to report
+    2 for every row of a multi-contingency run.
+    """
+    return len(_split_sequence(entry)[1])
 
 
 def build_results_tabs():
@@ -1510,8 +1670,7 @@ def build_results_tabs():
 def make_manhattan_plot(result):
     n_seq = len(result.sequences)
     g_values = result.g_values
-    seq_lengths = np.array([len(_split_sequence(s)[1])
-                            for s in result.sequences])
+    seq_lengths = np.array([_seq_len(s) for s in result.sequences])
     unique_lens = sorted(set(seq_lengths))
 
     length_colors = ["#00e5ff", "#0099ff", "#0044dd", "#00aa44",
@@ -1638,7 +1797,7 @@ def make_top_sequences_plot(result, n_top=20):
             "t_stat": float(t_val) if not np.isnan(t_val) else 0.0,
             "g_value": g_val,
             "direction": direction,
-            "length": len(seq),
+            "length": _seq_len(seq),
         })
 
     if not rows:
@@ -1766,7 +1925,7 @@ def make_sig_table(result):
 
         rows.append({
             "Sequence": _seq_label(seq, join=" → "),
-            "Length": len(seq),
+            "Length": _seq_len(seq),
             "Direction": direction,
             "g-value": round(g_val, 6),
         })
@@ -1791,7 +1950,7 @@ def make_download_section(result):
         neg_t = result.test_stats[i * 2 + 1]
         rows.append({
             "sequence": _seq_label(seq),
-            "length": len(seq),
+            "length": _seq_len(seq),
             "t_positive": pos_t if not np.isnan(pos_t) else "",
             "t_negative": neg_t if not np.isnan(neg_t) else "",
             "g_positive": pos_g if not np.isnan(pos_g) else "",
