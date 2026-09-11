@@ -47,6 +47,10 @@ Read the Fixed section before comparing new output against old.
   multi-contingency run.
 
 - `pycbas --version`, and `python -m pycbas` as an equivalent to the console script.
+- `NonIntegerCountWarning`, the category `compute_test_stats` warns with, so it can be
+  filtered on its own.
+- Tests for the GUI, which had none. They run on a synthetic cohort, so they need no
+  unpublished data, and each pins one of the display and estimate faults listed below.
 - `pycbas.__version__`, and the version now has one source, `pycbas/__init__.py`, which
   `pyproject.toml` reads. Reading it the other way round reports whatever was last
   installed, which is misleading when a release can change numerical output.
@@ -90,9 +94,69 @@ Read the Fixed section before comparing new output against old.
 - `estimate_resources` overstated chunked memory by about 1.8x: it doubled the column
   count and ignored the direction array. The real allocation is
   `resample_number x hypotheses x 9` bytes.
+- **`estimate_resources` overstated the unchunked figure by the ratio of the enumerable
+  sequence space to the observed hypothesis count**, which is two orders of magnitude on
+  a sparse space. Both matrices are sized by the count matrix's columns, so the unchunked
+  peak is about twice the chunked one, as the documentation says. `n_observed` now
+  overrides the worst case for both figures, as it always claimed to.
+- `estimate_resources` left `resample_number` out of its time estimate, reporting the
+  same seconds for a run five times the size. Time is linear in M and in the hypothesis
+  count; the measured calibration point is unchanged.
 - The GUI resource estimate ignored `criterion_order` and `block_aware`, so switching to
   a performance-based criterion changed the real hypothesis count while the estimate did
   not move.
+- **The GUI never counted hypotheses for a multi-contingency run at all.** The estimate
+  was gated on the single-contingency subject list, which that path leaves empty, so the
+  pane reported the enumerable sequence space: a figure that depends only on the alphabet
+  and the sequence length, and that moves for neither the contingency blocks nor the
+  subjects. It now counts what the run will test, and follows both controls.
+- **The GUI crashed when given a small performance criterion.** Choosing an order above
+  trials lowers the criterion field's minimum to 1, because a performance level is
+  usually a small number, but the underlying parameter kept a lower bound of 10, so
+  entering one raised `ValueError` inside the widget's watcher.
+- **Multi-contingency results reported a sequence length of 2 for every hypothesis**, in
+  the Manhattan plot's length bands, the significant-sequences table and the exported
+  CSV's `length` column. Those keys are `(block, sequence)` pairs, so the length of the
+  key is not the length of the sequence. All four now go through one helper.
+- The GUI resource estimate and criterion shortfall report were not recomputed when the
+  subject filter or the contingency block selection changed, and were never populated by
+  a multi-contingency load at all, so they stayed blank or showed a previous selection's
+  numbers at the moment they were most worth reading.
+- After loading multi-contingency data the GUI's arm count, reward encoding and
+  block-aware settings were applied to the analysis but not to the widgets, so the panel
+  displayed something other than what the run would use, and editing one of those widgets
+  silently reverted the detected value.
+- A failed analysis reported nothing in the GUI, leaving the button on "Running...". The
+  failure callback closed over the `except ... as` variable, which Python unbinds at the
+  end of the block, and the callback is deferred onto the server's event loop.
+- **`pycbas gui` launched panel through whatever `panel` was first on `PATH`**, which is
+  not always the environment pycbas is installed in: a conda base env ahead of an
+  activated venv is enough. The server started, the page loaded, and then every callback
+  failed with "No module named 'pycbas'". It now runs panel through the current
+  interpreter.
+- **The GUI reported more sequences to test than were possible.** A multi-contingency run
+  counts the sequence space once per contingency block, but the ceiling shown alongside
+  the observed count was the space for a single block, so the pane read like
+  "3,542 (of 1,884 possible)". `estimate_resources` takes `n_hypothesis_sets` for this.
+- The multi-contingency loader set its detected arm count, reward encoding, block-aware
+  flag and subject filter with parameter events discarded. Panel pushes a widget's value
+  to the browser through those events, so the server was updated and the page was not:
+  the arm count read 2, the checkboxes were clear and the subject filter rendered empty
+  while the analysis used the detected values. The expensive recomputation is now
+  deferred instead of the events being suppressed.
+- A problem with multi-contingency data was reported as "info file is empty or
+  malformed". The loader's diagnosis, such as a contingency changing partway through a
+  session, was discarded by a blanket `except` and the fall-through then blamed the info
+  file. Format detection is now structural, so a recognised file that cannot be loaded
+  reports why.
+- `pycbas._moments.tie_rtol_for` derived its tolerance from the number of finite matrix
+  cells rather than the number of subjects whenever any entry was non-finite, inflating
+  it by roughly the column count, and returned zero for a matrix of all NaN. A non-finite
+  entry now defeats the exactness claim rather than supporting it.
+- The non-integer count matrix warning was gated on a module-level flag that could not be
+  reset, so it fired once per process and was unobservable to any test that did not run
+  first. Deduplication is the warnings module's job now, and the warning has its own
+  category, `NonIntegerCountWarning`, so a caller working in rates can silence exactly it.
 - An empty hypothesis space rendered in the GUI as "0 significant" after dividing by
   zero out of sight. It is a configuration error, usually a contingency filter matching
   no trials, and now says so.
