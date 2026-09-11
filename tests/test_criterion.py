@@ -6,7 +6,6 @@ and skips when the multi-contingency cohort is absent, following the same
 pattern as the Igor cross-validation in test_cbas.py.
 """
 
-from pathlib import Path
 
 import numpy as np
 import pytest
@@ -20,7 +19,6 @@ from pycbas.contingency import (assign_contingency_blocks,
                                 load_subject_data_with_contingencies,
                                 load_cohort_info)
 
-from conftest import LESION_COHORT_DIR, CRITERION_REFERENCE  # noqa: E402
 
 
 # ---------------------------------------------------------------------------

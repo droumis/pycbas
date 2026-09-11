@@ -2,7 +2,6 @@
 
 import numpy as np
 import pytest
-from pathlib import Path
 
 from pycbas import (
     CBASParams,
@@ -11,7 +10,6 @@ from pycbas import (
     enumerate_sequences,
     build_count_matrix,
     compute_test_stats,
-    bootstrap_test_stats,
     romano_wolf_stepdown,
     find_k_fwer,
     run_cbas_comparative,
