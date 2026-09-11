@@ -61,6 +61,17 @@ conda activate pycbas
 pip install -e '.[dev]'
 ```
 
+With pixi there is no separate install step for the common tasks; each one installs
+the package into the environment first:
+
+```bash
+pixi run gui      # launch the GUI, equivalent to `pycbas gui`
+pixi run test     # run the test suite
+```
+
+The pixi environment currently resolves for `osx-arm64` only, so contributors on
+other platforms should use option 2.
+
 ## Quick start
 
 ### Comparative mode (group differences)
