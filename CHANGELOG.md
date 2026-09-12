@@ -1,5 +1,30 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- **`decode_symbol`, `decode_sequence` and `split_sequence_entry`.** The inverse of the
+  symbol encoding `extract_choice_stream` applies, which previously existed only as
+  copies inside the analysis scripts. `decode_sequence` labels a count matrix column in
+  the published convention, arms numbered from 1 with a trailing `*` for a rewarded
+  choice. `decode_symbol` raises rather than reporting a plausible wrong arm when the
+  symbol is out of range for `num_arms`.
+
+- **The count matrix's row and column order is documented and tested.** Row `i` is
+  subject `i` of the input, always; column order follows cohort-wide totals, so it
+  shifts when cohort membership changes and `sequences` must travel with the matrix.
+
+### Fixed
+
+- **Group labels and covariates that do not describe the cohort now raise.** Passing
+  fewer labels than subjects analysed a subset and returned a complete-looking
+  `CBASResult`; a label outside `{0, 1}` dropped that subject just as silently, which is
+  what a cohort coded `1`/`2` looks like; an empty group produced all-NaN statistics
+  behind a `RuntimeWarning`. All three now fail at the pipeline entry points, naming
+  both counts. Exclude a subject by dropping it from `subjects_data`, not by labelling
+  it into neither group.
+
 ## 0.2.0
 
 Two additions: criteria that count performance instead of trials, and analysis across

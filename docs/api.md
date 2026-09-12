@@ -15,7 +15,12 @@ Run the full comparative CBAS pipeline from raw data to significant sequences.
 **Arguments**
 
 - `subjects_data` (list of ndarray) - One array per subject from `load_subject_data`.
-- `group_labels` (array-like of int) - 0 or 1 per subject indicating group membership.
+- `group_labels` (array-like of int) - 0 or 1 per subject indicating group membership,
+  in the same order as `subjects_data`. Raises `ValueError` if the count does not match
+  the number of subjects, if any label is outside {0, 1}, or if either group is empty:
+  each of those would otherwise analyse a cohort you did not pass, or produce all-NaN
+  statistics, and return a complete-looking result either way. Exclude a subject by
+  dropping it from `subjects_data`, not by labelling it into neither group.
 - `params` (CBASParams, optional) - Analysis parameters. Uses defaults if None.
 - `contingency` (int or None) - Trial condition to filter on. None uses all trials.
 - `encode_reward` (bool) - If True, symbol = choice + reward * num_arms (doubles alphabet). Set False for tasks where choice already encodes the outcome.
@@ -38,7 +43,8 @@ Run the full correlative CBAS pipeline.
 **Arguments**
 
 - `subjects_data` (list of ndarray) - One array per subject from `load_subject_data`.
-- `covariate` (array-like of float) - One continuous value per subject (e.g. a behavioral score).
+- `covariate` (array-like of float) - One continuous value per subject (e.g. a behavioral
+  score), in the same order as `subjects_data`. Raises `ValueError` on a length mismatch.
 - `params` (CBASParams, optional) - Analysis parameters.
 - `contingency` (int or None) - Trial condition to filter on. None uses all trials.
 - `encode_reward` (bool) - If True, symbol = choice + reward * num_arms (doubles alphabet).
@@ -72,7 +78,9 @@ Comparative CBAS across several contingencies, each counted as its own set of
 hypotheses. `records` comes from `load_cohort_with_contingencies`. Returns a
 `CBASResult` whose `sequences` entries are `(block, sequence_tuple)` pairs rather than
 bare tuples. Everything downstream of the count matrix is the ordinary comparative
-path. See [multiple contingencies](guide.md#multiple-contingencies).
+path, including the `group_labels` validation described under
+`run_cbas_comparative`, counted against `records`. See
+[multiple contingencies](guide.md#multiple-contingencies).
 
 ---
 

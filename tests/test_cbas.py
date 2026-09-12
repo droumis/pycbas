@@ -16,6 +16,7 @@ from pycbas import (
     romano_wolf_stepdown,
     find_k_fwer,
     run_cbas_comparative,
+    run_cbas_correlative,
 )
 
 from conftest import IGOR_DATA_DIR as DATA_DIR, require_reference_path
@@ -300,6 +301,48 @@ class TestCountMatrixRowOrder:
         import inspect
         taken = set(inspect.signature(build_count_matrix).parameters)
         assert not taken & {"group_labels", "groups", "labels", "covariate"}
+
+
+class TestCohortLabelValidation:
+    """Labels that do not describe the cohort must not reach a result.
+
+    Each of these returned a complete-looking CBASResult computed on a cohort the
+    caller never asked for, or on NaN, so the analysis silently answered a different
+    question. Nothing downstream can detect that, which is why it fails at entry.
+    """
+
+    params = CBASParams(num_arms=3, seq_len_max=2, criterion=80, resample_number=50)
+
+    def cohort(self, n=6):
+        return [synthetic_subject(s, n_trials=100) for s in range(n)]
+
+    def test_too_few_labels(self):
+        with pytest.raises(ValueError, match="5 group labels for 6 subjects"):
+            run_cbas_comparative(self.cohort(), np.array([0, 1, 0, 1, 0]), self.params)
+
+    def test_too_many_labels(self):
+        with pytest.raises(ValueError, match="8 group labels for 6 subjects"):
+            run_cbas_comparative(self.cohort(), np.zeros(8, dtype=int), self.params)
+
+    def test_label_outside_zero_one(self):
+        """A cohort coded 1/2 rather than 0/1 loses a subject per stray value."""
+        with pytest.raises(ValueError, match="neither group"):
+            run_cbas_comparative(self.cohort(), np.array([0, 1, 0, 1, 0, 2]),
+                                 self.params)
+
+    def test_empty_group(self):
+        with pytest.raises(ValueError, match="group 1 has no subjects"):
+            run_cbas_comparative(self.cohort(), np.zeros(6, dtype=int), self.params)
+
+    def test_covariate_length_mismatch(self):
+        with pytest.raises(ValueError, match=r"expected \(6,\)"):
+            run_cbas_correlative(self.cohort(), np.arange(4, dtype=float), self.params)
+
+    def test_valid_labels_still_run(self):
+        """The guard must not have narrowed what a correct call may pass."""
+        result = run_cbas_comparative(self.cohort(), np.array([0, 1, 0, 1, 0, 1]),
+                                      self.params)
+        assert len(result.sequences) == len(result.significant_mask)
 
 
 class TestBuildCountMatrix:

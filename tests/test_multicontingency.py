@@ -219,6 +219,14 @@ class TestPipeline:
         assert all(isinstance(b, int) and isinstance(s, tuple)
                    for b, s in result.sequences)
 
+    def test_labels_must_match_the_records(self):
+        """Same guard as the single-contingency path, counted against `records`."""
+        cohort = [two_block_record(s, n=60) for s in range(12)]
+        params = CBASParams(num_arms=3, seq_len_max=2, criterion=10_000,
+                            resample_number=50)
+        with pytest.raises(ValueError, match="11 group labels for 12 subjects"):
+            run_cbas_multicontingency(cohort, np.array([0, 1] * 5 + [0]), params)
+
     def test_chunked_and_unchunked_agree(self):
         """The chunked path is the default here, so it needs pinning.
 
