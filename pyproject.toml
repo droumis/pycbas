@@ -36,6 +36,10 @@ dev = [
     "matplotlib>=3.7",
     "pandas>=2.0",
     "scipy>=1.11",
+    # The GUI extra, because tests/test_app.py skips itself without panel. Left out,
+    # CI reported a green suite while silently omitting every test of the app, which
+    # is where the faults 0.2.0 fixes had been living undetected.
+    "pycbas[gui]",
 ]
 
 [project.scripts]
