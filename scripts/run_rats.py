@@ -33,6 +33,7 @@ from pycbas import (
     build_count_matrix,
     compute_test_stats,
     bootstrap_test_stats,
+    decode_sequence,
     find_k_fwer,
     find_k_fwer_chunked,
 )
@@ -55,16 +56,6 @@ def load_rats(cohort="all_published"):
     subjects_data, group_labels, records = load_rat_cohort(cohort)
     print(f"Cohort '{cohort}': {describe(records)}")
     return subjects_data, group_labels
-
-
-def decode_rat_sequence(seq, num_arms=6):
-    """Decode rat sequence: arm = sym % 6, rewarded = sym // 6, display as '{arm+1}*' if rewarded."""
-    parts = []
-    for s in seq:
-        arm = s % num_arms
-        rewarded = s // num_arms
-        parts.append(f"{arm+1}{'*' if rewarded else ''}")
-    return " ".join(parts)
 
 
 def make_figures(data):
@@ -293,7 +284,7 @@ def write_report(data, timings):
 |---|---|---|---|
 """
     for seq_str, direction, gval, slen in sig_seqs[:25]:
-        decoded = decode_rat_sequence(tuple(int(x) for x in seq_str.split("-")))
+        decoded = decode_sequence(tuple(int(x) for x in seq_str.split("-")))
         report += f"| {seq_str} | {direction} | {gval:.4f} | {decoded} |\n"
 
     report_path = RESULTS_DIR / "validation_report.md"

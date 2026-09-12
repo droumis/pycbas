@@ -198,6 +198,49 @@ Extract choice streams split by block/session boundaries. Used internally when `
 
 ---
 
+### `decode_symbol`
+
+```python
+decode_symbol(sym, num_arms=6, encode_reward=True)
+```
+
+Invert `extract_choice_stream`'s encoding.
+
+**Returns** `(choice, rewarded)`, choice 0-based and rewarded a bool, or None when
+`encode_reward` is False, since the outcome is then not recoverable from the symbol.
+Raises `ValueError` if the symbol is out of range for `num_arms`, because decoding with
+the wrong `num_arms` otherwise reports a plausible wrong arm.
+
+---
+
+### `decode_sequence`
+
+```python
+decode_sequence(entry, num_arms=6, encode_reward=True, join=" ")
+```
+
+Readable label for one entry of a `sequences` list, in the published convention: arms
+numbered from 1, a trailing `*` for a rewarded choice. With `num_arms=6` the symbol 2
+reads as `3` and the symbol 8 as `3*`. A `(block, sequence)` entry from the
+multi-contingency pipeline is prefixed with its block.
+
+**Returns** str.
+
+---
+
+### `split_sequence_entry`
+
+```python
+split_sequence_entry(entry)
+```
+
+`(block, symbols)` for one entry of a `sequences` list, with block None for a bare
+sequence. Use this rather than `len(entry)` to get a sequence's length: a
+multi-contingency entry is `(block, (symbols...))`, so `len` is 2 for every hypothesis
+whatever its actual length.
+
+---
+
 ### `enumerate_sequences`
 
 ```python
@@ -286,7 +329,8 @@ because it is driven by cohort-wide totals, adding or removing one subject can m
 most columns. Only sequences observed in at least one subject get a column at all.
 
 So keep `sequences` with the matrix and index through it. A bare column position is not
-meaningful across two runs, even two runs on nearly the same cohort.
+meaningful across two runs, even two runs on nearly the same cohort. `decode_sequence`
+turns an entry into a readable label.
 
 ---
 

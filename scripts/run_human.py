@@ -25,6 +25,7 @@ from pycbas import (
     build_count_matrix,
     compute_test_stats_correlative,
     bootstrap_test_stats_correlative,
+    decode_symbol,
     find_k_fwer,
 )
 from results_io import save_results_json, compute_significance_summary
@@ -56,9 +57,12 @@ def load_humans():
 
 
 def decode_human_symbol(sym, num_arms=6):
-    """Decode human symbol into choice description."""
-    choice = sym % num_arms
-    rewarded = sym // num_arms
+    """Decode human symbol into choice description.
+
+    The arm/reward split is the library's; only the naming of the choices is local
+    to this task.
+    """
+    choice, rewarded = decode_symbol(sym, num_arms)
     choice_names = ["L1", "R1", "L2", "R2", "NC1", "NC2"]
     name = choice_names[choice] if choice < len(choice_names) else f"c{choice}"
     if rewarded:

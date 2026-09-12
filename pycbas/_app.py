@@ -1595,14 +1595,12 @@ def _no_scroll_zoom(plot, element):
 def _split_sequence(entry):
     """(block, symbols) for one entry of `result.sequences`.
 
-    The multi-contingency pipeline keys columns by `(block, sequence)` because the
-    same arm sequence under two contingencies is two hypotheses. Everything else
-    keys by the sequence alone. The display code should not have to know which
-    pipeline produced the result, so it goes through here.
+    Thin alias for the library's `split_sequence_entry`, kept because the display
+    helpers below read better with the short name. The display code should not have
+    to know which pipeline produced the result, so it goes through here.
     """
-    if (len(entry) == 2 and isinstance(entry[1], tuple)):
-        return entry[0], entry[1]
-    return None, entry
+    from pycbas import split_sequence_entry
+    return split_sequence_entry(entry)
 
 
 def _seq_label(entry, join="-"):

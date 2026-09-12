@@ -19,7 +19,8 @@ __version__ = "0.2.0"
 
 from .params import CBASParams, CBASResult
 from .io import (load_subject_data, extract_choice_stream, extract_choice_streams_by_block,
-                 enumerate_sequences, enumerate_sequences_block_aware)
+                 enumerate_sequences, enumerate_sequences_block_aware,
+                 split_sequence_entry, decode_symbol, decode_sequence)
 from .core import build_count_matrix, compute_test_stats, compute_test_stats_correlative
 from .bootstrap import bootstrap_test_stats, bootstrap_test_stats_correlative
 from .stepdown import (
@@ -49,6 +50,9 @@ __all__ = [
     "extract_choice_streams_by_block",
     "enumerate_sequences",
     "enumerate_sequences_block_aware",
+    "split_sequence_entry",
+    "decode_symbol",
+    "decode_sequence",
     "build_count_matrix",
     "compute_test_stats",
     "compute_test_stats_correlative",

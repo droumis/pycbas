@@ -10,6 +10,9 @@ from pycbas import (
     enumerate_sequences,
     build_count_matrix,
     compute_test_stats,
+    decode_symbol,
+    decode_sequence,
+    split_sequence_entry,
     romano_wolf_stepdown,
     find_k_fwer,
     run_cbas_comparative,
@@ -69,6 +72,45 @@ class TestExtractChoiceStream:
         ], dtype=np.int32)
         stream = extract_choice_stream(data, contingency=2, num_arms=6)
         assert len(stream) == 2
+
+
+class TestDecodeSymbol:
+    """The decode is the inverse of `extract_choice_stream`'s encode, so test it as one."""
+
+    def test_round_trips_the_encoding(self):
+        data = np.column_stack([
+            np.zeros(12, dtype=np.int32),
+            np.tile(np.arange(6, dtype=np.int32), 2),
+            np.repeat([0, 1], 6).astype(np.int32),
+            np.full(12, 2, dtype=np.int32),
+        ])
+        stream = extract_choice_stream(data, contingency=2, num_arms=6)
+        for sym, choice, reward in zip(stream, data[:, 1], data[:, 2]):
+            assert decode_symbol(sym, num_arms=6) == (choice, bool(reward))
+
+    def test_wrong_num_arms_raises_rather_than_misreporting(self):
+        """The failure this guards is silent: a plausible wrong arm, not an error."""
+        with pytest.raises(ValueError, match="num_arms"):
+            decode_symbol(9, num_arms=3)
+
+    def test_reward_is_unknown_when_not_encoded(self):
+        # None, not False: the outcome is unrecoverable, not known to be absent.
+        assert decode_symbol(4, num_arms=6, encode_reward=False) == (4, None)
+
+
+class TestDecodeSequence:
+    def test_published_convention(self):
+        # Arms numbered from 1, trailing star for a rewarded choice.
+        assert decode_sequence((2,), num_arms=6) == "3"
+        assert decode_sequence((8,), num_arms=6) == "3*"
+        assert decode_sequence((5, 11), num_arms=6) == "6 6*"
+
+    def test_multicontingency_entry_keeps_its_block(self):
+        assert decode_sequence((1, (2, 8)), num_arms=6) == "c1: 3 3*"
+
+    def test_split_sequence_entry_distinguishes_the_two_forms(self):
+        assert split_sequence_entry((2, 8)) == (None, (2, 8))
+        assert split_sequence_entry((1, (2, 8))) == (1, (2, 8))
 
 
 class TestComputeTestStats:

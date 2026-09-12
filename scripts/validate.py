@@ -26,6 +26,7 @@ from pycbas import (
     build_count_matrix,
     compute_test_stats,
     bootstrap_test_stats,
+    decode_sequence,
     find_k_fwer,
     run_cbas_comparative,
 )
@@ -66,16 +67,6 @@ def load_all_rats(n_ctrl_max=None, n_les_max=None):
     group_labels = np.array([0] * len(ctrl_data) + [1] * len(les_data))
     filenames = ctrl_names + les_names
     return subjects_data, group_labels, filenames
-
-
-def decode_symbol(sym, num_arms=6):
-    arm = sym % num_arms
-    rewarded = sym // num_arms
-    return f"{arm+1}{'*' if rewarded else ''}"
-
-
-def decode_sequence(seq, num_arms=6):
-    return " ".join(decode_symbol(s, num_arms) for s in seq)
 
 
 def save_results(sequences, g_values, test_stats, significant, directions,
