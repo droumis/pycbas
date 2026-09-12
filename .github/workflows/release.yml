@@ -224,15 +224,26 @@ jobs:
         with:
           name: dist
           path: dist/
-      # The changelog is the release notes; keeping one source avoids the two drifting.
-      - name: Extract this version's changelog section
+      # The changelog is the release notes, so the two cannot drift. Only the lead
+      # paragraph is taken -- everything between the version heading and the first
+      # subsection -- with a link to the full section, because a release page nobody
+      # scrolls to the end of is not release notes.
+      - name: Extract this version's changelog lead
+        env:
+          REPO: ${{ github.repository }}
         run: |
-          awk -v ver="## ${TAG#v}" '
-            $0 == ver {flag=1; next}
-            /^## / && flag {exit}
-            flag
-          ' CHANGELOG.md > RELEASE_BODY.md
-          test -s RELEASE_BODY.md || {
+          {
+            awk -v ver="## ${TAG#v}" '
+              $0 == ver {flag=1; next}
+              /^#+ / && flag {exit}
+              flag
+            ' CHANGELOG.md
+            echo
+            echo "Full notes: [CHANGELOG.md](https://github.com/${REPO}/blob/${TAG}/CHANGELOG.md)"
+          } > RELEASE_BODY.md
+          # A version with no changelog section is a release nobody wrote notes for.
+          grep -q '[^[:space:]]' <(awk -v ver="## ${TAG#v}" '
+              $0 == ver {flag=1; next} /^#+ / && flag {exit} flag' CHANGELOG.md) || {
             echo "::error::no '## ${TAG#v}' section in CHANGELOG.md"; exit 1; }
           cat RELEASE_BODY.md
       # Draft, not published: the notes are worth reading before they are announced.

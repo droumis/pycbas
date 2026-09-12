@@ -2,8 +2,10 @@
 
 ## 0.2.0
 
-Two new capabilities, and one fix that can change results you have already reported.
-Read the Fixed section before comparing new output against old.
+Two additions: criteria that count performance instead of trials, and analysis across
+several task contingencies at once, both usable from the GUI. One fix changes numerical
+output. Re-running a 0.1.0 analysis can report fewer significant sequences, because the
+step-down mishandled ties at the alpha boundary and resolved them towards significance.
 
 ### Added
 
