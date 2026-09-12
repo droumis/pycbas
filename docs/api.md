@@ -108,7 +108,10 @@ build_multicontingency_count_matrix(records, params, blocks=None, encode_reward=
 
 The count matrix behind `run_cbas_multicontingency`. Returns
 `(sequences, count_matrix)` with columns grouped contiguously by contingency, so a
-single contingency can be sliced out.
+single contingency can be sliced out. Row `i` is `records[i]`, and within a contingency
+the columns follow the same rule as `build_count_matrix`; see
+[Row and column order](#row-and-column-order). Each `sequences` entry is a
+`(block, sequence)` pair rather than a bare tuple.
 
 ---
 
@@ -262,6 +265,28 @@ Build the full sequence count matrix across all subjects and all sequence length
 - `block_aware` (bool) - If True, sequences cannot span block/session boundaries.
 
 **Returns** `(sequences, count_matrix)` where sequences is a list of tuples and count_matrix is ndarray of shape (n_subjects, n_sequences).
+
+#### Row and column order
+
+**Row `i` is `subjects_data[i]`.** The order you pass in is the order you get back;
+subjects are never sorted or grouped, and this function is not given the group labels,
+so group structure cannot affect it. Group membership is applied later as indices into
+these rows, so the two groups need not be contiguous. Align group labels, covariates
+and any per-subject metadata to the matrix positionally.
+
+Note that the caller decides that order, and a cohort loader may impose one of its own:
+`load_cohort_with_contingencies` orders subjects by the digits in their filenames, and a
+caller that sorts its subjects by group before building the matrix gets group-blocked
+rows. Nothing in the returned value records which order was used.
+
+**Column `j` is `sequences[j]`.** Columns are ordered by total count summed over every
+subject, descending, with ties broken by sequence length and then by sequence value.
+They are *not* in order of first appearance, and the order depends on the cohort:
+because it is driven by cohort-wide totals, adding or removing one subject can move
+most columns. Only sequences observed in at least one subject get a column at all.
+
+So keep `sequences` with the matrix and index through it. A bare column position is not
+meaningful across two runs, even two runs on nearly the same cohort.
 
 ---
 

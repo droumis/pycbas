@@ -198,6 +198,68 @@ class TestLoadSubjectData:
         assert stream.max() < 12  # 6 arms * 2 (reward/no reward)
 
 
+def synthetic_subject(seed, n_trials=120, n_sessions=2, num_arms=3):
+    """One subject's (n_trials, 4) array of session, choice, reward, contingency."""
+    rng = np.random.default_rng(seed)
+    sessions = np.repeat(np.arange(1, n_sessions + 1), n_trials // n_sessions)
+    return np.column_stack([
+        sessions.astype(np.int32),
+        rng.integers(0, num_arms, len(sessions)).astype(np.int32),
+        rng.integers(0, 2, len(sessions)).astype(np.int32),
+        np.full(len(sessions), 2, dtype=np.int32),
+    ])
+
+
+class TestCountMatrixRowOrder:
+    """Row i of the count matrix is subject i of the input, always.
+
+    Callers align group labels, covariates and any per-subject metadata to the
+    matrix positionally, and nothing in the returned value would reveal a
+    permutation, so a reordering here would be silent and would misattribute every
+    subject. Downstream uses that consume the matrix directly rather than through
+    the pipeline depend on this too. It is cheap to pin, so pin it.
+    """
+
+    params = CBASParams(num_arms=3, seq_len_max=3, criterion=1000)
+
+    def test_permuting_input_permutes_rows(self):
+        subjects = [synthetic_subject(s) for s in range(6)]
+        perm = [4, 1, 5, 0, 3, 2]
+
+        sequences, counts = build_count_matrix(subjects, self.params)
+        perm_sequences, perm_counts = build_count_matrix(
+            [subjects[i] for i in perm], self.params)
+
+        np.testing.assert_array_equal(perm_counts, counts[perm])
+        # Column order is decided by totals over the whole cohort, so permuting the
+        # subjects must leave the labels alone; otherwise the row check above could
+        # pass against a matrix whose columns had also moved.
+        assert perm_sequences == sequences
+
+    def test_row_matches_that_subject_counted_alone(self):
+        """Stronger than the permutation check: rows are not merely self-consistent.
+
+        A build that mixed two subjects' counts into one row could still permute
+        consistently, so compare each row against a build of that subject by itself.
+        """
+        subjects = [synthetic_subject(s) for s in range(4)]
+        sequences, counts = build_count_matrix(subjects, self.params)
+        index = {seq: i for i, seq in enumerate(sequences)}
+
+        for i, subject in enumerate(subjects):
+            solo_sequences, solo_counts = build_count_matrix([subject], self.params)
+            for j, seq in enumerate(solo_sequences):
+                assert counts[i, index[seq]] == solo_counts[0, j]
+            absent = set(sequences) - set(solo_sequences)
+            assert np.all(counts[i, [index[seq] for seq in absent]] == 0)
+
+    def test_group_structure_cannot_reach_the_matrix(self):
+        """The signature is the guarantee: there is no label argument to honour."""
+        import inspect
+        taken = set(inspect.signature(build_count_matrix).parameters)
+        assert not taken & {"group_labels", "groups", "labels", "covariate"}
+
+
 class TestBuildCountMatrix:
     def test_small_subset(self):
         require_reference_path(DATA_DIR, "Igor reference data")
