@@ -371,6 +371,72 @@ est = estimate_resources(num_arms=12, seq_len_max=8, n_observed=5000)
 print_resource_estimate(est)
 ```
 
+## Working with the count matrix
+
+`build_count_matrix` produces the matrix every later stage reads, so it is where to start for anything CBAS does not do itself: a different statistic, an embedding, an EM fit.
+
+```python
+from pathlib import Path
+from pycbas import CBASParams, build_count_matrix, decode_sequence, load_subject_data
+
+paths = sorted(Path("data/cohort").glob("*.txt"))
+
+# Build the ids, the arrays and the labels in one pass, so they cannot fall out of step.
+cohort = [(p.stem, load_subject_data(p), 0 if "control" in p.stem else 1)
+          for p in paths]
+subject_ids, subjects_data, group_labels = (list(x) for x in zip(*cohort))
+
+params = CBASParams(num_arms=6, seq_len_max=3, criterion=400)
+sequences, counts = build_count_matrix(subjects_data, params, contingency=2)
+
+counts.shape        # (len(subjects_data), len(sequences))
+```
+
+**Row `i` is `subjects_data[i]`.** Subjects are never sorted or grouped on the way in, and `build_count_matrix` is not given the group labels, so nothing about the groups can move a row. Membership is applied afterwards, as row indices.
+
+**Column `j` is `sequences[j]`.** Columns are ordered by each sequence's total count over the whole cohort, not by order of appearance, and that order changes when the cohort changes. Keep `sequences` with the matrix and look columns up through it rather than by position. The full rule is in the [API reference](api.md#row-and-column-order).
+
+Print both to see the mapping on your own data:
+
+```python
+for i, subject_id in enumerate(subject_ids):
+    print(f"row {i}  {subject_id}  group {group_labels[i]}")
+
+for j in range(5):
+    print(f"col {j}  {sequences[j]}  {decode_sequence(sequences[j], num_arms=6)}")
+```
+
+`decode_sequence` writes a symbol tuple in the published convention, so `(8,)` with six arms reads as `3*`, meaning arm 3, rewarded.
+
+### Reordering rows
+
+Nothing in the matrix records which order was used, so permute every per-subject array in the same step:
+
+```python
+import numpy as np
+
+order = np.argsort(group_labels, kind="stable")   # group 0 first, then group 1
+counts = counts[order]
+subject_ids = [subject_ids[i] for i in order]
+group_labels = [group_labels[i] for i in order]
+```
+
+The pipeline rejects a label vector of the wrong length, or one holding values outside `{0, 1}`. It cannot detect a permuted vector of the right length, so assemble the cohort in one pass as above.
+
+### Taking one contingency
+
+Entries from `build_multicontingency_count_matrix` are `(block, sequence)` pairs, and columns are contiguous by block, so one contingency slices out:
+
+```python
+from pycbas import split_sequence_entry
+
+block1 = [j for j, entry in enumerate(sequences)
+          if split_sequence_entry(entry)[0] == 1]
+counts[:, block1]
+```
+
+Use `split_sequence_entry` for a sequence's length too. `len(entry)` is 2 for every pair, whatever the sequence length.
+
 ## Using individual pipeline stages
 
 For custom workflows, you can call each stage separately:

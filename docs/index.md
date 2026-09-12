@@ -52,6 +52,7 @@ print(f"{result.n_significant} significant sequences (k={result.k_final})")
 - **Ready to run your own data?** The [User Guide](guide.md) covers data formats, parameter selection, and working with results.
 - **Want the math?** The [Algorithm](algorithm.md) page details the step-down procedure and k-FWER iteration.
 - **Prefer no code?** pyCBAS includes an [Interactive GUI](app.md) that handles data loading, parameter detection, higher-order criteria, several contingencies at once, and visualization.
+- **Using the count matrix for your own analysis?** [Working with the count matrix](guide.md#working-with-the-count-matrix) explains what its rows and columns are.
 - **Building on pyCBAS?** The [API Reference](api.md) documents all public functions and classes.
 
 ## Performance
