@@ -379,12 +379,12 @@ print_resource_estimate(est)
 from pathlib import Path
 from pycbas import CBASParams, build_count_matrix, decode_sequence, load_subject_data
 
-paths = sorted(Path("data/cohort").glob("*.txt"))
-
-# Build the ids, the arrays and the labels in one pass, so they cannot fall out of step.
-cohort = [(p.stem, load_subject_data(p), 0 if "control" in p.stem else 1)
-          for p in paths]
-subject_ids, subjects_data, group_labels = (list(x) for x in zip(*cohort))
+# One pass over the files, so the ids, the arrays and the labels cannot fall out of step.
+subject_ids, subjects_data, group_labels = [], [], []
+for path in sorted(Path("data/cohort").glob("*.txt")):
+    subject_ids.append(path.stem)
+    subjects_data.append(load_subject_data(path))
+    group_labels.append(0 if "control" in path.stem else 1)   # your own group rule here
 
 params = CBASParams(num_arms=6, seq_len_max=3, criterion=400)
 sequences, counts = build_count_matrix(subjects_data, params, contingency=2)
@@ -421,21 +421,24 @@ subject_ids = [subject_ids[i] for i in order]
 group_labels = [group_labels[i] for i in order]
 ```
 
-The pipeline rejects a label vector of the wrong length, or one holding values outside `{0, 1}`. It cannot detect a permuted vector of the right length, so assemble the cohort in one pass as above.
+The pipeline rejects a label vector whose length does not match the cohort, holds values outside `{0, 1}`, or leaves a group empty. It cannot detect a permuted vector of the right length, so assemble the cohort in one pass as above.
 
-### Taking one contingency
+### One contingency at a time
 
-Entries from `build_multicontingency_count_matrix` are `(block, sequence)` pairs, and columns are contiguous by block, so one contingency slices out:
+[Multiple contingencies](#multiple-contingencies) covers that format and its loader. Its count matrix labels every column with a `(block, sequence)` pair and keeps the blocks contiguous, so one contingency slices out, with `records` from that section:
 
 ```python
-from pycbas import split_sequence_entry
+from pycbas import build_multicontingency_count_matrix, split_sequence_entry
 
-block1 = [j for j, entry in enumerate(sequences)
-          if split_sequence_entry(entry)[0] == 1]
-counts[:, block1]
+sequences, counts = build_multicontingency_count_matrix(records, params)
+
+# sequences[j] is a pair here, e.g. (1, (8,)), so select on its block.
+in_block_1 = [j for j, entry in enumerate(sequences)
+              if split_sequence_entry(entry)[0] == 1]
+counts[:, in_block_1]
 ```
 
-Use `split_sequence_entry` for a sequence's length too. `len(entry)` is 2 for every pair, whatever the sequence length.
+`split_sequence_entry` also gives a sequence's length, which `len(entry)` does not: `len` is 2 for every pair, whatever the sequence length. Given a bare entry from `build_count_matrix` it reports a block of `None`, so a block test against those selects nothing rather than raising.
 
 ## Using individual pipeline stages
 
