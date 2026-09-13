@@ -167,12 +167,13 @@ default id.
 ### `resolve_labels`
 
 ```python
-resolve_labels(labels, ids, cohort_ids=None)
+resolve_labels(labels, ids, cohort_ids=None, what="labels")
 ```
 
-Labels for `ids`, from a `{id: label}` mapping or a sequence in cohort order. A sequence
-is converted to a mapping first, so the result follows `ids` even when those are not in
-cohort order. This is what the pipelines use to align labels to matrix rows.
+Values for `ids`, from a `{id: value}` mapping or a list in cohort order. A list is
+converted to a mapping first, so the result follows `ids` even when those are not in
+cohort order. This is what the pipelines use to align labels and covariates to matrix
+rows; `what` names the thing being resolved so the error messages read correctly.
 
 ---
 
@@ -185,6 +186,11 @@ default_group_coder(value)
 0, 1, or None for a raw group value from a cohort table. None means "not usable", which
 is distinct from either group: a blank or unrecognised value is not evidence of
 membership, so it is not guessed at.
+
+Exact words are matched first, then a substring, so `Hippocampal Lesion` reads as 1. That
+last step reads words rather than sentences, so a table spelling out `no lesion evident`
+is also read as 1; pass an explicit `coder` to `labels_from` when a table phrases its
+groups that way.
 
 ---
 
@@ -228,6 +234,32 @@ Load every `an*.txt` subject file in a directory, ordered numerically, plus the
 `anInfo.txt` table if present. Returns a `Cohort` whose subjects carry the info
 table's columns as `meta`, so a grouping or filter can be named rather than assembled
 alongside. Raises if the file count and the info row count disagree.
+
+---
+
+### `load_subject_with_contingencies`
+
+```python
+load_subject_with_contingencies(filepath, allow_mid_session_change=False, id=None,
+                                meta=None)
+```
+
+One subject from the multi-contingency text format. Returns a `Subject` whose `condition`
+column is the contingency block index and whose `blocks` describe each block's arms, with
+the filename stem as the default id. Raises by default when a contingency changes partway
+through a session; `allow_mid_session_change=True` permits it.
+
+---
+
+### `load_cohort_info`
+
+```python
+load_cohort_info(filepath)
+```
+
+Parse an `anInfo.txt` cohort table into a list of dicts, one per subject, in file order.
+`load_cohort_with_contingencies` calls this and attaches each row to its subject as
+`meta`, so you only need it directly to inspect the table itself.
 
 ---
 

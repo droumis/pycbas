@@ -13,6 +13,7 @@ import numpy as np
 import pytest
 
 from pycbas import CBASParams, Cohort, Subject
+from pycbas import contingency_criteria
 from pycbas.contingency import (assign_contingency_blocks,
                                 build_multicontingency_count_matrix,
                                 shared_contingency_blocks,
@@ -216,6 +217,44 @@ class TestMultiContingencyCounts:
 # ---------------------------------------------------------------------------
 # Pipeline
 # ---------------------------------------------------------------------------
+
+class TestContingencyCriteria:
+    """One criterion per subject per contingency, keyed by id.
+
+    The shape is the point: a subject can reach the criterion in one contingency and
+    fall short in another, and a shortfall report has to be able to name the subject
+    rather than an index into a list the caller must still be holding.
+    """
+
+    def cohort(self, n=4):
+        return Cohort([two_block_record(s, n=60) for s in range(n)])
+
+    def test_keyed_by_subject_then_block(self):
+        cohort = self.cohort()
+        params = CBASParams(num_arms=3, seq_len_max=2, criterion=5, criterion_order=1)
+
+        criteria, blocks = contingency_criteria(cohort, params)
+
+        assert set(criteria) == set(cohort.ids)
+        assert blocks == shared_contingency_blocks(cohort)
+        for subject_id, per_block in criteria.items():
+            assert set(per_block) == set(blocks), subject_id
+            assert all(np.isfinite(v) or np.isinf(v) for v in per_block.values())
+
+    def test_an_unreachable_criterion_is_inf_not_an_error(self):
+        cohort = self.cohort()
+        params = CBASParams(num_arms=3, seq_len_max=2, criterion=10_000,
+                            criterion_order=1)
+        criteria, blocks = contingency_criteria(cohort, params)
+        assert all(np.isinf(v) for per in criteria.values() for v in per.values())
+
+    def test_restricting_blocks_restricts_the_keys(self):
+        cohort = self.cohort()
+        params = CBASParams(num_arms=3, seq_len_max=2, criterion=5, criterion_order=1)
+        criteria, blocks = contingency_criteria(cohort, params, blocks=[1])
+        assert blocks == [1]
+        assert all(set(per) == {1} for per in criteria.values())
+
 
 class TestPipeline:
     def test_runs_end_to_end(self):

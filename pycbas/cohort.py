@@ -77,10 +77,6 @@ class Subject:
     def has_blocks(self):
         return self.blocks is not None
 
-    def conditions(self):
-        """Sorted condition values this subject has trials for."""
-        return sorted(int(c) for c in np.unique(self.condition))
-
     def alternation_blocks(self):
         """Blocks excluding exploration. Multi-contingency subjects only."""
         self._require_blocks()
@@ -254,6 +250,10 @@ def default_group_coder(value):
 
     None means "not usable", which is different from either group: a blank or
     unrecognised value is not evidence of membership, so it must not be guessed at.
+
+    Exact words are matched before a substring, so "Hippocampal Lesion" reads as 1. The
+    substring step reads words rather than sentences, so "no lesion evident" reads as 1
+    too; a table phrasing its groups that way needs an explicit coder.
     """
     if value is None:
         return None
@@ -281,8 +281,8 @@ def default_group_coder(value):
 _default_coder = default_group_coder
 
 
-def resolve_labels(labels, ids, cohort_ids=None):
-    """Group labels for `ids`, from a mapping, a cohort order, or a `meta` key.
+def resolve_labels(labels, ids, cohort_ids=None, what="labels"):
+    """Values for `ids`, from a mapping or a sequence in cohort order.
 
     Accepts a `{id: label}` mapping, a sequence in cohort order, or the name of a
     `meta` column when `labels` is a string and a cohort is given. A sequence is
@@ -294,19 +294,19 @@ def resolve_labels(labels, ids, cohort_ids=None):
         missing = [i for i in ids if i not in labels]
         if missing:
             raise ValueError(
-                f"no label for {len(missing)} of {len(ids)} subjects: "
+                f"no {what.rstrip('s')} for {len(missing)} of {len(ids)} subjects: "
                 f"{missing[:6]}{'...' if len(missing) > 6 else ''}")
         return np.asarray([labels[i] for i in ids])
 
     values = np.asarray(labels)
     if values.ndim != 1:
-        raise ValueError(f"labels must be one-dimensional, got shape {values.shape}")
+        raise ValueError(f"{what} must be one-dimensional, got shape {values.shape}")
     order = list(cohort_ids) if cohort_ids is not None else list(ids)
     if len(values) != len(order):
         raise ValueError(
-            f"{len(values)} labels for {len(order)} subjects; they must correspond "
+            f"{len(values)} {what} for {len(order)} subjects; they must correspond "
             f"one to one, in the same order")
-    return resolve_labels(dict(zip(order, values.tolist())), ids)
+    return resolve_labels(dict(zip(order, values.tolist())), ids, what=what)
 
 
 @dataclass
@@ -425,7 +425,13 @@ def load_cohort(source, pattern="*.txt", meta=None, ids=None):
             subject_meta = meta[i]
         else:
             subject_meta = {}
-        subjects.append(load_subject(path, id=subject_id, meta=subject_meta))
+        try:
+            subjects.append(load_subject(path, id=subject_id, meta=subject_meta))
+        except Exception as exc:
+            raise ValueError(
+                f"could not read {path} as subject data: {exc}. Every file matching "
+                f"{pattern!r} in a cohort directory is loaded, so point `pattern` at "
+                f"the subject files if the folder holds anything else.") from None
     return Cohort(subjects)
 
 

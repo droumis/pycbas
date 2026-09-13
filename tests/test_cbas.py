@@ -459,7 +459,8 @@ class TestCohortLabelValidation:
             run_cbas_comparative(self.cohort(), np.zeros(6, dtype=int), self.params)
 
     def test_covariate_length_mismatch(self):
-        with pytest.raises(ValueError, match="4 labels for 6 subjects"):
+        # Named as a covariate, not as labels: the shared resolver is told what it holds.
+        with pytest.raises(ValueError, match="4 covariate values for 6 subjects"):
             run_cbas_correlative(self.cohort(), np.arange(4, dtype=float), self.params)
 
     def test_valid_labels_still_run(self):

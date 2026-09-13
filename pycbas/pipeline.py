@@ -62,9 +62,10 @@ def _check_covariate(covariate, cohort, row_ids):
     if isinstance(covariate, str):
         values = resolve_labels(dict(zip(cohort.ids,
                                          cohort.covariate_from(covariate).tolist())),
-                                row_ids)
+                                row_ids, what="covariate values")
     else:
-        values = resolve_labels(covariate, row_ids, cohort_ids=cohort.ids)
+        values = resolve_labels(covariate, row_ids, cohort_ids=cohort.ids,
+                                what="covariate values")
     return np.asarray(values, dtype=np.float64)
 
 

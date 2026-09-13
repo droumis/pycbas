@@ -73,6 +73,17 @@ used to return a complete-looking result.
   subject `i` of the input, always; column order follows cohort-wide totals, so it
   shifts when cohort membership changes and `sequences` must travel with the matrix.
 
+- **Cohort assembly helpers.** `load_cohort` builds a cohort from a directory or a list
+  of files, `load_subject` loads one, and `load_cohort_info` parses an `anInfo.txt` table
+  on its own. `Cohort.filter`, `reorder`, `labels_from` and `covariate_from` derive a
+  subset, an order or an analysis's labels without a second list to keep in step.
+
+- **`default_group_coder` and `resolve_labels`.** The first is the vocabulary that turns
+  a cohort table's wording into 0 or 1, exported so that loading a cohort in Python and
+  loading it in the app agree on what `sham` means. The second resolves labels for a set
+  of subject ids from either a mapping or a list, and is what the pipelines use to match
+  labels to the count matrix's rows.
+
 - **Higher-order criteria.** `CBASParams.criterion_order` sets what `criterion`
   counts: `0` trials, as before; `1` rewarded trials; `k` runs of `k` consecutive
   rewarded choices. Each subject's stream is truncated where it reaches that level of

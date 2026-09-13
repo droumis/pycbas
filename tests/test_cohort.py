@@ -8,8 +8,8 @@ filter, a label supplied in a different order from the rows it describes.
 import numpy as np
 import pytest
 
-from pycbas import (CountMatrix, Cohort, Subject, load_cohort, load_subject,
-                    resolve_labels)
+from pycbas import (CountMatrix, Cohort, Subject, default_group_coder, load_cohort,
+                    load_subject, resolve_labels)
 
 
 def trials(n=40, seed=0, condition=2, n_sessions=2):
@@ -186,6 +186,46 @@ class TestCountMatrix:
     def test_column_labels_decode(self):
         m = CountMatrix(np.zeros((1, 2)), ["a"], [(2,), (8,)])
         assert m.column_labels(num_arms=6) == ["3", "3*"]
+
+
+class TestDefaultGroupCoder:
+    """The vocabulary that decides group membership, shared by the library and the app.
+
+    Untested it would be free to drift, and it is the one place where a cohort table's
+    wording turns into a 0 or a 1.
+    """
+
+    @pytest.mark.parametrize("value", [0, "0", "control", "Control", "CTRL", "sham",
+                                       "WT", "wildtype", "  control  ", False])
+    def test_group_zero_words(self, value):
+        assert default_group_coder(value) == 0
+
+    @pytest.mark.parametrize("value", [1, "1", "lesion", "Hippocampal Lesion", "KO",
+                                       "knockout", "mutant", "experimental", True])
+    def test_group_one_words(self, value):
+        assert default_group_coder(value) == 1
+
+    @pytest.mark.parametrize("value", [None, "", "   ", "unknown", "genotype", 2, -1,
+                                       0.5, "n/a"])
+    def test_unusable_values_are_not_guessed_at(self, value):
+        # None rather than a default group: a value that says nothing is not evidence.
+        assert default_group_coder(value) is None
+
+    def test_substring_fallback_places_a_descriptive_label(self):
+        # What the fallback is for: real tables say "Hippocampal Lesion", not "lesion".
+        assert default_group_coder("Hippocampal Lesion") == 1
+        assert default_group_coder("sham control surgery") == 0
+
+    def test_the_substring_fallback_reads_words_and_not_sentences(self):
+        """A documented limitation, pinned so it is a known cost rather than a surprise.
+
+        A table that spells out "no lesion evident" is read as lesion, because the
+        fallback looks for the word. The cohorts this vocabulary was built for leave
+        that field blank, which reads as unusable instead. A table that phrases its
+        groups as sentences needs an explicit coder.
+        """
+        assert default_group_coder("no lesion evident") == 1
+        assert default_group_coder("lesion-free") == 1
 
 
 class TestLoaders:
