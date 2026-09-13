@@ -1,6 +1,13 @@
 # Changelog
 
-## Unreleased
+## 0.2.0
+
+Criteria that count performance instead of trials, analysis across several task
+contingencies at once, both usable from the GUI, and a symbol decode for reading a count
+matrix's columns. Two fixes change behaviour. Re-running a 0.1.0 analysis can report
+fewer significant sequences, because the step-down mishandled ties at the alpha boundary
+and resolved them towards significance; and labels that do not describe the cohort now
+raise where they used to return a complete-looking result.
 
 ### Added
 
@@ -14,25 +21,6 @@
 - **The count matrix's row and column order is documented and tested.** Row `i` is
   subject `i` of the input, always; column order follows cohort-wide totals, so it
   shifts when cohort membership changes and `sequences` must travel with the matrix.
-
-### Fixed
-
-- **Group labels and covariates that do not describe the cohort now raise.** Passing
-  fewer labels than subjects analysed a subset and returned a complete-looking
-  `CBASResult`; a label outside `{0, 1}` dropped that subject just as silently, which is
-  what a cohort coded `1`/`2` looks like; an empty group produced all-NaN statistics
-  behind a `RuntimeWarning`. All three now fail at the pipeline entry points, naming
-  both counts. Exclude a subject by dropping it from `subjects_data`, not by labelling
-  it into neither group.
-
-## 0.2.0
-
-Two additions: criteria that count performance instead of trials, and analysis across
-several task contingencies at once, both usable from the GUI. One fix changes numerical
-output. Re-running a 0.1.0 analysis can report fewer significant sequences, because the
-step-down mishandled ties at the alpha boundary and resolved them towards significance.
-
-### Added
 
 - **Higher-order criteria.** `CBASParams.criterion_order` sets what `criterion`
   counts: `0` trials, as before; `1` rewarded trials; `k` runs of `k` consecutive
@@ -85,6 +73,14 @@ step-down mishandled ties at the alpha boundary and resolved them towards signif
 - `CHANGELOG.md`, which did not exist before.
 
 ### Fixed
+
+- **Group labels and covariates that do not describe the cohort now raise.** Passing
+  fewer labels than subjects analysed a subset and returned a complete-looking
+  `CBASResult`; a label outside `{0, 1}` dropped that subject just as silently, which is
+  what a cohort coded `1`/`2` looks like; an empty group produced all-NaN statistics
+  behind a `RuntimeWarning`. All three now fail at the pipeline entry points, naming
+  both counts. Exclude a subject by dropping it from `subjects_data`, not by labelling
+  it into neither group.
 
 - **The observed and bootstrap statistics now agree bitwise, which changes results at
   ties.** The step-down asks whether a bootstrap statistic reaches the observed one
