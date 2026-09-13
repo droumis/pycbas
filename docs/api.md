@@ -15,9 +15,13 @@ Run the full comparative CBAS pipeline from raw data to significant sequences.
 **Arguments**
 
 - `cohort` (Cohort) - Subjects from `load_cohort`, or built directly.
-- `group_labels` - how to group the cohort: a `{subject_id: 0/1}` mapping, a sequence in
-  cohort order, or the name of a `meta` column to derive it from. Labels are matched to
-  the count matrix's rows by id, so the row order cannot misgroup a subject. Raises
+- `group_labels` - how to group the cohort, in one of three forms. A
+  `{subject_id: 0/1}` mapping, or the name of a `meta` column to derive one from, ties
+  each label to a subject by name: the cohort's order then cannot affect the grouping,
+  and neither can the count matrix's. A list or array is read in cohort order instead,
+  which is the one form where the labels can be in the wrong order, and that is not
+  detectable from the data. Prefer a mapping or a column name when the labels and the
+  subject files were assembled separately. Raises
   `ValueError` if a subject has no label, if the count does not match the cohort, if any
   label is outside {0, 1}, or if either group is empty: each of those would otherwise
   analyse a cohort you did not pass, or produce all-NaN statistics, and return a
@@ -45,9 +49,10 @@ Run the full correlative CBAS pipeline.
 **Arguments**
 
 - `cohort` (Cohort) - Subjects from `load_cohort`, or built directly.
-- `covariate` - one continuous value per subject: a `{subject_id: value}` mapping, a
-  sequence in cohort order, or the name of a `meta` column. Raises `ValueError` on a
-  length mismatch or a missing subject.
+- `covariate` - one continuous value per subject, in the same three forms as
+  `group_labels` above and with the same trade-off: a `{subject_id: value}` mapping or a
+  `meta` column name is matched by name, while a list or array is read in cohort order.
+  Raises `ValueError` on a length mismatch or a missing subject.
 - `params` (CBASParams, optional) - Analysis parameters.
 - `contingency` (int or None) - Trial condition to filter on. None uses all trials.
 - `encode_reward` (bool) - If True, symbol = choice + reward * num_arms (doubles alphabet).

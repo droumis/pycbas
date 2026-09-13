@@ -58,7 +58,7 @@ result = run_cbas_comparative(
 )
 ```
 
-The ids matter because everything per-subject is matched to them rather than to a list position. Group labels may be a `{id: 0/1}` mapping as above, a sequence in cohort order, or the name of a `meta` column. For correlative mode pass continuous values the same way and call `run_cbas_correlative`.
+Group labels may be a `{id: 0/1}` mapping as above, the name of a `meta` column, or a list in cohort order. The first two are matched to subjects by name, so the cohort's order cannot affect them; a list is positional, so it is the only form that can be in the wrong order. Prefer a mapping when the labels did not come from the same pass that loaded the files. For correlative mode pass continuous values the same way and call `run_cbas_correlative`.
 
 ### Option B: the CSV loader
 
@@ -412,7 +412,9 @@ matrix = matrix.reorder(np.argsort(labels, kind="stable"))   # group 0 first
 matrix.subject_ids                                # follows the new row order
 ```
 
-Group labels are resolved by id wherever they are used, so reordering the cohort or the matrix cannot pair a subject with another's group. What the pipeline still rejects is a labelling that does not describe the cohort: a mapping missing a subject, a sequence of the wrong length, a value outside `{0, 1}`, or an empty group.
+Reordering is safe because group labels are resolved through `subject_ids` rather than through row positions, so neither `Cohort.reorder` nor `CountMatrix.reorder` can pair a subject with another's group. That holds however the labels were supplied. What it does not do is check a list of labels against the cohort you meant: a mapping or a `meta` column ties each label to a name, while a list is read in cohort order, so a list is the one form that can be silently in the wrong order.
+
+Separately, the pipeline rejects a labelling that cannot describe the cohort at all: a mapping missing a subject, a list of the wrong length, a value outside `{0, 1}`, or an empty group.
 
 ### One contingency at a time
 
