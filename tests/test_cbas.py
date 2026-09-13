@@ -268,19 +268,39 @@ class TestCountMatrixRowOrder:
     def cohort(self, n=6):
         """Subjects differing in whatever a reordering might sort on.
 
-        On a uniform cohort a sort keyed on trial count, session count or total
-        usage is a no-op, so it passes these tests while permuting a real cohort,
-        where those quantities differ per subject. Sorting `subjects_data` by
-        length was in fact invisible to the whole suite. The fixture asserts its
-        own heterogeneity, so that cannot quietly come back.
+        On a uniform cohort a sort keyed on trial count, session count, arm usage or
+        the contingency column is a no-op, so it passes these tests while permuting
+        a real cohort, where those quantities differ per subject. Sorting
+        `subjects_data` by length was in fact invisible to the whole suite. The
+        assertions below fail if the fixture ever loses that variation, since the
+        tests would then keep passing while checking nothing.
         """
-        subjects = [synthetic_subject(seed, n_trials=90 + 17 * seed,
-                                      n_sessions=1 + seed % 3)
-                    for seed in range(n)]
-        lengths = {len(s) for s in subjects}
-        assert len(lengths) == n, f"trial counts must differ, got {sorted(lengths)}"
+        # Not ascending: a sort that agrees with the fixture's own order is a no-op on
+        # it, which is how `sorted(key=len)` slipped past one of these tests.
+        sizes = [141, 90, 174, 106, 158, 123]
+        subjects = []
+        for seed, n_trials in enumerate(sizes[:n]):
+            data = synthetic_subject(seed, n_trials=n_trials,
+                                     n_sessions=1 + seed % 3,
+                                     num_arms=2 + seed % 2)
+            if seed % 2:
+                # Trials in another contingency. `build_count_matrix` filters these
+                # out, so they change no count, but they do vary the contingency
+                # column that a sort might key on.
+                other = data[:3 + seed].copy()
+                other[:, 3] = 0
+                data = np.vstack([data, other])
+            subjects.append(data)
+
+        lengths = [len(s) for s in subjects]
+        assert len(set(lengths)) == n, "trial counts must differ"
+        assert lengths != sorted(lengths) and lengths != sorted(lengths, reverse=True), \
+            f"trial counts must not be monotonic in index, got {lengths}"
         assert len({len(np.unique(s[:, 0])) for s in subjects}) > 1, \
             "session counts must differ"
+        assert len({int(s[:, 1].max()) for s in subjects}) > 1, "arm usage must differ"
+        assert len({int((s[:, 3] == 2).sum()) for s in subjects}) > 1, \
+            "the contingency column must differ"
         return subjects
 
     def test_permuting_input_permutes_rows(self):

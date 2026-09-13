@@ -416,6 +416,8 @@ def build_multicontingency_count_matrix(records, params, blocks=None,
     order = getattr(params, "criterion_order", 0)
 
     # counts[subject][(block, sequence)] = n
+    # Row order is `records` order; see the invariant note in core.build_count_matrix.
+    # Do not reorder this list or collect its results out of order.
     per_subject = []
     for record in records:
         counts = {}
