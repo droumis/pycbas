@@ -148,7 +148,7 @@ params = CBASParams(
 result = run_cbas_correlative(cohort, scores, params)
 ```
 
-The `scores` array is the covariate. CBAS will test, for every sequence in the count matrix, whether that sequence's usage (across subjects) correlates with these scores. A sequence is read in cohort order, so `scores[i]` is the score for `cohort[i]`; pass a `{id: score}` mapping instead when the scores did not come from the same pass as the files.
+The `scores` array is the covariate. CBAS will test, for every sequence in the count matrix, whether that sequence's usage (across subjects) correlates with these scores. A list or array is read in cohort order, so `scores[i]` is the score for `cohort[i]`; pass a `{id: score}` mapping instead when the scores did not come from the same pass as the files.
 
 ## Working with results
 
@@ -375,7 +375,7 @@ print_resource_estimate(est)
 
 ## Working with the count matrix
 
-`build_count_matrix` produces the matrix every later stage reads, so it is where to start for anything CBAS does not do itself: a different statistic, an embedding, an EM fit.
+`build_count_matrix` produces the matrix every later stage reads, so it is where to start for any analysis CBAS does not do itself.
 
 ```python
 from pycbas import CBASParams, build_count_matrix, load_cohort

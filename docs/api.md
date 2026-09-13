@@ -68,7 +68,7 @@ reordering or a filter cannot pair a subject with another's group, covariate or 
 Subject(id, trials, meta=None, blocks=None)
 ```
 
-One subject's trials under the identity they were loaded with. `trials` is an
+One subject's trials, under the identity it was loaded with. `trials` is an
 (n_trials, 4) array of session, choice, reward, condition, exposed also as the
 `.session`, `.choice`, `.reward` and `.condition` properties. `condition` is the file's
 fourth column for single-contingency data and the contingency block index for
@@ -91,10 +91,10 @@ validated block structure.
 Cohort(subjects)
 ```
 
-An ordered collection of `Subject`, indexable by position, by id, or by slice. Ids must
-be unique, since everything else is resolved through them.
+An ordered collection of `Subject`, indexable by position, by id, or by slice, with
+`len` and iteration. Ids must be unique, since everything else is resolved through them.
 
-**Methods**
+**Attributes and methods**
 
 - `ids` - subject ids, in cohort order.
 - `filter(predicate=None, **meta_equals)` - the subjects passing a predicate and
@@ -103,9 +103,10 @@ be unique, since everything else is resolved through them.
 - `reorder(order)` - a cohort in the given order of positions, identity following each
   subject.
 - `labels_from(key, coder=None)` - 0/1 group labels from a `meta` column. `coder` maps a
-  raw value to 0, 1, or None to exclude; the default understands `0`/`1` and words like
-  `control`, `sham`, `wt`, `lesion`, `ko`, `mutant`. Subjects with no usable value are
-  reported by id rather than dropped.
+  raw value to 0 or 1, or to None when it cannot be used; the default understands `0`/`1`
+  and words like `control`, `sham`, `wt`, `lesion`, `ko`, `mutant`. Unusable subjects are
+  named in a `ValueError` rather than dropped, since dropping them here would quietly
+  change the cohort you assembled. Remove them with `filter` first.
 - `covariate_from(key)` - a float covariate from a `meta` column.
 - `meta_values(key)` - one `meta` value per subject, in cohort order.
 - `has_blocks` - whether every subject carries contingency blocks.
@@ -122,7 +123,7 @@ Sequence counts with the ids of its rows and the labels of its columns, so the
 correspondence can be checked rather than assumed. `counts[i, j]` is how often subject
 `subject_ids[i]` used sequence `sequences[j]`.
 
-**Methods**
+**Attributes and methods**
 
 - `shape` - `counts.shape`.
 - `row(subject_id)` - one subject's counts, by id.
@@ -177,8 +178,8 @@ default_group_coder(value)
 ```
 
 0, 1, or None for a raw group value from a cohort table. None means "not usable", which
-is distinct from either group: a blank lesion field means the subject had surgery but no
-lesion was evident, so it is neither control nor lesion and is not guessed at.
+is distinct from either group: a blank or unrecognised value is not evidence of
+membership, so it is not guessed at.
 
 ---
 

@@ -12,7 +12,7 @@ ROOT_DIR = Path(__file__).parent.parent
 NOTES_DIR = ROOT_DIR / "notes"
 
 
-def parse_david_file(path, max_seq_len):
+def parse_reference_file(path, max_seq_len):
     """Parse the reference's significant sequence file.
 
     Format: seq_symbol_1, seq_symbol_2, ..., [empty padding], direction, p_value
@@ -55,7 +55,7 @@ def compare_flies():
     print("FLY COMPARISON")
     print("=" * 70)
 
-    reference = parse_david_file(NOTES_DIR / "flyCBASsigSeq.txt", max_seq_len=10)
+    reference = parse_reference_file(NOTES_DIR / "flyCBASsigSeq.txt", max_seq_len=10)
     ours = load_our_results("flies")
 
     print(f"the reference: {len(reference)} significant sequences")
@@ -68,36 +68,36 @@ def compare_flies():
         if (not np.isnan(pos_g) and pos_g < alpha) or (not np.isnan(neg_g) and neg_g < alpha):
             our_sig.add(seq)
 
-    david_sig = set(d["seq"] for d in reference)
+    reference_sig = set(d["seq"] for d in reference)
 
     print(f"\nOurs significant: {len(our_sig)}")
-    print(f"reference significant: {len(david_sig)}")
+    print(f"reference significant: {len(reference_sig)}")
 
-    both = our_sig & david_sig
-    only_ours = our_sig - david_sig
-    only_david = david_sig - our_sig
+    both = our_sig & reference_sig
+    only_ours = our_sig - reference_sig
+    only_reference = reference_sig - our_sig
 
     print(f"\nBoth: {len(both)}")
     print(f"Only ours (overcalled): {len(only_ours)}")
-    print(f"Only reference (missed): {len(only_david)}")
+    print(f"Only reference (missed): {len(only_reference)}")
 
-    if only_david:
+    if only_reference:
         print(f"\n--- Sequences the reference found significant but we MISSED ---")
         for d in reference:
-            if d["seq"] in only_david:
+            if d["seq"] in only_reference:
                 seq = d["seq"]
                 our_vals = ours.get(seq)
                 if our_vals:
-                    print(f"  {seq}  david_p={d['pvalue']:.6f}  "
+                    print(f"  {seq}  reference_p={d['pvalue']:.6f}  "
                           f"our_pos_g={our_vals['pos_g']:.6f}  our_neg_g={our_vals['neg_g']:.6f}")
                 else:
-                    print(f"  {seq}  david_p={d['pvalue']:.6f}  NOT IN OUR SEQUENCE SET")
+                    print(f"  {seq}  reference_p={d['pvalue']:.6f}  NOT IN OUR SEQUENCE SET")
 
     # p-value comparison for shared sequences
     print(f"\n--- P-value comparison (reference vs ours, first 20 by the reference's p-value) ---")
-    david_sorted = sorted(reference, key=lambda x: x["pvalue"])
-    print(f"{'Sequence':<30} {'Dir':<5} {'David_p':<12} {'Our_g':<12} {'Match?'}")
-    for d in david_sorted[:20]:
+    reference_sorted = sorted(reference, key=lambda x: x["pvalue"])
+    print(f"{'Sequence':<30} {'Dir':<5} {'Reference_p':<12} {'Our_g':<12} {'Match?'}")
+    for d in reference_sorted[:20]:
         seq = d["seq"]
         our_vals = ours.get(seq)
         if our_vals:
@@ -149,7 +149,7 @@ def compare_humans():
     print("HUMAN COMPARISON")
     print("=" * 70)
 
-    reference = parse_david_file(NOTES_DIR / "humanCBASsigSeq.txt", max_seq_len=4)
+    reference = parse_reference_file(NOTES_DIR / "humanCBASsigSeq.txt", max_seq_len=4)
     ours = load_our_results("humans")
 
     print(f"the reference: {len(reference)} significant sequences")
@@ -162,36 +162,36 @@ def compare_humans():
         if (not np.isnan(pos_g) and pos_g < alpha) or (not np.isnan(neg_g) and neg_g < alpha):
             our_sig.add(seq)
 
-    david_sig = set(d["seq"] for d in reference)
+    reference_sig = set(d["seq"] for d in reference)
 
     print(f"\nOurs significant: {len(our_sig)}")
-    print(f"reference significant: {len(david_sig)}")
+    print(f"reference significant: {len(reference_sig)}")
 
-    both = our_sig & david_sig
-    only_ours = our_sig - david_sig
-    only_david = david_sig - our_sig
+    both = our_sig & reference_sig
+    only_ours = our_sig - reference_sig
+    only_reference = reference_sig - our_sig
 
     print(f"\nBoth: {len(both)}")
     print(f"Only ours (overcalled): {len(only_ours)}")
-    print(f"Only reference (missed): {len(only_david)}")
+    print(f"Only reference (missed): {len(only_reference)}")
 
-    if only_david:
+    if only_reference:
         print(f"\n--- Sequences the reference found significant but we MISSED ---")
         for d in reference:
-            if d["seq"] in only_david:
+            if d["seq"] in only_reference:
                 seq = d["seq"]
                 our_vals = ours.get(seq)
                 if our_vals:
-                    print(f"  {seq}  david_p={d['pvalue']:.6f}  "
+                    print(f"  {seq}  reference_p={d['pvalue']:.6f}  "
                           f"our_pos_g={our_vals['pos_g']:.6f}  our_neg_g={our_vals['neg_g']:.6f}")
                 else:
-                    print(f"  {seq}  david_p={d['pvalue']:.6f}  NOT IN OUR SEQUENCE SET")
+                    print(f"  {seq}  reference_p={d['pvalue']:.6f}  NOT IN OUR SEQUENCE SET")
 
     # p-value comparison
     print(f"\n--- P-value comparison (all of the reference's sequences) ---")
-    david_sorted = sorted(reference, key=lambda x: x["pvalue"])
-    print(f"{'Sequence':<20} {'Dir':<5} {'David_p':<12} {'Our_g':<12} {'Diff':<10}")
-    for d in david_sorted:
+    reference_sorted = sorted(reference, key=lambda x: x["pvalue"])
+    print(f"{'Sequence':<20} {'Dir':<5} {'Reference_p':<12} {'Our_g':<12} {'Diff':<10}")
+    for d in reference_sorted:
         seq = d["seq"]
         our_vals = ours.get(seq)
         if our_vals:

@@ -29,7 +29,7 @@ ROOT_DIR = Path(__file__).parent.parent
 NOTES_DIR = ROOT_DIR / "notes"
 
 
-def parse_david_file(path, max_seq_len):
+def parse_reference_file(path, max_seq_len):
     sequences = []
     with open(path) as f:
         for line in f:
@@ -86,7 +86,7 @@ def _bootstrap_no_centering(count_matrix, boot_indices_0, boot_indices_1, n0, n1
     return null_stats
 
 
-def david_kfwer_iteration(sorted_stats, null_sub, alpha=0.5, gamma=0.05):
+def reference_kfwer_iteration(sorted_stats, null_sub, alpha=0.5, gamma=0.05):
     """the Igor reference's k-FWER iteration.
 
     Iterates k, reports p-values from the converged k's step-down.
@@ -218,7 +218,7 @@ def run_approach_b(count_matrix, group_indices, params, sequences):
     return g_values, best_k, test_stats
 
 
-def compare_with_david(g_values, test_stats, david_seqs, sequences, alpha, label):
+def compare_with_reference(g_values, test_stats, reference_seqs, sequences, alpha, label):
     """Compare g-values against the Igor reference's output."""
     n_seq = len(sequences)
     seq_to_idx = {s: i for i, s in enumerate(sequences)}
@@ -232,38 +232,38 @@ def compare_with_david(g_values, test_stats, david_seqs, sequences, alpha, label
            (not np.isnan(neg_g) and neg_g < alpha):
             our_sig.add(seq)
 
-    david_sig = set(d["seq"] for d in david_seqs)
+    reference_sig = set(d["seq"] for d in reference_seqs)
 
-    both = our_sig & david_sig
-    only_ours = our_sig - david_sig
-    only_david = david_sig - our_sig
+    both = our_sig & reference_sig
+    only_ours = our_sig - reference_sig
+    only_reference = reference_sig - our_sig
 
     print(f"\n  {label} vs reference:")
     print(f"    Ours significant: {len(our_sig)}")
-    print(f"    reference significant: {len(david_sig)}")
+    print(f"    reference significant: {len(reference_sig)}")
     print(f"    Both: {len(both)}")
     print(f"    Only ours (overcalled): {len(only_ours)}")
-    print(f"    Only reference (missed): {len(only_david)}")
+    print(f"    Only reference (missed): {len(only_reference)}")
 
     # P-value correlation for shared sequences
     if both:
         our_ps = []
-        david_ps = []
-        for d in david_seqs:
+        reference_ps = []
+        for d in reference_seqs:
             if d["seq"] in both:
                 idx = seq_to_idx[d["seq"]]
                 our_g = g_values[idx * 2 + 1] if d["direction"] == 1 else g_values[idx * 2]
                 if not np.isnan(our_g):
                     our_ps.append(our_g)
-                    david_ps.append(d["pvalue"])
+                    reference_ps.append(d["pvalue"])
         if our_ps:
             our_ps = np.array(our_ps)
-            david_ps = np.array(david_ps)
-            ratio = our_ps / np.where(david_ps > 0, david_ps, 1e-10)
+            reference_ps = np.array(reference_ps)
+            ratio = our_ps / np.where(reference_ps > 0, reference_ps, 1e-10)
             print(f"    P-value ratio (ours/reference) for shared: "
                   f"median={np.median(ratio):.3f}, mean={np.mean(ratio):.3f}")
 
-    return {"both": len(both), "only_ours": len(only_ours), "only_david": len(only_david)}
+    return {"both": len(both), "only_ours": len(only_ours), "only_reference": len(only_reference)}
 
 
 def load_fly_data():
@@ -321,21 +321,21 @@ def run_fly_comparison():
     sequences, count_matrix = _matrix.sequences, _matrix.counts
     print(f"Sequences: {len(sequences)}")
 
-    david_fly = parse_david_file(NOTES_DIR / "flyCBASsigSeq.txt", max_seq_len=10)
-    print(f"reference significant: {len(david_fly)}")
+    reference_fly = parse_reference_file(NOTES_DIR / "flyCBASsigSeq.txt", max_seq_len=10)
+    print(f"reference significant: {len(reference_fly)}")
 
     # Run both approaches
     g_a, k_a, stats_a = run_approach_a(count_matrix, group_indices, params, sequences)
     g_b, k_b, stats_b = run_approach_b(count_matrix, group_indices, params, sequences)
 
     # Compare each with the reference
-    results_a = compare_with_david(g_a, stats_a, david_fly, sequences, params.alpha, "Approach A")
-    results_b = compare_with_david(g_b, stats_b, david_fly, sequences, params.alpha, "Approach B")
+    results_a = compare_with_reference(g_a, stats_a, reference_fly, sequences, params.alpha, "Approach A")
+    results_b = compare_with_reference(g_b, stats_b, reference_fly, sequences, params.alpha, "Approach B")
 
     return {
         "approach_a": results_a,
         "approach_b": results_b,
-        "david_total": len(david_fly),
+        "reference_total": len(reference_fly),
     }
 
 
@@ -353,8 +353,8 @@ def run_human_comparison():
     sequences, count_matrix = _matrix.sequences, _matrix.counts
     print(f"Sequences: {len(sequences)}")
 
-    david_human = parse_david_file(NOTES_DIR / "humanCBASsigSeq.txt", max_seq_len=4)
-    print(f"reference significant: {len(david_human)}")
+    reference_human = parse_reference_file(NOTES_DIR / "humanCBASsigSeq.txt", max_seq_len=4)
+    print(f"reference significant: {len(reference_human)}")
 
     from pycbas import compute_test_stats_correlative, bootstrap_test_stats_correlative
 
@@ -368,7 +368,7 @@ def run_human_comparison():
     print(f"\n  k=1 step-down: {n_sig_k1} significant")
 
     # Converged k
-    step_p_final, final_k, iterations = david_kfwer_iteration(
+    step_p_final, final_k, iterations = reference_kfwer_iteration(
         sorted_stats, null_sub, params.alpha, params.gamma
     )
     n_sig_final = int(np.sum(step_p_final < params.alpha))
@@ -391,11 +391,11 @@ def run_human_comparison():
            (not np.isnan(neg_g) and neg_g < params.alpha):
             our_sig.add(seq)
 
-    david_sig = set(d["seq"] for d in david_human)
-    both = our_sig & david_sig
-    only_ours = our_sig - david_sig
-    only_david = david_sig - our_sig
-    print(f"\n  vs the reference (k=1): Both={len(both)}, Only ours={len(only_ours)}, Only the reference={len(only_david)}")
+    reference_sig = set(d["seq"] for d in reference_human)
+    both = our_sig & reference_sig
+    only_ours = our_sig - reference_sig
+    only_reference = reference_sig - our_sig
+    print(f"\n  vs the reference (k=1): Both={len(both)}, Only ours={len(only_ours)}, Only the reference={len(only_reference)}")
 
 
 def print_summary(fly_results):
@@ -403,20 +403,20 @@ def print_summary(fly_results):
     print("SUMMARY")
     print("=" * 70)
     print(f"""
-reference fly significant sequences: {fly_results['david_total']}
+reference fly significant sequences: {fly_results['reference_total']}
 
 Approach A (Centered + k=1):
   - Bootstrap null centered by subtracting observed delta (Clarke et al. 2020 eq 5)
   - P-values from k=1 (standard max-based) step-down
   - Null fill rate: ~5% (centering pushes most draws to opposite direction)
-  - Result: Both={fly_results['approach_a']['both']}, Overcalled={fly_results['approach_a']['only_ours']}, Missed={fly_results['approach_a']['only_david']}
+  - Result: Both={fly_results['approach_a']['both']}, Overcalled={fly_results['approach_a']['only_ours']}, Missed={fly_results['approach_a']['only_reference']}
 
 Approach B (Uncentered + converged-k, matching the reference's algorithm):
   - Bootstrap null NOT centered (matches Igor code get2waveCompStat, line 1146)
   - P-values from converged k-FWER (matches Igor code doResampleAndFindK, line 799)
   - Null fill rate: ~50%
   - At k=17 we get R=1602, matching the reference's 1605 within RNG noise
-  - Result: Both={fly_results['approach_b']['both']}, Overcalled={fly_results['approach_b']['only_ours']}, Missed={fly_results['approach_b']['only_david']}
+  - Result: Both={fly_results['approach_b']['both']}, Overcalled={fly_results['approach_b']['only_ours']}, Missed={fly_results['approach_b']['only_reference']}
 
 CONCLUSION: The remaining fly gap is entirely explained by RNG differences.
   - Our numpy RNG (seed=42) produces a null where k=17 gives R=1602

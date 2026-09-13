@@ -27,7 +27,7 @@
 
 ## Igor Comparison
 
-| | pycbas | David |
+| | pycbas | Igor reference |
 |---|---|---|
 | Significant | 1,605 | 1,605 |
 | Test stat max diff | 1.2e-06 | — |

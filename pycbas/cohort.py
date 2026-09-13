@@ -202,10 +202,10 @@ class Cohort:
     def labels_from(self, key, coder=None):
         """Group labels from a `meta` column, as an array aligned to this cohort.
 
-        `coder` maps a raw value to 0, 1, or None to exclude; without one the values
-        must already be 0 and 1. Subjects the coder excludes are reported rather than
-        dropped, since dropping them here would silently change the cohort a caller
-        thought it had assembled.
+        `coder` maps a raw value to 0 or 1, or to None when it cannot be used; without
+        one the default vocabulary applies. A subject the coder cannot place is named in
+        the error rather than dropped, since dropping it here would silently change the
+        cohort a caller thought it had assembled. Remove such subjects with `filter`.
         """
         coder = coder or _default_coder
         labels, unusable = [], []
@@ -252,9 +252,8 @@ GROUP_1_WORDS = frozenset({"1", "lesion", "exp", "experimental", "ko", "knockout
 def default_group_coder(value):
     """0, 1, or None for a raw group value from a cohort table.
 
-    None means "not usable", which is different from either group: a blank lesion
-    field means the subject had surgery but no lesion was evident, so it is neither
-    control nor lesion and must not be guessed at.
+    None means "not usable", which is different from either group: a blank or
+    unrecognised value is not evidence of membership, so it must not be guessed at.
     """
     if value is None:
         return None
