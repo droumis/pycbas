@@ -104,11 +104,11 @@ def build_count_matrix(cohort, params, contingency=2, encode_reward=True,
     n_subjects = len(subjects_data)
     order = getattr(params, "criterion_order", 0)
 
-    # Row order is `subjects_data` order, and callers align group labels, covariates and
-    # metadata to it positionally. Do not sort, group or otherwise reorder this list, and
-    # do not collect the per-subject results out of order, as a thread pool consuming
-    # completions would. A reordering here misattributes every subject silently, since
-    # nothing in the return value records which order was used.
+    # Row order is cohort order, and `subject_ids` on the returned CountMatrix says so.
+    # If you reorder here, or collect the per-subject results out of order as a thread
+    # pool consuming completions would, the ids must move with the rows: everything
+    # aligned to them, group labels and covariates included, is resolved by id, so the
+    # rows and the ids disagreeing is the one way to misattribute a subject.
     # `TestCountMatrixRowOrder` in tests/test_cbas.py pins this.
     all_seq_counts = []
     for subj_data in subjects_data:

@@ -759,8 +759,11 @@ def load_from_folder(event):
 
             # Assign group labels: sort prefixes alphabetically, group0=first, group1=second
             # If more than 2 prefixes, look for common comparative keywords
-            group_keywords_0 = {"control", "ctrl", "sham", "wt", "wildtype"}
-            group_keywords_1 = {"lesion", "experimental", "exp", "ko", "knockout", "mutant"}
+            # The same vocabulary the info-table path uses, from the library, so a
+            # folder named control0/lesion0 and an info table saying the same thing
+            # cannot disagree about which group is which.
+            from pycbas.cohort import GROUP_0_WORDS, GROUP_1_WORDS
+            group_keywords_0, group_keywords_1 = GROUP_0_WORDS, GROUP_1_WORDS
 
             sorted_prefixes = sorted(prefixes.keys())
             if len(sorted_prefixes) == 2:
@@ -1171,7 +1174,7 @@ def _suspended_subject_filter():
 
 
 def _apply_subject_filter(event=None):
-    """Re-derive records, labels and shared blocks from the current selection."""
+    """Re-derive the cohort and its shared blocks from the current selection."""
     if _SUSPEND_SUBJECT_FILTER:
         return
     from pycbas.contingency import shared_contingency_blocks

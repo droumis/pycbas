@@ -389,8 +389,8 @@ def build_multicontingency_count_matrix(cohort, params, blocks=None,
     order = getattr(params, "criterion_order", 0)
 
     # counts[subject][(block, sequence)] = n
-    # Row order is `records` order; see the invariant note in core.build_count_matrix.
-    # Do not reorder this list or collect its results out of order.
+    # Row order is cohort order, reported as `subject_ids`; see the invariant note in
+    # core.build_count_matrix. Reorder only with the ids.
     per_subject = []
     for record in cohort:
         counts = {}

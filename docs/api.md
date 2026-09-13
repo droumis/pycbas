@@ -270,9 +270,10 @@ subject never gets there. `reward_blocks` is a list of per-session 0/1 arrays.
 subject_criteria(cohort, params, contingency=2, block_aware=False)
 ```
 
-Per-subject criterion trial index, as a float array so that `inf` survives. `inf` marks
-a subject that never reached a higher-order criterion, which means it is not truncated
-and contributes every window it has. Pass the same `contingency` and `block_aware` used
+Criterion trial index per subject, as `{subject_id: trial}` so a shortfall can be
+reported by name. The values are floats so that `inf` survives; `inf` marks a subject
+that never reached a higher-order criterion, which means it is not truncated and
+contributes every window it has. Pass the same `contingency` and `block_aware` used
 for the run, since the criterion is expressed in the same coordinates as the
 enumeration. Only interesting when `params.criterion_order` is nonzero; see
 [higher-order criteria](guide.md#higher-order-criteria).

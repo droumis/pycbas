@@ -351,6 +351,81 @@ class TestCountMatrixRowOrder:
         assert not taken & {"group_labels", "groups", "labels", "covariate"}
 
 
+class TestOrderCannotMislabel:
+    """The point of carrying ids: a reordering must not move anyone's group.
+
+    Row order pinned by `TestCountMatrixRowOrder` is the builder's promise. This is the
+    consequence callers depend on, and it holds because labels are resolved through
+    `subject_ids` rather than through positions. The statistics are compared rather than
+    a `CBASResult`, since the bootstrap draws are unseeded and would differ anyway.
+    """
+
+    params = CBASParams(num_arms=3, seq_len_max=3, criterion=1000)
+
+    def statistics(self, cohort, labels):
+        from pycbas import resolve_labels
+        matrix = build_count_matrix(cohort, self.params)
+        resolved = resolve_labels(labels, matrix.subject_ids)
+        groups = [np.where(resolved == 0)[0], np.where(resolved == 1)[0]]
+        return matrix.sequences, compute_test_stats(matrix.counts, groups)
+
+    def cohort(self):
+        subjects = [synthetic_subject(seed, n_trials=90 + 13 * seed)
+                    for seed in range(6)]
+        return synthetic_cohort(subjects)
+
+    @pytest.mark.parametrize("perm", [[3, 1, 0, 5, 2, 4], [5, 4, 3, 2, 1, 0]])
+    def test_statistics_survive_a_permuted_cohort(self, perm):
+        cohort = self.cohort()
+        labels = {s.id: i % 2 for i, s in enumerate(cohort)}
+
+        sequences, stats = self.statistics(cohort, labels)
+        moved_sequences, moved_stats = self.statistics(cohort.reorder(perm), labels)
+
+        assert moved_sequences == sequences
+        np.testing.assert_array_equal(np.nan_to_num(moved_stats, nan=-7.0),
+                                      np.nan_to_num(stats, nan=-7.0))
+
+    def test_the_pipeline_groups_by_id_even_if_the_builder_reorders(self, monkeypatch):
+        """Pins the pipeline's wiring, which nothing else can reach.
+
+        `build_count_matrix` does not reorder, so resolving labels against cohort order
+        rather than against the matrix's own `subject_ids` gives the same answer today
+        and no test notices. Substituting a builder that does reorder makes the
+        difference observable: the grouping must follow the ids, not the positions.
+        """
+        from pycbas import pipeline
+        cohort = self.cohort()
+        labels = {s.id: i % 2 for i, s in enumerate(cohort)}
+        params = CBASParams(num_arms=3, seq_len_max=2, criterion=1000,
+                            resample_number=50)
+
+        straight = run_cbas_comparative(cohort, labels, params)
+
+        real_builder = pipeline.build_count_matrix
+
+        def reversing_builder(*args, **kwargs):
+            matrix = real_builder(*args, **kwargs)
+            return matrix.reorder(list(reversed(range(matrix.shape[0]))))
+
+        monkeypatch.setattr(pipeline, "build_count_matrix", reversing_builder)
+        reordered = run_cbas_comparative(cohort, labels, params)
+
+        assert reordered.sequences == straight.sequences
+        np.testing.assert_array_equal(
+            np.nan_to_num(reordered.test_stats, nan=-7.0),
+            np.nan_to_num(straight.test_stats, nan=-7.0))
+
+    def test_a_sequence_of_labels_is_read_in_cohort_order(self):
+        """The convenience form must agree with the explicit mapping."""
+        cohort = self.cohort()
+        as_sequence = self.statistics(cohort, [0, 1, 0, 1, 0, 1])[1]
+        as_mapping = self.statistics(cohort, {s.id: i % 2
+                                              for i, s in enumerate(cohort)})[1]
+        np.testing.assert_array_equal(np.nan_to_num(as_sequence, nan=-7.0),
+                                      np.nan_to_num(as_mapping, nan=-7.0))
+
+
 class TestCohortLabelValidation:
     """Labels that do not describe the cohort must not reach a result.
 
