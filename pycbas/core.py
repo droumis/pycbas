@@ -26,6 +26,8 @@ def reward_blocks(subj_data, contingency=2, block_aware=False):
     split by session, exactly as `extract_choice_streams_by_block` splits it, and
     a run of rewarded trials cannot span a session. Without it the stream is one
     block, matching the pooled enumeration, where sequences may span sessions.
+
+    Takes the raw (n_trials, 4) trial array, so it works on `subject.trials`.
     """
     if contingency is None:
         data = subj_data
@@ -39,8 +41,8 @@ def reward_blocks(subj_data, contingency=2, block_aware=False):
     return [rewards[sessions == s] for s in np.unique(sessions)]
 
 
-def subject_criteria(subjects_data, params, contingency=2, block_aware=False):
-    """Per-subject criterion trial index, with `inf` where a subject fell short.
+def subject_criteria(cohort, params, contingency=2, block_aware=False):
+    """Criterion trial index per subject, `inf` where a subject fell short.
 
     Exposed because the shortfall is worth reporting rather than absorbing. A
     subject with an infinite criterion contributes every window it has, so with a
@@ -49,33 +51,56 @@ def subject_criteria(subjects_data, params, contingency=2, block_aware=False):
     assuming it is negligible.
 
     Returns:
-        float array of length n_subjects.
+        dict of subject id to float, so a shortfall report can name the subject
+        rather than an index into a list the caller has to still be holding.
     """
+    cohort = as_cohort(cohort)
     order = getattr(params, "criterion_order", 0)
-    return np.array([
-        criterion_trial(reward_blocks(d, contingency, block_aware),
-                        order, params.criterion)
-        for d in subjects_data
-    ], dtype=np.float64)
+    return {
+        subject.id: criterion_trial(
+            reward_blocks(subject.trials, contingency, block_aware),
+            order, params.criterion)
+        for subject in cohort
+    }
 
 
-def build_count_matrix(subjects_data, params, contingency=2, encode_reward=True,
+def as_cohort(cohort):
+    """Accept a `Cohort`, or refuse a bare list of arrays by name.
+
+    The old signatures took a list of arrays, which carried no identity, so every
+    per-subject correspondence had to be maintained positionally by the caller. That
+    is the mistake these types remove, and silently accepting the old shape would
+    keep it available.
+    """
+    from .cohort import Cohort
+    if isinstance(cohort, Cohort):
+        return cohort
+    raise TypeError(
+        f"expected a Cohort, got {type(cohort).__name__}. Build one with "
+        f"load_cohort(directory_or_paths), or Cohort([Subject(...), ...]); a bare "
+        f"list of trial arrays carries no subject identity.")
+
+
+def build_count_matrix(cohort, params, contingency=2, encode_reward=True,
                        block_aware=False):
     """Build the full sequence count matrix.
 
     Args:
-        subjects_data: list of subject data arrays (from load_subject_data)
+        cohort: Cohort of subjects (from `load_cohort`)
         params: CBASParams instance
-        contingency: block type to filter on, or None for all trials
+        contingency: condition value to filter on, or None for all trials
         encode_reward: if True, encode symbol + reward*num_arms. Set False for
             tasks where outcome is deterministic from the symbol (e.g., 2AFC).
         block_aware: if True, sequences cannot span block/session boundaries.
             Matches Igor's counting for multi-session experiments.
 
     Returns:
-        sequences: list of all unique sequence tuples (sorted by total frequency descending)
-        count_matrix: ndarray of shape (n_subjects, n_sequences) with usage counts
+        CountMatrix, whose `subject_ids` are the cohort's ids in cohort order and
+        whose `sequences` label the columns.
     """
+    from .cohort import CountMatrix
+    cohort = as_cohort(cohort)
+    subjects_data = [subject.trials for subject in cohort]
     n_subjects = len(subjects_data)
     order = getattr(params, "criterion_order", 0)
 
@@ -128,7 +153,8 @@ def build_count_matrix(subjects_data, params, contingency=2, encode_reward=True,
         for seq, count in sc.items():
             count_matrix[subj_idx, seq_to_idx[seq]] = count
 
-    return sequences, count_matrix
+    return CountMatrix(counts=count_matrix, subject_ids=cohort.ids,
+                       sequences=sequences)
 
 
 def compute_test_stats(count_matrix, group_indices):

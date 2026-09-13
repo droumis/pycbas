@@ -26,7 +26,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from pycbas import (CBASParams, build_count_matrix, compute_test_stats,
+from pycbas import (CBASParams, Cohort, Subject, build_count_matrix,
+                    compute_test_stats,
                     bootstrap_test_stats, romano_wolf_stepdown,
                     run_cbas_comparative, run_cbas_correlative)
 
@@ -74,7 +75,9 @@ def make_cohort():
     # A covariate correlated with the motif rate, for the correlative path.
     covariate = np.array([0.10 + 0.16 * (l) + 0.02 * (i % 4)
                           for l, i in zip(labels, list(range(N_PER_GROUP)) * 2)])
-    return subjects, labels, covariate
+    cohort = Cohort([Subject(id=f"s{i:02d}", trials=trials)
+                     for i, trials in enumerate(subjects)])
+    return cohort, labels, covariate
 
 
 def encoded_motif():
@@ -93,13 +96,14 @@ def params():
 
 def compute_all():
     """Every quantity the golden file pins, as plain Python types."""
-    subjects, labels, covariate = make_cohort()
+    cohort, labels, covariate = make_cohort()
     p = params()
 
     out = {}
     for block_aware in (False, True):
-        seqs, counts = build_count_matrix(subjects, p, contingency=2,
-                                          encode_reward=True, block_aware=block_aware)
+        matrix = build_count_matrix(cohort, p, contingency=2,
+                                    encode_reward=True, block_aware=block_aware)
+        seqs, counts = matrix.sequences, matrix.counts
         key = "block_aware" if block_aware else "pooled"
         out[key] = {
             "n_sequences": len(seqs),
@@ -109,8 +113,9 @@ def compute_all():
             "motif_column_total": int(counts[:, seqs.index(encoded_motif())].sum()),
         }
 
-    seqs, counts = build_count_matrix(subjects, p, contingency=2,
-                                      encode_reward=True, block_aware=False)
+    matrix = build_count_matrix(cohort, p, contingency=2, encode_reward=True,
+                                block_aware=False)
+    seqs, counts = matrix.sequences, matrix.counts
     grp = [np.flatnonzero(labels == 0), np.flatnonzero(labels == 1)]
 
     stats = compute_test_stats(counts, grp)
@@ -129,7 +134,7 @@ def compute_all():
         "mean_finite": float(np.round(np.nanmean(null_arr), 8)),
     }
 
-    comp = run_cbas_comparative(subjects, labels, p, contingency=2,
+    comp = run_cbas_comparative(cohort, labels, p, contingency=2,
                                 encode_reward=True)
     out["comparative"] = {
         "n_sequences": len(comp.sequences),
@@ -141,7 +146,7 @@ def compute_all():
         )[:12],
     }
 
-    corr = run_cbas_correlative(subjects, covariate, p, contingency=2,
+    corr = run_cbas_correlative(cohort, covariate, p, contingency=2,
                                 encode_reward=True)
     out["correlative"] = {
         "n_sequences": len(corr.sequences),
@@ -170,8 +175,9 @@ def test_cohort_is_deterministic():
     a = make_cohort()[0]
     b = make_cohort()[0]
     assert len(a) == len(b) == 2 * N_PER_GROUP
+    assert a.ids == b.ids
     for x, y in zip(a, b):
-        assert np.array_equal(x, y)
+        assert np.array_equal(x.trials, y.trials)
 
 
 @pytest.mark.parametrize("section", ["pooled", "block_aware"])
@@ -197,9 +203,9 @@ def test_correlative_pipeline_unchanged(actual, golden):
 
 def test_stepdown_monotonicity(actual):
     """g-values from step-down must be non-decreasing in rank, by construction."""
-    subjects, labels, _ = make_cohort()
+    cohort, labels, _ = make_cohort()
     p = params()
-    _, counts = build_count_matrix(subjects, p, contingency=2, encode_reward=True)
+    counts = build_count_matrix(cohort, p, contingency=2, encode_reward=True).counts
     grp = [np.flatnonzero(labels == 0), np.flatnonzero(labels == 1)]
     stats = compute_test_stats(counts, grp)
     null = bootstrap_test_stats(counts, grp, p, rng=np.random.default_rng(SEED))

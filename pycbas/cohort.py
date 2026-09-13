@@ -241,16 +241,45 @@ def _matches(value, wanted):
     return value == wanted
 
 
-def _default_coder(value):
+#: Values a cohort table uses for the two groups. Kept here rather than in the GUI so
+#: that loading a cohort in Python and loading it in the app agree on what "sham"
+#: means; the app had its own copy of this vocabulary.
+GROUP_0_WORDS = frozenset({"0", "control", "ctrl", "sham", "wt", "wildtype"})
+GROUP_1_WORDS = frozenset({"1", "lesion", "exp", "experimental", "ko", "knockout",
+                           "mutant"})
+
+
+def default_group_coder(value):
+    """0, 1, or None for a raw group value from a cohort table.
+
+    None means "not usable", which is different from either group: a blank lesion
+    field means the subject had surgery but no lesion was evident, so it is neither
+    control nor lesion and must not be guessed at.
+    """
     if value is None:
         return None
     if isinstance(value, bool):
         return int(value)
-    try:
-        number = int(value)
-    except (TypeError, ValueError):
+    if isinstance(value, (int, np.integer)):
+        return int(value) if int(value) in (0, 1) else None
+    if isinstance(value, (float, np.floating)):
+        return int(value) if value in (0.0, 1.0) else None
+
+    text = str(value).strip().lower()
+    if not text:
         return None
-    return number if number in (0, 1) else None
+    if text in GROUP_0_WORDS:
+        return 0
+    if text in GROUP_1_WORDS:
+        return 1
+    if "control" in text:
+        return 0
+    if "lesion" in text:
+        return 1
+    return None
+
+
+_default_coder = default_group_coder
 
 
 def resolve_labels(labels, ids, cohort_ids=None):

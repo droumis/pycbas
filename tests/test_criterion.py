@@ -10,13 +10,14 @@ pattern as the Igor cross-validation in test_cbas.py.
 import numpy as np
 import pytest
 
-from pycbas import CBASParams, build_count_matrix, extract_choice_stream
+from pycbas import (CBASParams, Cohort, Subject, build_count_matrix,
+                    extract_choice_stream)
 from pycbas.io import enumerate_sequences
 from pycbas.core import reward_blocks, subject_criteria
 from pycbas.criterion import (perfect_run_starts, criterion_trial,
                               reached_criterion, criterion_trials_by_subject)
 from pycbas.contingency import (assign_contingency_blocks,
-                                load_subject_data_with_contingencies,
+                                load_subject_with_contingencies,
                                 load_cohort_info)
 
 
@@ -174,6 +175,11 @@ def _subject(choices, rewards, sessions=None, contingency=2):
                             np.full(n, contingency)]).astype(np.int32)
 
 
+def _cohort(trials, id="s"):
+    """A one-subject cohort around a raw trial array."""
+    return Cohort([Subject(id=id, trials=trials)])
+
+
 class TestPipelineWiring:
     def test_order_zero_matches_the_historical_path(self):
         """The default must reproduce a direct enumerate_sequences call."""
@@ -183,7 +189,8 @@ class TestPipelineWiring:
         subj = _subject(choices, rewards)
         params = CBASParams(num_arms=3, seq_len_max=3, criterion=50)
 
-        seqs, counts = build_count_matrix([subj], params, contingency=2)
+        matrix = build_count_matrix(_cohort(subj), params, contingency=2)
+        seqs, counts = matrix.sequences, matrix.counts
         stream = extract_choice_stream(subj, 2, 3, encode_reward=True)
         expected = enumerate_sequences(stream, 2, 50)
         idx = seqs.index(next(iter(expected)))
@@ -195,8 +202,8 @@ class TestPipelineWiring:
         subj = _subject(choices, rewards)
         params = CBASParams(num_arms=3, seq_len_max=1, criterion=3,
                             criterion_order=1)
-        crit = subject_criteria([subj], params, contingency=2)
-        assert crit[0] == 5, "third reward is at trial index 5"
+        crit = subject_criteria(_cohort(subj), params, contingency=2)
+        assert crit["s"] == 5, "third reward is at trial index 5"
 
     def test_order_one_yields_fewer_counts_than_order_zero(self):
         rng = np.random.default_rng(1)
@@ -207,16 +214,16 @@ class TestPipelineWiring:
                          criterion_order=1)
         high = CBASParams(num_arms=3, seq_len_max=2, criterion=200,
                           criterion_order=0)
-        _, few = build_count_matrix([subj], low, contingency=2)
-        _, many = build_count_matrix([subj], high, contingency=2)
+        few = build_count_matrix(_cohort(subj), low, contingency=2).counts
+        many = build_count_matrix(_cohort(subj), high, contingency=2).counts
         assert few.sum() < many.sum()
 
     def test_subject_short_of_criterion_reports_inf(self):
         subj = _subject(np.zeros(20, dtype=int), np.zeros(20, dtype=int))
         params = CBASParams(num_arms=3, seq_len_max=1, criterion=5,
                             criterion_order=1)
-        crit = subject_criteria([subj], params, contingency=2)
-        assert np.isinf(crit[0])
+        crit = subject_criteria(_cohort(subj), params, contingency=2)
+        assert np.isinf(crit["s"])
 
     def test_inf_criterion_counts_every_window(self):
         """A subject that never reaches criterion is not truncated."""
@@ -225,8 +232,8 @@ class TestPipelineWiring:
         unreachable = CBASParams(num_arms=3, seq_len_max=1, criterion=99,
                                  criterion_order=1)
         no_cutoff = CBASParams(num_arms=3, seq_len_max=1, criterion=10_000)
-        _, a = build_count_matrix([subj], unreachable, contingency=2)
-        _, b = build_count_matrix([subj], no_cutoff, contingency=2)
+        a = build_count_matrix(_cohort(subj), unreachable, contingency=2).counts
+        b = build_count_matrix(_cohort(subj), no_cutoff, contingency=2).counts
         assert a.sum() == b.sum() == 30
 
     def test_reward_blocks_follow_the_enumeration_structure(self):
@@ -243,10 +250,10 @@ class TestPipelineWiring:
         subj = _subject(np.zeros(4, dtype=int), np.ones(4, dtype=int), sessions)
         params = CBASParams(num_arms=3, seq_len_max=1, criterion=1,
                             criterion_order=3)
-        assert np.isinf(subject_criteria([subj], params, contingency=2,
-                                         block_aware=True)[0])
-        assert subject_criteria([subj], params, contingency=2,
-                                block_aware=False)[0] == 0
+        assert np.isinf(subject_criteria(_cohort(subj), params, contingency=2,
+                                         block_aware=True)["s"])
+        assert subject_criteria(_cohort(subj), params, contingency=2,
+                                block_aware=False)["s"] == 0
 
 
 # ---------------------------------------------------------------------------
@@ -283,7 +290,7 @@ def computed(lesion_cohort_dir):
     out = {}
     for path in files:
         subject = int(path.stem[2:])
-        record = load_subject_data_with_contingencies(path)
+        record = load_subject_with_contingencies(path)
         for block in record.alternation_blocks():
             out[(subject, block.block)] = criterion_trial(
                 record.reward_blocks_for(block.block), REFERENCE_ORDER, REFERENCE_COUNT)

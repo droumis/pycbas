@@ -19,7 +19,7 @@ __version__ = "0.2.0"
 
 from .params import CBASParams, CBASResult
 from .cohort import (Subject, Cohort, CountMatrix, load_subject, load_cohort,
-                     resolve_labels)
+                     resolve_labels, default_group_coder)
 from .io import (load_subject_data, extract_choice_stream, extract_choice_streams_by_block,
                  enumerate_sequences, enumerate_sequences_block_aware,
                  split_sequence_entry, decode_symbol, decode_sequence)
@@ -34,17 +34,18 @@ from .stepdown import (
 from .resources import estimate_resources, print_resource_estimate
 from .pipeline import (run_cbas_comparative, run_cbas_correlative,
                        run_cbas_multicontingency)
-from .contingency import (load_subject_data_with_contingencies,
+from .contingency import (load_subject_with_contingencies,
                           load_cohort_with_contingencies,
+                          load_cohort_info,
                           shared_contingency_blocks,
                           build_multicontingency_count_matrix,
-                          record_criteria)
+                          contingency_criteria)
 from .criterion import criterion_trial, reached_criterion
 from .core import subject_criteria, NonIntegerCountWarning
 
 __all__ = [
     "__version__",
-    "record_criteria",
+    "contingency_criteria",
     "CBASParams",
     "CBASResult",
     "Subject",
@@ -53,6 +54,7 @@ __all__ = [
     "load_subject",
     "load_cohort",
     "resolve_labels",
+    "default_group_coder",
     "load_subject_data",
     "extract_choice_stream",
     "extract_choice_streams_by_block",
@@ -74,7 +76,8 @@ __all__ = [
     "run_cbas_comparative",
     "run_cbas_correlative",
     "run_cbas_multicontingency",
-    "load_subject_data_with_contingencies",
+    "load_subject_with_contingencies",
+    "load_cohort_info",
     "load_cohort_with_contingencies",
     "shared_contingency_blocks",
     "build_multicontingency_count_matrix",

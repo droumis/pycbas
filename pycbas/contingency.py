@@ -37,12 +37,14 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from .cohort import Cohort, CountMatrix, Subject
+from .core import as_cohort
+
 __all__ = [
-    "record_criteria",
+    "contingency_criteria",
     "ContingencyBlock",
-    "SubjectRecord",
     "assign_contingency_blocks",
-    "load_subject_data_with_contingencies",
+    "load_subject_with_contingencies",
     "load_cohort_info",
     "load_cohort_with_contingencies",
     "shared_contingency_blocks",
@@ -74,53 +76,6 @@ class ContingencyBlock:
         if self.centre is None:
             return None
         return 2 * self.centre - self.left_outer
-
-
-@dataclass
-class SubjectRecord:
-    """One subject's trials, with contingency block membership per trial.
-
-    session, choice, reward: per-trial arrays, blanks already dropped
-    block: per-trial contingency block index
-    blocks: the ContingencyBlock list, in temporal order
-    """
-
-    session: np.ndarray
-    choice: np.ndarray
-    reward: np.ndarray
-    block: np.ndarray
-    blocks: list
-
-    def __len__(self):
-        return len(self.choice)
-
-    def alternation_blocks(self):
-        """Blocks excluding exploration."""
-        return [b for b in self.blocks if not b.is_exploration]
-
-    def reward_blocks_for(self, block):
-        """Per-session reward arrays for one contingency, in temporal order.
-
-        This is the input `pycbas.criterion` expects. Sessions are kept separate
-        so that runs cannot span a session boundary.
-        """
-        mask = self.block == block
-        out = []
-        for session in np.unique(self.session[mask]):
-            out.append(self.reward[mask & (self.session == session)])
-        return out
-
-    def symbol_blocks_for(self, block, num_arms=6, encode_reward=True):
-        """Per-session symbol arrays for one contingency, in temporal order."""
-        mask = self.block == block
-        out = []
-        for session in np.unique(self.session[mask]):
-            sel = mask & (self.session == session)
-            symbols = self.choice[sel]
-            if encode_reward:
-                symbols = symbols + self.reward[sel] * num_arms
-            out.append(symbols)
-        return out
 
 
 def assign_contingency_blocks(session, centre, left_outer,
@@ -212,7 +167,8 @@ def assign_contingency_blocks(session, centre, left_outer,
     return block_of_trial, blocks
 
 
-def load_subject_data_with_contingencies(filepath, allow_mid_session_change=False):
+def load_subject_with_contingencies(filepath, allow_mid_session_change=False,
+                                    id=None, meta=None):
     """Load one subject from the multi-contingency text format.
 
     The format has nine comma-separated columns: session, choice, reward, centre
@@ -230,10 +186,15 @@ def load_subject_data_with_contingencies(filepath, allow_mid_session_change=Fals
         filepath: path to one subject's file
         allow_mid_session_change: forwarded to `assign_contingency_blocks`, which
             raises by default when a contingency changes partway through a session.
+        id: subject identity, defaulting to the filename stem
+        meta: per-subject metadata, typically one row of the cohort info table
 
     Returns:
-        SubjectRecord
+        Subject, whose `condition` column is the contingency block index, so that
+        selecting `contingency=2` means the same thing as it does for the
+        single-contingency format.
     """
+    from pathlib import Path
     sessions, choices, rewards, centres, lefts = [], [], [], [], []
     with open(filepath) as fh:
         lines = fh.readlines()
@@ -262,10 +223,12 @@ def load_subject_data_with_contingencies(filepath, allow_mid_session_change=Fals
     reward = np.array(rewards, dtype=np.int64)
     block, blocks = assign_contingency_blocks(
         session, centres, lefts, allow_mid_session_change=allow_mid_session_change)
-    return SubjectRecord(session, choice, reward, block, blocks)
+    trials = np.column_stack([session, choice, reward, block])
+    return Subject(id=id if id is not None else Path(filepath).stem,
+                   trials=trials, meta=dict(meta or {}), blocks=blocks)
 
 
-def shared_contingency_blocks(records):
+def shared_contingency_blocks(cohort):
     """Validate that a block index means the same thing for every subject.
 
     The published convention counts each contingency separately, so a column of the
@@ -289,12 +252,16 @@ def shared_contingency_blocks(records):
     Returns:
         sorted list of block indices common to all subjects
     """
-    if not records:
-        raise ValueError("no subject records given")
+    cohort = as_cohort(cohort)
+    for subject in cohort:
+        if not subject.has_blocks:
+            raise ValueError(
+                f"subject {subject.id!r} has no contingency block structure; load "
+                f"the cohort with load_cohort_with_contingencies")
 
     arms_by_block = {}
     block_sets = []
-    for index, record in enumerate(records):
+    for index, record in enumerate(cohort):
         blocks = {b.block: (b.centre, b.left_outer)
                   for b in record.alternation_blocks()}
         block_sets.append(set(blocks))
@@ -305,8 +272,9 @@ def shared_contingency_blocks(records):
                 first_arms, first_index = arms_by_block[block]
                 raise ValueError(
                     f"contingency block {block} is not aligned across subjects: "
-                    f"subject {first_index} has centre/left {first_arms} but "
-                    f"subject {index} has {arms}. A block index must denote the "
+                    f"subject {cohort[first_index].id!r} has centre/left "
+                    f"{first_arms} but subject {cohort[index].id!r} has {arms}. "
+                    f"A block index must denote the "
                     "same arms for every subject before its sequences can be "
                     "pooled into one hypothesis."
                 )
@@ -318,8 +286,9 @@ def shared_contingency_blocks(records):
         offenders = [i for i, s in enumerate(block_sets) if not union <= s]
         raise ValueError(
             f"not every subject ran every contingency: block(s) {missing} are "
-            f"absent for {len(offenders)} of {len(records)} subjects, first at "
-            f"index {offenders[0]}. Those subjects have no data for the affected "
+            f"absent for {len(offenders)} of {len(cohort)} subjects, first "
+            f"{cohort[offenders[0]].id!r}. Those subjects have no data for the "
+            f"affected "
             "columns, and filling zero would assert they never produced those "
             "sequences. Representing it honestly needs NaN support in the "
             "statistic and the bootstrap, which pycbas does not have yet. Restrict "
@@ -328,14 +297,13 @@ def shared_contingency_blocks(records):
     return sorted(common)
 
 
-def record_criteria(records, params, blocks=None):
+def contingency_criteria(cohort, params, blocks=None):
     """Criterion trial index per subject per contingency, `inf` where unreached.
 
-    The multi-contingency counterpart of `core.subject_criteria`, which cannot be
-    used here because it takes per-subject arrays rather than `SubjectRecord`s. The
-    criterion applies within each contingency, so a subject can reach it in one
-    contingency and fall short in another, and the answer is a matrix rather than a
-    vector.
+    The multi-contingency counterpart of `core.subject_criteria`. It stays a separate
+    function because it answers a different question: the criterion applies within
+    each contingency, so a subject can reach it in one and fall short in another, and
+    the answer is one value per subject *per contingency* rather than one per subject.
 
     This matters more here than in the single-contingency case, not less. A subject
     that falls short is not truncated and contributes every window it has, so with a
@@ -343,16 +311,18 @@ def record_criteria(records, params, blocks=None):
     several contingencies multiplies the number of chances to fall short.
 
     Args:
-        records: list of SubjectRecord
+        cohort: Cohort loaded with contingency blocks
         params: CBASParams; `criterion` and `criterion_order` are what matter
         blocks: contingency blocks to evaluate, default all shared by every subject
 
     Returns:
-        float array of shape (n_subjects, n_blocks), and the block list it used.
+        `{subject_id: {block: criterion_trial}}`, and the block list it used. Keyed by
+        id so a shortfall report can name the subject.
     """
     from .criterion import criterion_trial
 
-    available = shared_contingency_blocks(records)
+    cohort = as_cohort(cohort)
+    available = shared_contingency_blocks(cohort)
     if blocks is None:
         blocks = available
     else:
@@ -364,15 +334,18 @@ def record_criteria(records, params, blocks=None):
                 f"available: {available}")
 
     order = getattr(params, "criterion_order", 0)
-    out = np.array([
-        [criterion_trial(record.reward_blocks_for(block), order, params.criterion)
-         for block in blocks]
-        for record in records
-    ], dtype=np.float64)
+    out = {
+        subject.id: {
+            block: criterion_trial(subject.reward_blocks_for(block), order,
+                                   params.criterion)
+            for block in blocks
+        }
+        for subject in cohort
+    }
     return out, list(blocks)
 
 
-def build_multicontingency_count_matrix(records, params, blocks=None,
+def build_multicontingency_count_matrix(cohort, params, blocks=None,
                                         encode_reward=True):
     """Count sequences separately per contingency and concatenate the columns.
 
@@ -387,7 +360,7 @@ def build_multicontingency_count_matrix(records, params, blocks=None,
     episode, and its trial index is local to that contingency.
 
     Args:
-        records: list of SubjectRecord
+        cohort: Cohort loaded with contingency blocks
         params: CBASParams; `criterion_order` and `criterion` apply within each
             contingency
         blocks: contingency block indices to include, default all that every
@@ -395,14 +368,14 @@ def build_multicontingency_count_matrix(records, params, blocks=None,
         encode_reward: encode reward into symbols
 
     Returns:
-        (sequences, count_matrix) where `sequences` is a list of
-        (block, sequence_tuple) pairs and `count_matrix` has shape
-        (n_subjects, len(sequences)).
+        CountMatrix whose `sequences` entries are (block, sequence_tuple) pairs and
+        whose `subject_ids` are the cohort's ids in cohort order.
     """
     from .criterion import criterion_trial, as_enumeration_cutoff
     from .io import enumerate_sequences_block_aware
 
-    available = shared_contingency_blocks(records)
+    cohort = as_cohort(cohort)
+    available = shared_contingency_blocks(cohort)
     if blocks is None:
         blocks = available
     else:
@@ -419,7 +392,7 @@ def build_multicontingency_count_matrix(records, params, blocks=None,
     # Row order is `records` order; see the invariant note in core.build_count_matrix.
     # Do not reorder this list or collect its results out of order.
     per_subject = []
-    for record in records:
+    for record in cohort:
         counts = {}
         for block in blocks:
             streams = record.symbol_blocks_for(block, params.num_arms, encode_reward)
@@ -445,11 +418,12 @@ def build_multicontingency_count_matrix(records, params, blocks=None,
     sequences = sorted(totals, key=lambda k: (k[0], -totals[k], len(k[1]), k[1]))
 
     index = {key: i for i, key in enumerate(sequences)}
-    count_matrix = np.zeros((len(records), len(sequences)), dtype=np.float64)
+    count_matrix = np.zeros((len(cohort), len(sequences)), dtype=np.float64)
     for row, counts in enumerate(per_subject):
         for key, n in counts.items():
             count_matrix[row, index[key]] = n
-    return sequences, count_matrix
+    return CountMatrix(counts=count_matrix, subject_ids=cohort.ids,
+                       sequences=sequences)
 
 
 def load_cohort_with_contingencies(directory, allow_mid_session_change=False):
@@ -458,9 +432,11 @@ def load_cohort_with_contingencies(directory, allow_mid_session_change=False):
     Files are ordered numerically by the digits in their stem, so `an2` precedes
     `an10`, which is the order the info table rows correspond to.
 
+    The info table's columns become each subject's `meta`, so a grouping or a filter
+    can be derived from them by name without a second list to keep in step.
+
     Returns:
-        (records, info) where records is a list of SubjectRecord and info is the
-        list of dicts from `load_cohort_info`, or None when no info file exists.
+        Cohort. The info table is on the subjects as `meta`, not returned separately.
     """
     from pathlib import Path
     directory = Path(directory)
@@ -469,16 +445,19 @@ def load_cohort_with_contingencies(directory, allow_mid_session_change=False):
         raise ValueError(f"no subject files matching an*.txt in {directory}")
     files.sort(key=lambda p: int("".join(c for c in p.stem if c.isdigit())))
 
-    records = [load_subject_data_with_contingencies(
-        p, allow_mid_session_change=allow_mid_session_change) for p in files]
-
     info_path = directory / "anInfo.txt"
     info = load_cohort_info(info_path) if info_path.exists() else None
-    if info is not None and len(info) != len(records):
+    if info is not None and len(info) != len(files):
         raise ValueError(
-            f"{len(records)} subject files but {len(info)} rows in "
+            f"{len(files)} subject files but {len(info)} rows in "
             f"{info_path.name}; they must correspond one to one")
-    return records, info
+
+    return Cohort([
+        load_subject_with_contingencies(
+            path, allow_mid_session_change=allow_mid_session_change,
+            meta=info[i] if info is not None else None)
+        for i, path in enumerate(files)
+    ])
 
 
 def load_cohort_info(filepath):

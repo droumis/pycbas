@@ -7,11 +7,15 @@ from .bootstrap import bootstrap_test_stats, bootstrap_test_stats_correlative
 from .stepdown import find_k_fwer, find_k_fwer_chunked
 
 
-def _group_indices(group_labels, n_subjects):
-    """Row indices for each group, refusing any labelling that drops a subject.
+def _group_indices(group_labels, cohort, row_ids):
+    """Row indices for each group, resolved through the ids of those rows.
+
+    Resolving by id rather than by position is what makes the row order of the count
+    matrix irrelevant here: whatever order the builder produced, each row is grouped
+    by the label belonging to *that* subject.
 
     Every one of these used to produce a complete-looking CBASResult from a cohort
-    that was not the one the caller passed:
+    that was not the one the caller passed, so they fail here instead:
 
     - too few labels: `np.where` simply found fewer rows, so an analysis of five of
       six subjects was indistinguishable from a finished one
@@ -20,28 +24,26 @@ def _group_indices(group_labels, n_subjects):
     - an empty group: the studentized statistic divides by that group's size, so
       every value is NaN, reported only as a RuntimeWarning
 
-    These are all the same mistake, that the labels do not describe this cohort, and
-    it is a mistake no downstream check can recover from, so fail here. Callers with
-    subjects to exclude should drop them from `subjects_data` too, rather than
-    labelling them into neither group.
+    Callers with subjects to exclude should drop them from the cohort, with
+    `Cohort.filter`, rather than labelling them into neither group.
     """
-    labels = np.asarray(group_labels)
-    if labels.ndim != 1:
-        raise ValueError(
-            f"group_labels must be one-dimensional, got shape {labels.shape}")
-    if len(labels) != n_subjects:
-        raise ValueError(
-            f"{len(labels)} group labels for {n_subjects} subjects; they must "
-            f"correspond one to one, in the same order")
+    from .cohort import resolve_labels
+    if isinstance(group_labels, str):
+        labels = resolve_labels(dict(zip(cohort.ids,
+                                         cohort.labels_from(group_labels).tolist())),
+                                row_ids)
+    else:
+        labels = resolve_labels(group_labels, row_ids, cohort_ids=cohort.ids)
 
+    n_subjects = len(row_ids)
     groups = [np.where(labels == 0)[0], np.where(labels == 1)[0]]
     assigned = len(groups[0]) + len(groups[1])
     if assigned != n_subjects:
         stray = sorted({v.item() for v in np.unique(labels)} - {0, 1})
         raise ValueError(
-            f"group_labels must be 0 or 1, but {n_subjects - assigned} of "
+            f"group labels must be 0 or 1, but {n_subjects - assigned} of "
             f"{n_subjects} subjects are labelled {stray}, which puts them in "
-            f"neither group; drop them from subjects_data instead")
+            f"neither group; drop them from the cohort instead")
     for group, index in zip(groups, (0, 1)):
         if len(group) == 0:
             raise ValueError(
@@ -49,22 +51,24 @@ def _group_indices(group_labels, n_subjects):
     return groups
 
 
-def _check_covariate(covariate, n_subjects):
-    """The correlative counterpart of `_group_indices`.
+def _check_covariate(covariate, cohort, row_ids):
+    """The correlative counterpart of `_group_indices`, also resolved by id.
 
     A short covariate raised from a broadcast deep in the statistic, naming array
     shapes rather than the mistake; a long one was truncated by the permutation
     indices without comment.
     """
-    covariate = np.asarray(covariate, dtype=np.float64)
-    if covariate.shape != (n_subjects,):
-        raise ValueError(
-            f"covariate has shape {covariate.shape}, expected ({n_subjects},), one "
-            f"value per subject in the same order as subjects_data")
-    return covariate
+    from .cohort import resolve_labels
+    if isinstance(covariate, str):
+        values = resolve_labels(dict(zip(cohort.ids,
+                                         cohort.covariate_from(covariate).tolist())),
+                                row_ids)
+    else:
+        values = resolve_labels(covariate, row_ids, cohort_ids=cohort.ids)
+    return np.asarray(values, dtype=np.float64)
 
 
-def run_cbas_multicontingency(records, group_labels, params=None, blocks=None,
+def run_cbas_multicontingency(cohort, group_labels, params=None, blocks=None,
                               encode_reward=True, chunked=True):
     """Comparative CBAS across several contingencies, each counted separately.
 
@@ -74,10 +78,10 @@ def run_cbas_multicontingency(records, group_labels, params=None, blocks=None,
     of the count matrix is the ordinary comparative path, unchanged.
 
     Args:
-        records: list of SubjectRecord from `load_subject_data_with_contingencies`
-        group_labels: array of 0/1 indicating group membership, one per subject
-            in the same order. Must label every subject as 0 or 1 and leave
-            neither group empty; anything else raises.
+        cohort: Cohort from `load_cohort_with_contingencies`
+        group_labels: how to group the cohort. A `{subject_id: 0/1}` mapping, a
+            sequence in cohort order, or the name of a `meta` column to derive it
+            from. Every subject must be 0 or 1 and neither group may be empty.
         params: CBASParams instance; the criterion applies within each contingency
         blocks: contingency blocks to include, default all shared by every subject
         encode_reward: encode reward into symbols
@@ -93,27 +97,26 @@ def run_cbas_multicontingency(records, group_labels, params=None, blocks=None,
     if params is None:
         params = CBASParams()
 
-    group_indices = _group_indices(group_labels, len(records))
+    matrix = build_multicontingency_count_matrix(
+        cohort, params, blocks=blocks, encode_reward=encode_reward)
+    group_indices = _group_indices(group_labels, cohort, matrix.subject_ids)
 
-    sequences, count_matrix = build_multicontingency_count_matrix(
-        records, params, blocks=blocks, encode_reward=encode_reward)
-
-    return _finish_comparative(sequences, count_matrix, group_indices, params,
-                               chunked)
+    return _finish_comparative(matrix.sequences, matrix.counts, group_indices,
+                               params, chunked)
 
 
-def run_cbas_comparative(subjects_data, group_labels, params=None,
+def run_cbas_comparative(cohort, group_labels, params=None,
                          contingency=2, encode_reward=True, chunked=True,
                          block_aware=False):
     """Run the full comparative CBAS pipeline.
 
     Args:
-        subjects_data: list of subject data arrays (from load_subject_data)
-        group_labels: array of 0/1 indicating group membership, one per subject
-            in the same order. Must label every subject as 0 or 1 and leave
-            neither group empty; anything else raises.
+        cohort: Cohort of subjects (from `load_cohort`)
+        group_labels: how to group the cohort. A `{subject_id: 0/1}` mapping, a
+            sequence in cohort order, or the name of a `meta` column to derive it
+            from. Every subject must be 0 or 1 and neither group may be empty.
         params: CBASParams instance
-        contingency: block type to filter on, or None for all trials
+        contingency: condition value to filter on, or None for all trials
         encode_reward: if True, encode symbol + reward*num_arms. Set False for 2AFC.
         chunked: if True (default), use memory-efficient chunked pipeline
         block_aware: if True, sequences cannot span block/session boundaries.
@@ -124,14 +127,12 @@ def run_cbas_comparative(subjects_data, group_labels, params=None,
     if params is None:
         params = CBASParams()
 
-    group_indices = _group_indices(group_labels, len(subjects_data))
-
-    sequences, count_matrix = build_count_matrix(subjects_data, params,
-                                                 contingency=contingency,
-                                                 encode_reward=encode_reward,
-                                                 block_aware=block_aware)
-    return _finish_comparative(sequences, count_matrix, group_indices, params,
-                               chunked)
+    matrix = build_count_matrix(cohort, params, contingency=contingency,
+                                encode_reward=encode_reward,
+                                block_aware=block_aware)
+    group_indices = _group_indices(group_labels, cohort, matrix.subject_ids)
+    return _finish_comparative(matrix.sequences, matrix.counts, group_indices,
+                               params, chunked)
 
 
 def _finish_comparative(sequences, count_matrix, group_indices, params, chunked):
@@ -170,14 +171,14 @@ def _finish_comparative(sequences, count_matrix, group_indices, params, chunked)
     )
 
 
-def run_cbas_correlative(subjects_data, covariate, params=None,
+def run_cbas_correlative(cohort, covariate, params=None,
                          contingency=2, encode_reward=True, block_aware=False):
     """Run the full correlative CBAS pipeline.
 
     Args:
-        subjects_data: list of subject data arrays (from load_subject_data)
-        covariate: array of continuous values (e.g. CBIT scores), one per subject
-            in the same order as subjects_data. A length mismatch raises.
+        cohort: Cohort of subjects (from `load_cohort`)
+        covariate: continuous value per subject: a `{subject_id: value}` mapping, a
+            sequence in cohort order, or the name of a `meta` column.
         params: CBASParams instance
         contingency: block type to filter on, or None for all trials
         encode_reward: if True, encode symbol + reward*num_arms. Set False for 2AFC.
@@ -189,11 +190,11 @@ def run_cbas_correlative(subjects_data, covariate, params=None,
     if params is None:
         params = CBASParams()
 
-    covariate = _check_covariate(covariate, len(subjects_data))
-    sequences, count_matrix = build_count_matrix(subjects_data, params,
-                                                 contingency=contingency,
-                                                 encode_reward=encode_reward,
-                                                 block_aware=block_aware)
+    matrix = build_count_matrix(cohort, params, contingency=contingency,
+                                encode_reward=encode_reward,
+                                block_aware=block_aware)
+    sequences, count_matrix = matrix.sequences, matrix.counts
+    covariate = _check_covariate(covariate, cohort, matrix.subject_ids)
     test_stats = compute_test_stats_correlative(count_matrix, covariate)
     null_matrix, null_directions = bootstrap_test_stats_correlative(count_matrix, covariate, params)
     g_values, k_final, k_history = find_k_fwer(

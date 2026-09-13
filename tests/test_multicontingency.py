@@ -12,24 +12,32 @@ data and skip without it, via the fixtures in conftest.py.
 import numpy as np
 import pytest
 
-from pycbas import CBASParams
-from pycbas.contingency import (SubjectRecord, assign_contingency_blocks,
+from pycbas import CBASParams, Cohort, Subject
+from pycbas.contingency import (assign_contingency_blocks,
                                 build_multicontingency_count_matrix,
                                 shared_contingency_blocks,
                                 load_cohort_with_contingencies,
-                                load_subject_data_with_contingencies)
+                                load_subject_with_contingencies)
 from pycbas.criterion import criterion_trial, as_enumeration_cutoff
 from pycbas.io import enumerate_sequences_block_aware
 from pycbas.pipeline import run_cbas_multicontingency
 
 
-def make_record(sessions, choices, rewards, centres, lefts):
-    """Build a SubjectRecord directly, bypassing the file format."""
+def _seqs_counts(matrix):
+    """(sequences, counts) from a CountMatrix, so these tests keep reading as before."""
+    return matrix.sequences, matrix.counts
+
+
+def make_record(sessions, choices, rewards, centres, lefts, id="s"):
+    """Build a Subject directly, bypassing the file format."""
     sessions = np.asarray(sessions, dtype=np.int64)
     block, blocks = assign_contingency_blocks(
         sessions, np.asarray(centres), np.asarray(lefts))
-    return SubjectRecord(sessions, np.asarray(choices, dtype=np.int64),
-                         np.asarray(rewards, dtype=np.int64), block, blocks)
+    trials = np.column_stack([sessions,
+                              np.asarray(choices, dtype=np.int64),
+                              np.asarray(rewards, dtype=np.int64),
+                              block])
+    return Subject(id=id, trials=trials, blocks=blocks)
 
 
 def two_block_record(seed=0, n=40):
@@ -44,7 +52,7 @@ def two_block_record(seed=0, n=40):
             rewards.append(int(rng.integers(0, 2)))
             centres.append(centre)
             lefts.append(left)
-    return make_record(sessions, choices, rewards, centres, lefts)
+    return make_record(sessions, choices, rewards, centres, lefts, id=f"s{seed}")
 
 
 # ---------------------------------------------------------------------------
@@ -53,30 +61,31 @@ def two_block_record(seed=0, n=40):
 
 class TestSharedBlocks:
     def test_aligned_cohort(self):
-        records = [two_block_record(s) for s in range(3)]
+        records = Cohort([two_block_record(s) for s in range(3)])
         assert shared_contingency_blocks(records) == [1, 2]
 
     def test_exploration_is_excluded(self):
-        assert 0 not in shared_contingency_blocks([two_block_record()])
+        assert 0 not in shared_contingency_blocks(Cohort([two_block_record()]))
 
     def test_misaligned_arms_raise(self):
         """Block i must denote the same arms for every subject."""
         a = two_block_record()
         b = make_record([0, 0, 1, 1], [0, 0, 0, 0], [1, 1, 1, 1],
-                        [-1, -1, 3, 3], [-1, -1, 2, 2])   # block 1 is (3,2) here
+                        [-1, -1, 3, 3], [-1, -1, 2, 2],   # block 1 is (3,2) here
+                        id="b")
         with pytest.raises(ValueError, match="not aligned across subjects"):
-            shared_contingency_blocks([a, b])
+            shared_contingency_blocks(Cohort([a, b]))
 
     def test_missing_contingency_raises(self):
         """Zero would assert 'never produced it' rather than 'not measured'."""
         a = two_block_record()
-        b = make_record([0, 0], [0, 0], [1, 1], [-1, -1], [-1, -1])
+        b = make_record([0, 0], [0, 0], [1, 1], [-1, -1], [-1, -1], id="b")
         with pytest.raises(ValueError, match="not every subject ran every contingency"):
-            shared_contingency_blocks([a, b])
+            shared_contingency_blocks(Cohort([a, b]))
 
     def test_empty_input_raises(self):
         with pytest.raises(ValueError):
-            shared_contingency_blocks([])
+            shared_contingency_blocks(Cohort([]))
 
 
 # ---------------------------------------------------------------------------
@@ -86,17 +95,17 @@ class TestSharedBlocks:
 class TestMultiContingencyCounts:
     @pytest.fixture
     def cohort(self):
-        return [two_block_record(s) for s in range(5)]
+        return Cohort([two_block_record(s) for s in range(5)])
 
     def test_columns_are_grouped_by_contingency(self, cohort):
         params = CBASParams(num_arms=3, seq_len_max=2, criterion=10_000)
-        sequences, _ = build_multicontingency_count_matrix(cohort, params)
+        sequences, _ = _seqs_counts(build_multicontingency_count_matrix(cohort, params))
         blocks = [b for b, _ in sequences]
         assert blocks == sorted(blocks)
 
     def test_shape_and_label_format(self, cohort):
         params = CBASParams(num_arms=3, seq_len_max=2, criterion=10_000)
-        sequences, counts = build_multicontingency_count_matrix(cohort, params)
+        sequences, counts = _seqs_counts(build_multicontingency_count_matrix(cohort, params))
         assert counts.shape == (len(cohort), len(sequences))
         block, seq = sequences[0]
         assert isinstance(block, int) and isinstance(seq, tuple)
@@ -104,7 +113,7 @@ class TestMultiContingencyCounts:
     def test_per_contingency_columns_sum_to_the_total(self, cohort):
         """The convention's 100 + 200 = 300."""
         params = CBASParams(num_arms=3, seq_len_max=2, criterion=10_000)
-        sequences, counts = build_multicontingency_count_matrix(cohort, params)
+        sequences, counts = _seqs_counts(build_multicontingency_count_matrix(cohort, params))
         from collections import Counter
         per_block = Counter(b for b, _ in sequences)
         assert sum(per_block.values()) == counts.shape[1]
@@ -112,7 +121,7 @@ class TestMultiContingencyCounts:
 
     def test_same_sequence_under_two_contingencies_is_two_columns(self, cohort):
         params = CBASParams(num_arms=3, seq_len_max=2, criterion=10_000)
-        sequences, _ = build_multicontingency_count_matrix(cohort, params)
+        sequences, _ = _seqs_counts(build_multicontingency_count_matrix(cohort, params))
         from collections import Counter
         repeated = [s for s, n in Counter(s for _, s in sequences).items() if n > 1]
         assert repeated, "expected at least one sequence shared across contingencies"
@@ -123,7 +132,7 @@ class TestMultiContingencyCounts:
     def test_matches_an_independent_per_block_build(self, cohort):
         """The whole point: each contingency counted as if it were alone."""
         params = CBASParams(num_arms=3, seq_len_max=2, criterion=10_000)
-        sequences, counts = build_multicontingency_count_matrix(cohort, params)
+        sequences, counts = _seqs_counts(build_multicontingency_count_matrix(cohort, params))
         index = {key: i for i, key in enumerate(sequences)}
 
         for block in shared_contingency_blocks(cohort):
@@ -141,8 +150,8 @@ class TestMultiContingencyCounts:
 
     def test_blocks_argument_subsets(self, cohort):
         params = CBASParams(num_arms=3, seq_len_max=2, criterion=10_000)
-        all_seqs, _ = build_multicontingency_count_matrix(cohort, params)
-        one_seqs, one = build_multicontingency_count_matrix(cohort, params, blocks=[1])
+        all_seqs, _ = _seqs_counts(build_multicontingency_count_matrix(cohort, params))
+        one_seqs, one = _seqs_counts(build_multicontingency_count_matrix(cohort, params, blocks=[1]))
         assert {b for b, _ in one_seqs} == {1}
         assert one.shape[1] == sum(1 for b, _ in all_seqs if b == 1)
 
@@ -192,7 +201,8 @@ class TestMultiContingencyCounts:
         )
         params = CBASParams(num_arms=3, seq_len_max=1, criterion=2,
                             criterion_order=1)
-        sequences, counts = build_multicontingency_count_matrix([record], params)
+        sequences, counts = _seqs_counts(
+            build_multicontingency_count_matrix(Cohort([record]), params))
         got = {key: int(counts[0, i]) for i, key in enumerate(sequences)}
 
         # symbol = choice + reward * num_arms
@@ -209,7 +219,7 @@ class TestMultiContingencyCounts:
 
 class TestPipeline:
     def test_runs_end_to_end(self):
-        cohort = [two_block_record(s, n=60) for s in range(12)]
+        cohort = Cohort([two_block_record(s, n=60) for s in range(12)])
         labels = np.array([0, 1] * 6)
         params = CBASParams(num_arms=3, seq_len_max=2, criterion=10_000,
                             resample_number=200)
@@ -219,12 +229,12 @@ class TestPipeline:
         assert all(isinstance(b, int) and isinstance(s, tuple)
                    for b, s in result.sequences)
 
-    def test_labels_must_match_the_records(self):
-        """Same guard as the single-contingency path, counted against `records`."""
-        cohort = [two_block_record(s, n=60) for s in range(12)]
+    def test_labels_must_match_the_cohort(self):
+        """Same guard as the single-contingency path, counted against the cohort."""
+        cohort = Cohort([two_block_record(s, n=60) for s in range(12)])
         params = CBASParams(num_arms=3, seq_len_max=2, criterion=10_000,
                             resample_number=50)
-        with pytest.raises(ValueError, match="11 group labels for 12 subjects"):
+        with pytest.raises(ValueError, match="11 labels for 12 subjects"):
             run_cbas_multicontingency(cohort, np.array([0, 1] * 5 + [0]), params)
 
     def test_chunked_and_unchunked_agree(self):
@@ -236,7 +246,7 @@ class TestPipeline:
         Both default to the same seed, so agreement should be exact rather than
         approximate.
         """
-        cohort = [two_block_record(s, n=60) for s in range(12)]
+        cohort = Cohort([two_block_record(s, n=60) for s in range(12)])
         labels = np.array([0, 1] * 6)
         params = CBASParams(num_arms=3, seq_len_max=2, criterion=10_000,
                             resample_number=300)
@@ -253,7 +263,7 @@ class TestPipeline:
                                    direct.g_values[finite])
 
     def test_single_block_subset_matches_hypothesis_count(self):
-        cohort = [two_block_record(s, n=60) for s in range(12)]
+        cohort = Cohort([two_block_record(s, n=60) for s in range(12)])
         labels = np.array([0, 1] * 6)
         params = CBASParams(num_arms=3, seq_len_max=2, criterion=10_000,
                             resample_number=200)
@@ -273,35 +283,35 @@ def cohort(lesion_cohort_dir):
 
 class TestLesionCohort:
     def test_loads_in_numeric_order(self, cohort):
-        records, info = cohort
-        # Consistency between the two loaders rather than a pinned cohort size: the
-        # claim is that every info row produced a record, which is what makes the
-        # positional correspondence between the two lists safe to rely on.
-        assert len(records) == len(info) > 0
+        # The info table is now on the subjects, so the correspondence it used to be
+        # the caller's job to preserve is structural: every subject carries its own
+        # row. Assert that rather than a pinned cohort size.
+        assert len(cohort) > 0
+        assert all(s.meta for s in cohort)
+        assert cohort.ids == sorted(cohort.ids,
+                                    key=lambda i: int("".join(c for c in i
+                                                             if c.isdigit())))
 
     def test_every_subject_runs_all_six_contingencies(self, cohort):
-        records, _ = cohort
-        assert shared_contingency_blocks(records) == [1, 2, 3, 4, 5, 6]
+        assert shared_contingency_blocks(cohort) == [1, 2, 3, 4, 5, 6]
 
     def test_block_one_and_five_share_arms_but_stay_separate(self, cohort):
         """The recurrence the reference implementation does not merge."""
-        records, _ = cohort
         blocks = {b.block: (b.centre, b.left_outer)
-                  for b in records[0].alternation_blocks()}
+                  for b in cohort[0].alternation_blocks()}
         assert blocks[1] == blocks[5], "expected the arms-2-3-4 recurrence"
         params = CBASParams(num_arms=6, seq_len_max=2, criterion=100,
                             criterion_order=4)
-        sequences, _ = build_multicontingency_count_matrix(
-            records[:20], params, blocks=[1, 5])
+        sequences, _ = _seqs_counts(build_multicontingency_count_matrix(
+            cohort[:20], params, blocks=[1, 5]))
         present = {b for b, _ in sequences}
         assert present == {1, 5}, "the recurrence must contribute its own columns"
 
     def test_counts_are_nonzero_and_shaped(self, cohort):
-        records, _ = cohort
         params = CBASParams(num_arms=6, seq_len_max=2, criterion=100,
                             criterion_order=4)
-        sequences, counts = build_multicontingency_count_matrix(
-            records[:30], params)
+        sequences, counts = _seqs_counts(build_multicontingency_count_matrix(
+            cohort[:30], params))
         assert counts.shape == (30, len(sequences))
         assert counts.sum() > 0
         assert (counts.sum(axis=1) > 0).all(), "every subject contributes counts"
@@ -326,7 +336,7 @@ class TestHeaderDetection:
     def _load(self, tmp_path, text):
         fp = tmp_path / "an0.txt"
         fp.write_text(text)
-        return load_subject_data_with_contingencies(fp)
+        return load_subject_with_contingencies(fp)
 
     def test_headerless_file_keeps_every_trial(self, tmp_path):
         rec = self._load(tmp_path, "\n".join(self.ROWS) + "\n")

@@ -5,6 +5,8 @@ import pytest
 
 from pycbas import (
     CBASParams,
+    Cohort,
+    Subject,
     load_subject_data,
     extract_choice_stream,
     enumerate_sequences,
@@ -201,7 +203,7 @@ class TestFindKFWER:
 
 
 def load_rat_data():
-    """Load all rat data files and return (subjects_data, group_labels)."""
+    """Load all rat data files and return (cohort, group_labels)."""
     require_reference_path(DATA_DIR, "Igor reference data")
 
     subjects_data = []
@@ -215,11 +217,10 @@ def load_rat_data():
             label = 1
         else:
             continue
-        data = load_subject_data(f)
-        subjects_data.append(data)
+        subjects_data.append(Subject(id=name, trials=load_subject_data(f)))
         group_labels.append(label)
 
-    return subjects_data, np.array(group_labels)
+    return Cohort(subjects_data), np.array(group_labels)
 
 
 class TestLoadSubjectData:
@@ -251,6 +252,12 @@ def synthetic_subject(seed, n_trials=120, n_sessions=2, num_arms=3):
         rng.integers(0, 2, len(sessions)).astype(np.int32),
         np.full(len(sessions), 2, dtype=np.int32),
     ])
+
+
+def synthetic_cohort(subjects, prefix="s"):
+    """Wrap trial arrays as an identified cohort, ids following their position."""
+    return Cohort([Subject(id=f"{prefix}{i}", trials=t)
+                   for i, t in enumerate(subjects)])
 
 
 class TestCountMatrixRowOrder:
@@ -307,9 +314,11 @@ class TestCountMatrixRowOrder:
         subjects = self.cohort()
         perm = [4, 1, 5, 0, 3, 2]
 
-        sequences, counts = build_count_matrix(subjects, self.params)
-        perm_sequences, perm_counts = build_count_matrix(
-            [subjects[i] for i in perm], self.params)
+        matrix = build_count_matrix(synthetic_cohort(subjects), self.params)
+        sequences, counts = matrix.sequences, matrix.counts
+        permuted = build_count_matrix(
+            synthetic_cohort([subjects[i] for i in perm]), self.params)
+        perm_sequences, perm_counts = permuted.sequences, permuted.counts
 
         np.testing.assert_array_equal(perm_counts, counts[perm])
         # Column order is decided by totals over the whole cohort, so permuting the
@@ -324,14 +333,15 @@ class TestCountMatrixRowOrder:
         consistently, so compare each row against a build of that subject by itself.
         """
         subjects = self.cohort(4)
-        sequences, counts = build_count_matrix(subjects, self.params)
+        matrix = build_count_matrix(synthetic_cohort(subjects), self.params)
+        sequences, counts = matrix.sequences, matrix.counts
         index = {seq: i for i, seq in enumerate(sequences)}
 
         for i, subject in enumerate(subjects):
-            solo_sequences, solo_counts = build_count_matrix([subject], self.params)
-            for j, seq in enumerate(solo_sequences):
-                assert counts[i, index[seq]] == solo_counts[0, j]
-            absent = set(sequences) - set(solo_sequences)
+            solo = build_count_matrix(synthetic_cohort([subject]), self.params)
+            for j, seq in enumerate(solo.sequences):
+                assert counts[i, index[seq]] == solo.counts[0, j]
+            absent = set(sequences) - set(solo.sequences)
             assert np.all(counts[i, [index[seq] for seq in absent]] == 0)
 
     def test_group_structure_cannot_reach_the_matrix(self):
@@ -352,14 +362,15 @@ class TestCohortLabelValidation:
     params = CBASParams(num_arms=3, seq_len_max=2, criterion=80, resample_number=50)
 
     def cohort(self, n=6):
-        return [synthetic_subject(s, n_trials=100) for s in range(n)]
+        return synthetic_cohort([synthetic_subject(s, n_trials=100)
+                                 for s in range(n)])
 
     def test_too_few_labels(self):
-        with pytest.raises(ValueError, match="5 group labels for 6 subjects"):
+        with pytest.raises(ValueError, match="5 labels for 6 subjects"):
             run_cbas_comparative(self.cohort(), np.array([0, 1, 0, 1, 0]), self.params)
 
     def test_too_many_labels(self):
-        with pytest.raises(ValueError, match="8 group labels for 6 subjects"):
+        with pytest.raises(ValueError, match="8 labels for 6 subjects"):
             run_cbas_comparative(self.cohort(), np.zeros(8, dtype=int), self.params)
 
     def test_label_outside_zero_one(self):
@@ -373,7 +384,7 @@ class TestCohortLabelValidation:
             run_cbas_comparative(self.cohort(), np.zeros(6, dtype=int), self.params)
 
     def test_covariate_length_mismatch(self):
-        with pytest.raises(ValueError, match=r"expected \(6,\)"):
+        with pytest.raises(ValueError, match="4 labels for 6 subjects"):
             run_cbas_correlative(self.cohort(), np.arange(4, dtype=float), self.params)
 
     def test_valid_labels_still_run(self):
@@ -388,7 +399,8 @@ class TestBuildCountMatrix:
         require_reference_path(DATA_DIR, "Igor reference data")
         subjects_data, group_labels = load_rat_data()
         params = CBASParams(seq_len_max=2, criterion=100)
-        sequences, count_matrix = build_count_matrix(subjects_data[:6], params)
+        matrix = build_count_matrix(subjects_data[:6], params)
+        sequences, count_matrix = matrix.sequences, matrix.counts
 
         assert count_matrix.shape[0] == 6
         assert count_matrix.shape[1] == len(sequences)
@@ -436,7 +448,7 @@ class TestIntegrationSmall:
         subjects_data, group_labels = load_rat_data()
 
         control_indices = np.where(group_labels == 0)[0]
-        control_data = [subjects_data[i] for i in control_indices]
+        control_data = subjects_data.reorder(control_indices)
         n = len(control_data)
         fake_labels = np.array([0] * (n // 2) + [1] * (n - n // 2))
 
