@@ -181,6 +181,32 @@ class TestMultiContingencyLoad:
         assert list(app.subject_filter.value) == ["Mut", "WT"]
         assert seen, "the selector's value was set without an event, so the page never updates"
 
+    def test_the_filter_keeps_every_subject_with_its_own_group(self, loaded):
+        """Filtering must not shift the correspondence between subject and group.
+
+        The fixture makes the two facts independent: genotype alternates by subject
+        number and group splits the cohort in half, so a filter on genotype keeps an
+        interleaved subset and any off-by-one in the pairing shows up. Asserting only
+        that the subject count fell, as the resource-estimate test does, passes just
+        as happily when every surviving label belongs to the wrong animal.
+        """
+        truth = {s.id: s.meta["lesion"] for s in app.app_state._all_cohort}
+        wanted = [v for v in app.subject_filter.options if v == "WT"]
+        assert wanted, "expected a WT genotype in the fixture"
+
+        app.subject_filter.value = wanted
+        cohort = app.app_state.cohort
+        assert 0 < len(cohort) < len(truth), "expected a proper subset"
+
+        labels = app.app_state.group_labels
+        assert len(labels) == len(cohort)
+        for subject, label in zip(cohort, labels):
+            expected = 0 if "control" in truth[subject.id].lower() else 1
+            assert label == expected, (
+                f"{subject.id} came from a {truth[subject.id]!r} row but is "
+                f"labelled {label}")
+            assert subject.meta["genotype"] == "WT"
+
     def test_block_and_filter_controls_appear(self, loaded):
         assert app.block_row.visible
         assert app.subject_filter_row.visible

@@ -46,6 +46,13 @@ pn.extension("tabulator", sizing_mode="stretch_width", notifications=True)
 # State and logic
 # =============================================================================
 
+
+#: Where the GUI keeps the current analysis's grouping and covariate on each subject.
+#: Underscored so they cannot collide with a column name from a cohort info table.
+GROUP_KEY = "_group"
+SCORE_KEY = "_score"
+
+
 class CBASApp(param.Parameterized):
     # --- Mode ---
     mode = param.Selector(
@@ -55,10 +62,12 @@ class CBASApp(param.Parameterized):
     )
 
     # --- Data ---
-    subjects_data = param.List(default=[], doc="Loaded subject arrays")
-    group_labels = param.Array(default=np.array([]), doc="Group labels (comparative)")
-    covariate = param.Array(default=np.array([]), doc="Covariate scores (correlative)")
-    n_subjects = param.Integer(default=0)
+    # One cohort, not a set of parallel per-subject lists. Group and covariate live in
+    # each subject's `meta` under GROUP_KEY and SCORE_KEY, so filtering or reordering
+    # cannot separate a subject from its label: that used to be six collections the
+    # loaders and the subject filter had to keep index-aligned by hand.
+    cohort = param.Parameter(default=None, doc="Cohort of loaded subjects")
+    n_subjects = param.Integer(default=0, doc="len(cohort), mirrored for the widgets")
     data_loaded = param.Boolean(default=False)
 
     # --- Parameters ---
@@ -78,13 +87,9 @@ class CBASApp(param.Parameterized):
     block_aware = param.Boolean(default=False, doc="Sequences cannot span block/session boundaries")
 
     # --- Multi-contingency ---
-    # Populated only when the folder holds the multi-contingency format, which
-    # carries a contingency block structure per subject rather than a single
-    # stream. `records` and `subjects_data` are mutually exclusive.
-    records = param.List(default=[], doc="SubjectRecord list (multi-contingency)")
-    _all_records = param.List(default=[], doc="Every labelled record, before filtering")
-    _all_labels = param.Array(default=np.array([]), doc="Labels for _all_records")
-    _all_filter_values = param.List(default=[], doc="Filter column value per record")
+    # A multi-contingency cohort carries a block structure per subject; `has_blocks`
+    # is what distinguishes it, rather than which of two lists happens to be empty.
+    _all_cohort = param.Parameter(default=None, doc="Cohort before the subject filter")
     filter_column = param.String(default="", doc="Info column the filter applies to")
     available_blocks = param.List(default=[], doc="Blocks shared by every subject")
     selected_blocks = param.List(default=[], doc="Blocks to include in the analysis")
@@ -95,43 +100,72 @@ class CBASApp(param.Parameterized):
     status_text = param.String(default="")
     result = param.Parameter(default=None)
 
+    @property
+    def has_blocks(self):
+        """Whether the loaded cohort carries contingency blocks."""
+        return self.cohort is not None and self.cohort.has_blocks
+
+    @property
+    def group_labels(self):
+        """Group labels in cohort order, derived from the cohort itself."""
+        from pycbas import resolve_labels
+        if self.cohort is None:
+            return np.array([])
+        return resolve_labels({s.id: s.meta[GROUP_KEY] for s in self.cohort},
+                              self.cohort.ids).astype(np.int32)
+
+    @property
+    def covariate(self):
+        """Covariate in cohort order, derived from the cohort itself."""
+        if self.cohort is None:
+            return np.array([])
+        return self.cohort.covariate_from(SCORE_KEY)
+
+    def set_cohort(self, cohort, labels_or_scores=None):
+        """Adopt a cohort, writing any labels or scores onto its subjects.
+
+        Taking the labels here, once, is what removes the parallel list: everything
+        downstream reads them back off the subject they belong to.
+        """
+        if labels_or_scores is not None:
+            if len(labels_or_scores) != len(cohort):
+                raise ValueError(
+                    f"{len(labels_or_scores)} labels for {len(cohort)} subjects")
+            key = GROUP_KEY if self.mode == "Comparative" else SCORE_KEY
+            for subject, value in zip(cohort, labels_or_scores):
+                subject.meta[key] = int(value) if key == GROUP_KEY else float(value)
+        self.cohort = cohort
+        self.n_subjects = len(cohort)
+
     def load_choice_streams(self, choice_data, labels_or_scores):
         """Load from arrays directly (choice streams + labels/scores)."""
-        self.subjects_data = []
-        for stream in choice_data:
+        from pycbas import Cohort, Subject
+        subjects = []
+        for i, stream in enumerate(choice_data):
             stream = np.asarray(stream, dtype=np.int32)
-            n = len(stream)
-            arr = np.zeros((n, 4), dtype=np.int32)
+            arr = np.zeros((len(stream), 4), dtype=np.int32)
             arr[:, 1] = stream
             arr[:, 3] = self.contingency
-            self.subjects_data.append(arr)
+            subjects.append(Subject(id=f"subject{i + 1}", trials=arr))
 
-        if self.mode == "Comparative":
-            self.group_labels = np.asarray(labels_or_scores, dtype=np.int32)
-        else:
-            self.covariate = np.asarray(labels_or_scores, dtype=np.float64)
-
-        self.n_subjects = len(self.subjects_data)
+        self.set_cohort(Cohort(subjects), labels_or_scores)
         self.data_loaded = True
 
     def load_csv_files(self, file_contents_list, labels_or_scores):
         """Load from uploaded CSV file contents."""
-        self.subjects_data = []
-        for content in file_contents_list:
+        from pycbas import Cohort, Subject
+        subjects = []
+        for i, content in enumerate(file_contents_list):
             rows = []
             for line in content.strip().split("\n"):
                 parts = line.strip().split(",")
                 if len(parts) >= 4:
                     rows.append([int(p) if p.strip() else 0 for p in parts[:4]])
             if rows:
-                self.subjects_data.append(np.array(rows, dtype=np.int32))
+                subjects.append(Subject(id=f"subject{i + 1}",
+                                        trials=np.array(rows, dtype=np.int32)))
 
-        if self.mode == "Comparative":
-            self.group_labels = np.asarray(labels_or_scores, dtype=np.int32)
-        else:
-            self.covariate = np.asarray(labels_or_scores, dtype=np.float64)
-
-        self.n_subjects = len(self.subjects_data)
+        self.set_cohort(Cohort(subjects), labels_or_scores)
         self.data_loaded = True
 
     def run_analysis(self):
@@ -146,26 +180,28 @@ class CBASApp(param.Parameterized):
             criterion_order=self.criterion_order,
             resample_number=self.resample_number,
         )
-        if self.records:
+        # The label is read off each subject by name, so the run cannot pair a
+        # subject with another's group however the cohort was filtered or ordered.
+        if self.has_blocks:
             # Each contingency is its own hypothesis set, corrected jointly, so
             # `blocks` changes the size of the hypothesis space rather than
             # subsetting a result. chunked is left at its default for that reason.
             from pycbas.pipeline import run_cbas_multicontingency
             self.result = run_cbas_multicontingency(
-                self.records, self.group_labels, params,
+                self.cohort, GROUP_KEY, params,
                 blocks=list(self.selected_blocks) or None,
                 encode_reward=self.encode_reward,
             )
         elif self.mode == "Comparative":
             self.result = run_cbas_comparative(
-                self.subjects_data, self.group_labels, params,
+                self.cohort, GROUP_KEY, params,
                 contingency=self.contingency,
                 encode_reward=self.encode_reward,
                 block_aware=self.block_aware,
             )
         else:
             self.result = run_cbas_correlative(
-                self.subjects_data, self.covariate, params,
+                self.cohort, SCORE_KEY, params,
                 contingency=self.contingency,
                 encode_reward=self.encode_reward,
                 block_aware=self.block_aware,
@@ -189,7 +225,7 @@ class CBASApp(param.Parameterized):
         cache_key = (
             self.num_arms, self.seq_len_max, self.criterion, self.criterion_order,
             self.contingency, self.encode_reward, self.block_aware,
-            self.n_subjects, tuple(self.selected_blocks), len(self.records),
+            self.n_subjects, tuple(self.selected_blocks), self.has_blocks,
         )
         if cache_key == self._observed_cache_key:
             return self._observed_cache_val
@@ -200,20 +236,19 @@ class CBASApp(param.Parameterized):
             criterion=self.criterion, criterion_order=self.criterion_order,
         )
         try:
-            if self.records:
+            if self.has_blocks:
                 from pycbas.contingency import build_multicontingency_count_matrix
-                sequences, _counts = build_multicontingency_count_matrix(
-                    self.records, params,
+                matrix = build_multicontingency_count_matrix(
+                    self.cohort, params,
                     blocks=list(self.selected_blocks) or None,
                     encode_reward=self.encode_reward)
-                n = len(sequences)
             else:
                 from pycbas.core import build_count_matrix
-                sequences, _counts = build_count_matrix(
-                    self.subjects_data, params, contingency=self.contingency,
+                matrix = build_count_matrix(
+                    self.cohort, params, contingency=self.contingency,
                     encode_reward=self.encode_reward,
                     block_aware=self.block_aware)
-                n = len(sequences)
+            n = len(matrix.sequences)
         except Exception:
             # An estimate is a convenience; a failure here must not block the run,
             # which reports the real error itself. None rather than zero, so the
@@ -226,19 +261,18 @@ class CBASApp(param.Parameterized):
     def get_resource_estimate(self):
         from pycbas import estimate_resources
         n_observed = None
-        # `records` and `subjects_data` are mutually exclusive, and the
-        # multi-contingency loader sets `subjects_data` to []. Gating on
-        # `subjects_data` alone therefore skipped the count for every
-        # multi-contingency run and reported the enumerable sequence space as the
-        # hypothesis space, which is both wrong and insensitive to the block
-        # selection that determines the real count.
-        if self.data_loaded and (self.subjects_data or self.records):
+        # One cohort covers both formats. This used to gate on `subjects_data`, which
+        # the multi-contingency loader left empty, so the count was skipped for every
+        # multi-contingency run and the enumerable sequence space was reported as the
+        # hypothesis space: wrong, and insensitive to the block selection that
+        # determines the real count.
+        if self.data_loaded and self.cohort is not None:
             n_observed = self._count_observed_sequences()
         # Each contingency block counts the sequence space again, so the ceiling the
         # pane reports as "possible" has to be multiplied by the number of blocks.
         # Otherwise it comes out below the observed count and the estimate reads as
         # "3,542 of 1,884 possible".
-        n_sets = len(self.selected_blocks) if self.records else 1
+        n_sets = len(self.selected_blocks) if self.has_blocks else 1
         return estimate_resources(
             num_arms=self.num_arms,
             seq_len_max=self.seq_len_max,
@@ -423,55 +457,43 @@ def _try_load_multicontingency(folder_path, info_file):
     malformed" from the single-header parser, which blames the wrong file and hides
     the real diagnosis.
     """
+    from pycbas import default_group_coder
     from pycbas.contingency import (load_cohort_with_contingencies,
                                     shared_contingency_blocks)
     if not _has_two_header_info_table(info_file):
         return False
 
     try:
-        records, info = load_cohort_with_contingencies(folder_path)
+        cohort = load_cohort_with_contingencies(folder_path)
     except Exception as exc:
         return _fail_multicontingency(
             f"**Could not load `{folder_path.name}/` as multi-contingency data:** "
             f"{exc}")
-    if not records or not info or len(records) != len(info):
+    if not all(s.meta for s in cohort):
         return _fail_multicontingency(
             f"**`{folder_path.name}/` looks like multi-contingency data, but the "
             f"subject files and `{info_file.name}` do not correspond one to one.**")
 
+    columns = list(cohort[0].meta)
     group_col = next((c for c in ("lesion", "group", "label", "condition")
-                      if c in info[0]), None)
+                      if c in columns), None)
     if group_col is None:
         return _fail_multicontingency(
             f"**No group column in `{info_file.name}`.** A comparative analysis needs "
             f"one of `lesion`, `group`, `label` or `condition`; the columns found "
-            f"were {', '.join(f'`{c}`' for c in info[0])}.")
+            f"were {', '.join(f'`{c}`' for c in columns)}.")
 
-    def to_group(value):
-        if value is None:
-            return None
-        v = str(value).strip().lower()
-        if v in ("0", "control", "ctrl", "sham", "wt", "wildtype"):
-            return 0
-        if v in ("1", "lesion", "exp", "experimental", "ko", "knockout", "mutant"):
-            return 1
-        if "control" in v:
-            return 0
-        if "lesion" in v:
-            return 1
-        return None
-
-    keep, labels = [], []
-    for record, row in zip(records, info):
-        g = to_group(row.get(group_col))
-        if g is not None:
-            keep.append(record)
-            labels.append(g)
-    dropped = len(records) - len(keep)
+    # The vocabulary for "which group is this" lives in the library, so loading a
+    # cohort here and loading it in Python agree on what `sham` means.
+    keep = cohort.filter(lambda s: default_group_coder(s.meta.get(group_col)) is not None)
+    for subject in keep:
+        subject.meta[GROUP_KEY] = default_group_coder(subject.meta.get(group_col))
+    labels = [s.meta[GROUP_KEY] for s in keep]
+    dropped = len(cohort) - len(keep)
     if len(keep) < 2 or len(set(labels)) < 2:
         return _fail_multicontingency(
             f"**Multi-contingency data loaded, but `{group_col}` does not define two "
-            f"groups.** {len(keep)} of {len(records)} subjects had a usable value, "
+            f"groups.** {len(keep)} of {len(cohort)} subjects had a usable value, "
             f"covering {len(set(labels))} group(s). A comparative analysis needs "
             f"subjects in both.")
 
@@ -486,28 +508,20 @@ def _try_load_multicontingency(folder_path, info_file):
     # rather than applied silently. Cohorts that mix genotypes or experiments should
     # not be pooled by default, and should not be subsetted without saying so either.
     filter_col = next((c for c in ("genotype", "geno", "strain", "experiment")
-                       if c in info[0]), None)
-    filter_values = []
+                       if c in columns), None)
     if filter_col is not None:
-        filter_values = [str(row.get(filter_col)) for row, g in
-                         ((r, to_group(r.get(group_col))) for r in info) if g is not None]
-        distinct = sorted(set(filter_values))
+        distinct = sorted({str(s.meta.get(filter_col)) for s in keep})
         if len(distinct) < 2 or len(distinct) > 12:
-            filter_col, filter_values = None, []
+            filter_col = None
     app_state.filter_column = filter_col or ""
 
-    app_state.subjects_data = []
-    app_state._all_records = keep
-    app_state._all_labels = np.asarray(labels, dtype=np.int32)
-    app_state._all_filter_values = filter_values or [""] * len(keep)
-    app_state.records = keep
+    app_state._all_cohort = keep
     app_state.available_blocks = list(blocks)
     app_state.selected_blocks = list(blocks)
-    app_state.group_labels = np.asarray(labels, dtype=np.int32)
-    app_state.n_subjects = len(keep)
     app_state.mode = "Comparative"
+    app_state.set_cohort(keep)
 
-    n_arms = max(int(r.choice.max()) for r in keep) + 1
+    n_arms = max(int(s.choice.max()) for s in keep) + 1
 
     # Push these onto the widgets, not just onto the state. There is no reverse
     # binding from state to widget, so setting only the state leaves the panel
@@ -526,7 +540,7 @@ def _try_load_multicontingency(folder_path, info_file):
     block_selector.value = list(blocks)
     block_row.visible = True
     if filter_col is not None:
-        distinct = sorted(set(filter_values))
+        distinct = sorted({str(s.meta.get(filter_col)) for s in keep})
         subject_filter.name = f"Restrict subjects by {filter_col}"
         # Suspended, not event-discarded: the watcher would overwrite the load message
         # below with a less informative one, but discarding the events would also stop
@@ -707,9 +721,11 @@ def load_from_folder(event):
                 return
 
             subjects_data = []
+            subject_names = []
             labels_or_scores = []
             for subj_id in sorted(matched.keys()):
                 subjects_data.append(load_subject_data(matched[subj_id]))
+                subject_names.append(matched[subj_id].stem)
                 labels_or_scores.append(info[subj_id])
 
             source_desc = f"info file: `{info_file.name}`"
@@ -766,11 +782,13 @@ def load_from_folder(event):
                         group_map[p] = 0
 
             subjects_data = []
+            subject_names = []
             labels_or_scores = []
             for prefix in sorted_prefixes:
                 label = group_map[prefix]
                 for f in sorted(prefixes[prefix]):
                     subjects_data.append(load_subject_data(f))
+                    subject_names.append(f.stem)
                     labels_or_scores.append(float(label))
 
             group_counts = {}
@@ -785,20 +803,18 @@ def load_from_folder(event):
             source_desc = f"groups from filenames: {grp_desc}"
 
         # --- Common: set state and auto-detect params ---
-        app_state.records = []
+        from pycbas import Cohort, Subject
+        app_state._all_cohort = None
         app_state.available_blocks = []
         app_state.selected_blocks = []
         block_row.visible = False
         subject_filter_row.visible = False
-        app_state.subjects_data = subjects_data
 
         set_detected_mode(labels_or_scores)
-        if app_state.mode == "Comparative":
-            app_state.group_labels = np.asarray(labels_or_scores, dtype=np.int32)
-        else:
-            app_state.covariate = np.asarray(labels_or_scores, dtype=np.float64)
-
-        app_state.n_subjects = len(subjects_data)
+        app_state.set_cohort(
+            Cohort([Subject(id=name, trials=arr)
+                    for name, arr in zip(subject_names, subjects_data)]),
+            labels_or_scores)
         app_state.data_loaded = True
 
         # Auto-detect parameters from loaded data
@@ -1167,29 +1183,27 @@ def _apply_subject_filter(event=None):
         data_status.alert_type = "warning"
         app_state.data_loaded = False
         return
-    pairs = [(r, int(l)) for r, l, v in zip(app_state._all_records,
-                                           app_state._all_labels,
-                                           app_state._all_filter_values)
-             if v in keep_values]
-    if len({l for _, l in pairs}) < 2:
+    # One filter over one cohort. This used to zip three parallel lists and rebuild
+    # two more, which is the alignment the cohort type exists to make impossible.
+    column = app_state.filter_column
+    selected = app_state._all_cohort.filter(
+        lambda s: str(s.meta.get(column)) in keep_values)
+    labels = selected.labels_from(GROUP_KEY) if len(selected) else np.array([])
+    if len(set(labels.tolist())) < 2:
         data_status.object = ("**That selection leaves only one group.** A comparative "
                              "analysis needs subjects in both groups.")
         data_status.alert_type = "warning"
         app_state.data_loaded = False
         return
-    records = [r for r, _ in pairs]
-    labels = np.asarray([l for _, l in pairs], dtype=np.int32)
     try:
-        blocks = shared_contingency_blocks(records)
+        blocks = shared_contingency_blocks(selected)
     except Exception as exc:
         data_status.object = (f"**That selection has no contingency blocks common to "
                               f"every subject:** {exc}")
         data_status.alert_type = "danger"
         app_state.data_loaded = False
         return
-    app_state.records = records
-    app_state.group_labels = labels
-    app_state.n_subjects = len(records)
+    app_state.set_cohort(selected)
     app_state.available_blocks = list(blocks)
     kept = [b for b in block_selector.value if b in blocks] or list(blocks)
     block_selector.options = list(blocks)
@@ -1201,8 +1215,8 @@ def _apply_subject_filter(event=None):
              f"{', '.join(str(v) for v in subject_filter.value)})"
              if app_state.filter_column else "")
     data_status.object = (
-        f"**{len(records)} subjects selected**{label}: {n0} group 0, "
-        f"{len(records) - n0} group 1. Contingency blocks shared by all of them: "
+        f"**{len(selected)} subjects selected**{label}: {n0} group 0, "
+        f"{len(selected) - n0} group 1. Contingency blocks shared by all of them: "
         f"{', '.join(str(b) for b in blocks)}.")
     data_status.alert_type = "success"
     # Changing the selection changes the subjects, and therefore the hypothesis
@@ -1348,29 +1362,35 @@ def update_criterion_shortfall():
         criterion_shortfall_pane.visible = False
         return
 
-    from pycbas import CBASParams, record_criteria
+    from pycbas import CBASParams, contingency_criteria
     from pycbas.core import subject_criteria
     params = CBASParams(num_arms=app_state.num_arms,
                         seq_len_max=app_state.seq_len_max,
                         criterion=app_state.criterion,
                         criterion_order=app_state.criterion_order)
     per_contingency = None
+    n_subjects_evaluated = 0
+    n_blocks_evaluated = 0
     try:
-        if app_state.records:
+        if app_state.has_blocks:
             # The criterion applies within each contingency, so a subject can reach
             # it in one and fall short in another. Report the pairs, and separately
             # how many subjects are affected at all, since one bad contingency is
             # enough to make that subject contribute everything it has there.
-            per_contingency, blocks_used = record_criteria(
-                app_state.records, params,
+            per_subject, blocks_used = contingency_criteria(
+                app_state.cohort, params,
                 blocks=list(app_state.selected_blocks) or None)
+            per_contingency = np.array([[per_subject[i][b] for b in blocks_used]
+                                        for i in app_state.cohort.ids],
+                                       dtype=np.float64)
+            n_subjects_evaluated, n_blocks_evaluated = per_contingency.shape
             criteria = per_contingency.reshape(-1)
         else:
-            criteria = subject_criteria(
-                app_state.subjects_data, params,
+            criteria = np.array(list(subject_criteria(
+                app_state.cohort, params,
                 contingency=app_state.contingency,
                 block_aware=app_state.block_aware,
-            )
+            ).values()), dtype=np.float64)
     except Exception as exc:
         criterion_shortfall_pane.object = f"Could not evaluate the criterion: {exc}"
         criterion_shortfall_pane.alert_type = "danger"
@@ -1384,8 +1404,8 @@ def update_criterion_shortfall():
     if per_contingency is not None:
         unit = "subject-contingency pairs"
         n_subj_short = int((~np.isfinite(per_contingency)).any(axis=1).sum())
-        extra = (f" That is {n_subj_short} of {per_contingency.shape[0]} subjects "
-                 f"affected in at least one of the {per_contingency.shape[1]} "
+        extra = (f" That is {n_subj_short} of {n_subjects_evaluated} subjects "
+                 f"affected in at least one of the {n_blocks_evaluated} "
                  f"contingencies.")
     else:
         unit = "subjects"
