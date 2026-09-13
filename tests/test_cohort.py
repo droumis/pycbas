@@ -77,9 +77,25 @@ class TestCohort:
     def test_addressable_by_position_and_by_id(self):
         cohort = Cohort([subject("a"), subject("b", seed=1)])
         assert cohort[0].id == "a"
-        assert cohort["b"].id == "b"
+        assert cohort.by_id("b").id == "b"
         with pytest.raises(KeyError):
-            cohort["nobody"]
+            cohort.by_id("nobody")
+
+    def test_an_id_is_not_a_position(self):
+        """Ids are often numbers, so one syntax must not answer two questions."""
+        cohort = Cohort([subject("2"), subject("0", seed=1), subject("1", seed=2)])
+        assert cohort[0].id == "2", "indexing is positional"
+        assert cohort.by_id("0").id == "0"
+        with pytest.raises(TypeError, match="by_id"):
+            cohort["0"]
+
+    def test_ids_are_strings_however_they_were_given(self):
+        """Cohort tables number their animals, so an int id must not lose the lookup."""
+        cohort = Cohort([Subject(id=200, trials=trials()),
+                         Subject(id=201, trials=trials(seed=1))])
+        assert cohort.ids == ["200", "201"]
+        assert cohort.by_id(200).id == "200"
+        assert cohort.by_id("200").id == "200"
 
     def test_a_slice_is_a_cohort(self):
         cohort = Cohort([subject(n, seed=i) for i, n in enumerate("abcd")])
@@ -103,7 +119,7 @@ class TestCohort:
         cohort = Cohort([subject(n, seed=i) for i, n in enumerate("abc")])
         moved = cohort.reorder([2, 0, 1])
         assert moved.ids == ["c", "a", "b"]
-        np.testing.assert_array_equal(moved[0].trials, cohort["c"].trials)
+        np.testing.assert_array_equal(moved[0].trials, cohort.by_id("c").trials)
 
     def test_labels_from_a_meta_column(self):
         cohort = Cohort([subject("a", lesion=0), subject("b", seed=1, lesion=1)])
@@ -247,8 +263,8 @@ class TestLoaders:
     def test_load_cohort_takes_meta_by_id_or_in_file_order(self, tmp_path):
         write_cohort(tmp_path)
         by_id = load_cohort(tmp_path, meta={"an2": {"lesion": 1}})
-        assert by_id["an2"].meta == {"lesion": 1}
-        assert by_id["an1"].meta == {}
+        assert by_id.by_id("an2").meta == {"lesion": 1}
+        assert by_id.by_id("an1").meta == {}
         in_order = load_cohort(tmp_path, meta=[{"lesion": 0}, {"lesion": 1}, {"lesion": 0}])
         np.testing.assert_array_equal(in_order.labels_from("lesion"), [0, 1, 0])
 

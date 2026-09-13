@@ -37,8 +37,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from .cohort import Cohort, CountMatrix, Subject
-from .core import as_cohort
+from .cohort import Cohort, CountMatrix, Subject, as_cohort
 
 __all__ = [
     "contingency_criteria",

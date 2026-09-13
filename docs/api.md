@@ -77,7 +77,9 @@ One subject's trials, under the identity it was loaded with. `trials` is an
 (n_trials, 4) array of session, choice, reward, condition, exposed also as the
 `.session`, `.choice`, `.reward` and `.condition` properties. `condition` is the file's
 fourth column for single-contingency data and the contingency block index for
-multi-contingency data, so `contingency=2` selects the same thing in both.
+multi-contingency data. Both are selected by value, so one filter path serves both, but
+what a given value means depends on the format it came from; `has_blocks` distinguishes
+them.
 
 `meta` holds whatever the cohort table supplied, such as `lesion`, `sex` or `genotype`.
 Group membership is deliberately not a field: the same subject is control in one
@@ -96,12 +98,19 @@ validated block structure.
 Cohort(subjects)
 ```
 
-An ordered collection of `Subject`, indexable by position, by id, or by slice, with
-`len` and iteration. Ids must be unique, since everything else is resolved through them.
+An ordered collection of `Subject`, indexed by position or slice, with `len` and
+iteration. Ids must be unique, since everything else is resolved through them, and they
+are coerced to strings: cohort tables often number their animals, and a lookup that
+worked for `"200"` but not `200` would be the worst of both.
+
+Indexing is deliberately not overloaded to take an id as well. Ids are often numbers, so
+`cohort[0]` and `cohort["0"]` would be two different questions in one syntax; `by_id`
+asks the second one.
 
 **Attributes and methods**
 
 - `ids` - subject ids, in cohort order.
+- `by_id(subject_id)` - the subject with that id, whether given as a string or a number.
 - `filter(predicate=None, **meta_equals)` - the subjects passing a predicate and
   matching every `meta` value given, e.g. `cohort.filter(genotype="WT")`. A value may be
   a set or list to keep several.

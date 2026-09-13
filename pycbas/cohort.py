@@ -22,6 +22,8 @@ from pathlib import Path
 
 import numpy as np
 
+from .io import decode_sequence, load_subject_data, split_sequence_entry
+
 #: Column order of `Subject.trials`, matching the on-disk single-contingency format.
 SESSION, CHOICE, REWARD, CONDITION = range(4)
 
@@ -33,7 +35,9 @@ class Subject:
     `trials` is an (n_trials, 4) array of session, choice, reward, condition, the
     layout the text loaders produce. `condition` is whatever the file's fourth column
     held for single-contingency data, and the contingency block index for
-    multi-contingency data, so `contingency=2` selects the same thing in both.
+    multi-contingency data. Both are selected the same way, by value, so one filter path
+    serves both; what a given value means still depends on which format it came from,
+    and `has_blocks` is what distinguishes them.
 
     `blocks` is present only for multi-contingency subjects, where it gives the arm
     identity and exploration flag of each condition value. Its absence is what
@@ -47,6 +51,10 @@ class Subject:
     blocks: list | None = None
 
     def __post_init__(self):
+        # Coerced, not merely documented: cohort tables number their animals, so ids
+        # arrive as ints as often as strings, and a lookup that worked for one and
+        # silently failed for the other would be the worst of both.
+        self.id = str(self.id)
         trials = np.asarray(self.trials)
         if trials.ndim != 2 or trials.shape[1] != 4:
             raise ValueError(
@@ -149,15 +157,26 @@ class Cohort:
         return iter(self.subjects)
 
     def __getitem__(self, key):
-        """Position, id, or slice. A slice gives another cohort."""
+        """Position or slice. A slice gives another cohort; use `by_id` for a name.
+
+        Deliberately not overloaded to accept an id as well. Ids are often numbers, so
+        `cohort[0]` and `cohort["0"]` would be two different questions wearing one
+        syntax, and the answer would differ silently.
+        """
         if isinstance(key, slice):
             return Cohort(self.subjects[key])
         if isinstance(key, str):
-            for s in self.subjects:
-                if s.id == key:
-                    return s
-            raise KeyError(f"no subject with id {key!r}")
+            raise TypeError(
+                f"index a cohort by position; use cohort.by_id({key!r}) for a subject id")
         return self.subjects[key]
+
+    def by_id(self, subject_id):
+        """The subject with this id."""
+        subject_id = str(subject_id)
+        for subject in self.subjects:
+            if subject.id == subject_id:
+                return subject
+        raise KeyError(f"no subject with id {subject_id!r}")
 
     def __repr__(self):
         return f"Cohort({len(self)} subjects: {', '.join(self.ids[:4])}" + \
@@ -203,7 +222,7 @@ class Cohort:
         the error rather than dropped, since dropping it here would silently change the
         cohort a caller thought it had assembled. Remove such subjects with `filter`.
         """
-        coder = coder or _default_coder
+        coder = coder or default_group_coder
         labels, unusable = [], []
         for s in self.subjects:
             value = coder(s.meta.get(key))
@@ -278,8 +297,6 @@ def default_group_coder(value):
     return None
 
 
-_default_coder = default_group_coder
-
 
 def resolve_labels(labels, ids, cohort_ids=None, what="labels"):
     """Values for `ids`, from a mapping or a sequence in cohort order.
@@ -339,7 +356,7 @@ class CountMatrix:
     def row(self, subject_id):
         """One subject's counts, by id."""
         try:
-            return self.counts[self.subject_ids.index(subject_id)]
+            return self.counts[self.subject_ids.index(str(subject_id))]
         except ValueError:
             raise KeyError(f"no row for subject {subject_id!r}") from None
 
@@ -355,7 +372,6 @@ class CountMatrix:
         selection there looks like a contingency with no sequences, which is the kind
         of quiet wrong answer this type exists to prevent.
         """
-        from .io import split_sequence_entry
         if not self.sequences or split_sequence_entry(self.sequences[0])[0] is None:
             raise ValueError(
                 "this count matrix has bare sequence entries, so it has no "
@@ -370,9 +386,24 @@ class CountMatrix:
 
     def column_labels(self, num_arms=6, encode_reward=True, join=" "):
         """Readable labels for the columns, in the published convention."""
-        from .io import decode_sequence
         return [decode_sequence(entry, num_arms, encode_reward, join)
                 for entry in self.sequences]
+
+
+def as_cohort(cohort):
+    """Accept a `Cohort`, or refuse a bare list of arrays by name.
+
+    The old signatures took a list of arrays, which carried no identity, so every
+    per-subject correspondence had to be maintained positionally by the caller. That is
+    the mistake these types remove, and silently accepting the old shape would keep it
+    available.
+    """
+    if isinstance(cohort, Cohort):
+        return cohort
+    raise TypeError(
+        f"expected a Cohort, got {type(cohort).__name__}. Build one with "
+        f"load_cohort(directory_or_paths), or Cohort([Subject(...), ...]); a bare "
+        f"list of trial arrays carries no subject identity.")
 
 
 def load_subject(filepath, id=None, meta=None):
@@ -382,7 +413,6 @@ def load_subject(filepath, id=None, meta=None):
     carries. Pass one explicitly when the stem is not the name you want to see in
     results, or when two cohorts use the same filenames.
     """
-    from .io import load_subject_data
     path = Path(filepath)
     return Subject(id=id if id is not None else path.stem,
                    trials=load_subject_data(path),
@@ -431,7 +461,7 @@ def load_cohort(source, pattern="*.txt", meta=None, ids=None):
             raise ValueError(
                 f"could not read {path} as subject data: {exc}. Every file matching "
                 f"{pattern!r} in a cohort directory is loaded, so point `pattern` at "
-                f"the subject files if the folder holds anything else.") from None
+                f"the subject files if the folder holds anything else.") from exc
     return Cohort(subjects)
 
 

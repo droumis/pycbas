@@ -6,6 +6,7 @@ import numpy as np
 from .io import (extract_choice_stream, extract_choice_streams_by_block,
                  enumerate_sequences, enumerate_sequences_block_aware)
 from .criterion import criterion_trial, as_enumeration_cutoff
+from .cohort import CountMatrix, as_cohort
 from ._moments import sigma_from_sums
 
 
@@ -64,23 +65,6 @@ def subject_criteria(cohort, params, contingency=2, block_aware=False):
     }
 
 
-def as_cohort(cohort):
-    """Accept a `Cohort`, or refuse a bare list of arrays by name.
-
-    The old signatures took a list of arrays, which carried no identity, so every
-    per-subject correspondence had to be maintained positionally by the caller. That
-    is the mistake these types remove, and silently accepting the old shape would
-    keep it available.
-    """
-    from .cohort import Cohort
-    if isinstance(cohort, Cohort):
-        return cohort
-    raise TypeError(
-        f"expected a Cohort, got {type(cohort).__name__}. Build one with "
-        f"load_cohort(directory_or_paths), or Cohort([Subject(...), ...]); a bare "
-        f"list of trial arrays carries no subject identity.")
-
-
 def build_count_matrix(cohort, params, contingency=2, encode_reward=True,
                        block_aware=False):
     """Build the full sequence count matrix.
@@ -98,7 +82,6 @@ def build_count_matrix(cohort, params, contingency=2, encode_reward=True,
         CountMatrix, whose `subject_ids` are the cohort's ids in cohort order and
         whose `sequences` label the columns.
     """
-    from .cohort import CountMatrix
     cohort = as_cohort(cohort)
     subjects_data = [subject.trials for subject in cohort]
     n_subjects = len(subjects_data)
