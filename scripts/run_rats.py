@@ -322,8 +322,9 @@ def run_analysis(quick=False, cohort="all_published", chunked=False, block_aware
     timings = {}
 
     t0 = time.perf_counter()
-    sequences, count_matrix = build_count_matrix(subjects_data, params,
+    _matrix = build_count_matrix(subjects_data, params,
                                                  block_aware=block_aware)
+    sequences, count_matrix = _matrix.sequences, _matrix.counts
     timings["build_count_matrix"] = time.perf_counter() - t0
     n_seq = len(sequences)
     print(f"\n[{timings['build_count_matrix']:.2f}s] Count matrix: "

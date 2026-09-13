@@ -20,6 +20,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 from pycbas import (
+    Cohort,
+    Subject,
     CBASParams,
     load_subject_data,
     build_count_matrix,
@@ -50,10 +52,11 @@ def load_humans():
     for subj_id in sorted(info.keys()):
         fpath = DATA_DIR / f"subject{subj_id}.txt"
         if fpath.exists():
-            subjects_data.append(load_subject_data(fpath))
+            subjects_data.append(Subject(id=fpath.stem,
+                                         trials=load_subject_data(fpath)))
             covariate.append(info[subj_id])
 
-    return subjects_data, np.array(covariate)
+    return Cohort(subjects_data), np.array(covariate)
 
 
 def decode_human_symbol(sym, num_arms=6):
@@ -280,7 +283,8 @@ def run_analysis(quick=False):
     timings = {}
 
     t0 = time.perf_counter()
-    sequences, count_matrix = build_count_matrix(subjects_data, params, contingency=1)
+    _matrix = build_count_matrix(subjects_data, params, contingency=1)
+    sequences, count_matrix = _matrix.sequences, _matrix.counts
     timings["build_count_matrix"] = time.perf_counter() - t0
     n_seq = len(sequences)
     print(f"\n[{timings['build_count_matrix']:.2f}s] Count matrix: "

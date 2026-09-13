@@ -17,6 +17,8 @@ import numpy as np
 from pathlib import Path
 
 from pycbas import (
+    Cohort,
+    Subject,
     CBASParams, load_subject_data, build_count_matrix,
     compute_test_stats, bootstrap_test_stats, _prepare_null_sub,
     _stepdown_core, _bootstrap_parallel,
@@ -276,9 +278,10 @@ def load_fly_data():
     for fly_id in sorted(info.keys()):
         fpath = DATA_DIR / f"fly{fly_id}.txt"
         if fpath.exists():
-            subjects_data.append(load_subject_data(fpath))
+            subjects_data.append(Subject(id=fpath.stem,
+                                         trials=load_subject_data(fpath)))
             group_labels.append(info[fly_id])
-    return subjects_data, np.array(group_labels)
+    return Cohort(subjects_data), np.array(group_labels)
 
 
 def load_human_data():
@@ -293,9 +296,10 @@ def load_human_data():
     for subj_id in sorted(info.keys()):
         fpath = DATA_DIR / f"subject{subj_id}.txt"
         if fpath.exists():
-            subjects_data.append(load_subject_data(fpath))
+            subjects_data.append(Subject(id=fpath.stem,
+                                         trials=load_subject_data(fpath)))
             covariates.append(info[subj_id])
-    return subjects_data, np.array(covariates)
+    return Cohort(subjects_data), np.array(covariates)
 
 
 HUMAN_PARAMS = CBASParams(num_arms=6, seq_len_max=4, criterion=400, resample_number=10000)
@@ -313,7 +317,8 @@ def run_fly_comparison():
 
     print(f"Subjects: {len(subjects_data)} (group0={len(group_indices[0])}, group1={len(group_indices[1])})")
 
-    sequences, count_matrix = build_count_matrix(subjects_data, params, contingency=1)
+    _matrix = build_count_matrix(subjects_data, params, contingency=1)
+    sequences, count_matrix = _matrix.sequences, _matrix.counts
     print(f"Sequences: {len(sequences)}")
 
     david_fly = parse_david_file(NOTES_DIR / "flyCBASsigSeq.txt", max_seq_len=10)
@@ -344,7 +349,8 @@ def run_human_comparison():
 
     print(f"Subjects: {len(subjects_data)}")
 
-    sequences, count_matrix = build_count_matrix(subjects_data, params, contingency=HUMAN_CONTINGENCY)
+    _matrix = build_count_matrix(subjects_data, params, contingency=HUMAN_CONTINGENCY)
+    sequences, count_matrix = _matrix.sequences, _matrix.counts
     print(f"Sequences: {len(sequences)}")
 
     david_human = parse_david_file(NOTES_DIR / "humanCBASsigSeq.txt", max_seq_len=4)

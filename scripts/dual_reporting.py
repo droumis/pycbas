@@ -13,6 +13,8 @@ import matplotlib.pyplot as plt
 from pathlib import Path
 
 from pycbas import (
+    Cohort,
+    Subject,
     CBASParams,
     load_subject_data,
     build_count_matrix,
@@ -41,10 +43,11 @@ def load_flies():
     for fly_id in sorted(info.keys()):
         fpath = DATA_DIR / f"fly{fly_id}.txt"
         if fpath.exists():
-            subjects_data.append(load_subject_data(fpath))
+            subjects_data.append(Subject(id=fpath.stem,
+                                         trials=load_subject_data(fpath)))
             group_labels.append(info[fly_id])
 
-    return subjects_data, np.array(group_labels)
+    return Cohort(subjects_data), np.array(group_labels)
 
 
 def compute_gvalues_at_fixed_k(test_stats, null_matrix, k, alpha=0.5):
@@ -118,7 +121,8 @@ def main():
     ]
 
     print("Building count matrix...")
-    sequences, count_matrix = build_count_matrix(subjects_data, params, contingency=1)
+    _matrix = build_count_matrix(subjects_data, params, contingency=1)
+    sequences, count_matrix = _matrix.sequences, _matrix.counts
     seq_lengths = np.array([len(s) for s in sequences])
     n_seq = len(sequences)
     print(f"  {n_seq} sequences")

@@ -20,6 +20,8 @@ import numpy as np
 from pathlib import Path
 
 from pycbas import (
+    Cohort,
+    Subject,
     CBASParams,
     load_subject_data,
     extract_choice_stream,
@@ -50,10 +52,10 @@ def load_all_rats(n_ctrl_max=None, n_les_max=None):
     for f in sorted(DATA_DIR.glob("*.txt")):
         name = f.stem
         if "Control" in name:
-            ctrl_data.append(load_subject_data(f))
+            ctrl_data.append(Subject(id=name, trials=load_subject_data(f)))
             ctrl_names.append(name)
         elif "Lesion" in name:
-            les_data.append(load_subject_data(f))
+            les_data.append(Subject(id=name, trials=load_subject_data(f)))
             les_names.append(name)
 
     if n_ctrl_max is not None:
@@ -63,10 +65,9 @@ def load_all_rats(n_ctrl_max=None, n_les_max=None):
         les_data = les_data[:n_les_max]
         les_names = les_names[:n_les_max]
 
-    subjects_data = ctrl_data + les_data
     group_labels = np.array([0] * len(ctrl_data) + [1] * len(les_data))
     filenames = ctrl_names + les_names
-    return subjects_data, group_labels, filenames
+    return Cohort(ctrl_data + les_data), group_labels, filenames
 
 
 def save_results(sequences, g_values, test_stats, significant, directions,
@@ -139,7 +140,8 @@ def run_validation(params_override=None, n_ctrl_max=None, n_les_max=None):
     timings = {}
 
     t0 = time.perf_counter()
-    sequences, count_matrix = build_count_matrix(subjects_data, params)
+    _matrix = build_count_matrix(subjects_data, params)
+    sequences, count_matrix = _matrix.sequences, _matrix.counts
     timings["build_count_matrix"] = time.perf_counter() - t0
     print(f"\n[{timings['build_count_matrix']:.2f}s] Built count matrix: "
           f"{count_matrix.shape[0]} subjects x {count_matrix.shape[1]} sequences")

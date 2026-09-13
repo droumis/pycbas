@@ -29,7 +29,7 @@ from pathlib import Path
 
 import numpy as np
 
-from pycbas import load_subject_data
+from pycbas import Cohort, Subject, load_subject_data
 
 ROOT_DIR = Path(__file__).parent.parent
 DEFAULT_DATA_DIR = ROOT_DIR / "data" / "rats"
@@ -159,7 +159,7 @@ def load_rat_cohort(cohort="initial", data_dir=None, require_lesion_known=True,
     """Load streams for a cohort.
 
     Returns:
-        subjects_data: list of arrays from load_subject_data, controls first
+        cohort: Cohort of subjects, controls first
         group_labels: ndarray, 0 = control, 1 = lesion
         records: the matching anInfo records, in the same order
     """
@@ -176,9 +176,19 @@ def load_rat_cohort(cohort="initial", data_dir=None, require_lesion_known=True,
     # Controls first, then lesion, each ordered by animal name for determinism.
     selected.sort(key=lambda r: (r["lesion"], r["name"]))
 
-    subjects_data = [load_subject_data(r["path"]) for r in selected]
+    # Identity and metadata travel with the trials, so the group-first ordering above
+    # is a presentation choice rather than something the analysis depends on.
+    #
+    # The id is the file stem, not the animal name: names 200-208 are reused between
+    # experiments 1 and 3 for different animals, of different sex and lesion status,
+    # so `name` does not identify an animal on its own. It stays in `meta`.
+    cohort = Cohort([
+        Subject(id=r["path"].stem,
+                trials=load_subject_data(r["path"]),
+                meta={k: v for k, v in r.items() if k != "path"})
+        for r in selected])
     group_labels = np.array([r["lesion"] for r in selected], dtype=int)
-    return subjects_data, group_labels, selected
+    return cohort, group_labels, selected
 
 
 def describe(records):

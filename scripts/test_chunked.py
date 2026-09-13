@@ -8,6 +8,8 @@ import numpy as np
 from pathlib import Path
 
 from pycbas import (
+    Cohort,
+    Subject,
     CBASParams,
     load_subject_data,
     build_count_matrix,
@@ -26,14 +28,13 @@ def load_rats(n_ctrl_max=46, n_les_max=39):
     for f in sorted(DATA_DIR.glob("*.txt")):
         name = f.stem
         if "Control" in name:
-            ctrl_data.append(load_subject_data(f))
+            ctrl_data.append(Subject(id=f.stem, trials=load_subject_data(f)))
         elif "Lesion" in name:
-            les_data.append(load_subject_data(f))
+            les_data.append(Subject(id=f.stem, trials=load_subject_data(f)))
     ctrl_data = ctrl_data[:n_ctrl_max]
     les_data = les_data[:n_les_max]
-    subjects_data = ctrl_data + les_data
     group_labels = np.array([0] * len(ctrl_data) + [1] * len(les_data))
-    return subjects_data, group_labels
+    return Cohort(ctrl_data + les_data), group_labels
 
 
 def main():
@@ -51,7 +52,8 @@ def main():
 
     print(f"\nBuilding count matrix...")
     t0 = time.perf_counter()
-    sequences, count_matrix = build_count_matrix(subjects_data, params)
+    _matrix = build_count_matrix(subjects_data, params)
+    sequences, count_matrix = _matrix.sequences, _matrix.counts
     n_seq = len(sequences)
     print(f"  {n_seq:,} sequences, {time.perf_counter() - t0:.1f}s")
 

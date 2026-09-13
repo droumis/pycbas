@@ -13,6 +13,8 @@ import numpy as np
 from pathlib import Path
 
 from pycbas import (
+    Cohort,
+    Subject,
     CBASParams,
     load_subject_data,
     build_count_matrix,
@@ -39,10 +41,11 @@ def load_flies():
     for fly_id in sorted(info.keys()):
         fpath = DATA_DIR / f"fly{fly_id}.txt"
         if fpath.exists():
-            subjects_data.append(load_subject_data(fpath))
+            subjects_data.append(Subject(id=fpath.stem,
+                                         trials=load_subject_data(fpath)))
             group_labels.append(info[fly_id])
 
-    return subjects_data, np.array(group_labels)
+    return Cohort(subjects_data), np.array(group_labels)
 
 
 def run_subsample(subjects_data, group_labels, n_per_group, params, rng):
@@ -62,7 +65,8 @@ def run_subsample(subjects_data, group_labels, n_per_group, params, rng):
         np.where(sub_labels == 1)[0],
     ]
 
-    sequences, count_matrix = build_count_matrix(sub_data, params, contingency=1)
+    _matrix = build_count_matrix(sub_data, params, contingency=1)
+    sequences, count_matrix = _matrix.sequences, _matrix.counts
     test_stats = compute_test_stats(count_matrix, group_indices)
     null_matrix, _ = bootstrap_test_stats(count_matrix, group_indices, params)
     g_values, k_final = find_k_fwer(test_stats, null_matrix, params.alpha, params.gamma)
@@ -113,7 +117,8 @@ def main():
         np.where(group_labels == 1)[0],
     ]
     t0 = time.perf_counter()
-    sequences, count_matrix = build_count_matrix(subjects_data, params, contingency=1)
+    _matrix = build_count_matrix(subjects_data, params, contingency=1)
+    sequences, count_matrix = _matrix.sequences, _matrix.counts
     test_stats = compute_test_stats(count_matrix, group_indices)
     null_matrix, _ = bootstrap_test_stats(count_matrix, group_indices, params)
     g_values, k_final = find_k_fwer(test_stats, null_matrix, params.alpha, params.gamma)
