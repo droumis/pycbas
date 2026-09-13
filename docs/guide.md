@@ -25,25 +25,24 @@ Everything else (file format, reward encoding, session filtering) is about getti
 
 ### Option A: bring your own arrays
 
-If you already have choice streams as numpy arrays (e.g. from your own preprocessing pipeline), you can skip `load_subject_data` entirely and pass data directly to `build_count_matrix`. Each element in `subjects_data` should be a 2D array with columns `(session, choice, reward, contingency)`. If you don't use session filtering or reward encoding, you can fill those columns with zeros:
+If you already have choice streams as numpy arrays (e.g. from your own preprocessing pipeline), you can skip the file loaders and build the cohort yourself. Each `Subject` takes an id and a 2D array with columns `(session, choice, reward, condition)`. If you don't use session filtering or reward encoding, fill those columns with zeros:
 
 ```python
 import numpy as np
-from pycbas import CBASParams, run_cbas_comparative
+from pycbas import CBASParams, Cohort, Subject, run_cbas_comparative
 
 # Suppose you have a list of 1D choice arrays
 choice_streams = [np.array([0, 1, 1, 0, 1, ...]), ...]  # one per subject
 
-# Wrap each into the expected 4-column format
-subjects_data = []
-for stream in choice_streams:
-    n = len(stream)
-    arr = np.zeros((n, 4), dtype=np.int32)
+subjects = []
+for i, stream in enumerate(choice_streams):
+    arr = np.zeros((len(stream), 4), dtype=np.int32)
     arr[:, 1] = stream       # column 1 = choice
-    arr[:, 3] = 1            # column 3 = contingency (set to match your filter)
-    subjects_data.append(arr)
+    arr[:, 3] = 1            # column 3 = condition (set to match your filter)
+    subjects.append(Subject(id=f"subject{i}", trials=arr))
 
-group_labels = [0] * 20 + [1] * 20  # e.g. 20 per group
+cohort = Cohort(subjects)
+group_labels = {s.id: 0 if i < 20 else 1 for i, s in enumerate(cohort)}
 
 params = CBASParams(
     num_arms=2,           # size of your choice alphabet
@@ -53,13 +52,13 @@ params = CBASParams(
 )
 
 result = run_cbas_comparative(
-    subjects_data, group_labels, params,
+    cohort, group_labels, params,
     contingency=1,        # must match the value you put in column 3
     encode_reward=False,  # no reward encoding since column 2 is zeros
 )
 ```
 
-For correlative mode, replace `group_labels` with a numpy array of continuous scores (one per subject) and call `run_cbas_correlative`.
+The ids matter because everything per-subject is matched to them rather than to a list position. Group labels may be a `{id: 0/1}` mapping as above, a sequence in cohort order, or the name of a `meta` column. For correlative mode pass continuous values the same way and call `run_cbas_correlative`.
 
 ### Option B: the CSV loader
 
@@ -78,9 +77,9 @@ If your data is stored as one CSV per subject with columns `session, choice, rew
 - `contingency` — trial condition integer (used to filter trials by condition)
 
 ```python
-from pycbas import load_subject_data
+from pycbas import load_cohort
 
-subjects_data = [load_subject_data(f) for f in my_file_list]
+cohort = load_cohort(my_file_list)      # or load_cohort("path/to/folder")
 ```
 
 ### Reward encoding
@@ -98,12 +97,12 @@ Set `num_arms` to the number of distinct choices your task offers. With `encode_
 ## Running a comparative analysis
 
 ```python
-from pycbas import CBASParams, load_subject_data, run_cbas_comparative
+from pycbas import CBASParams, load_cohort, run_cbas_comparative
 
 # Load data
 files_group0 = [...]  # paths to control subject files
 files_group1 = [...]  # paths to experimental subject files
-subjects_data = [load_subject_data(f) for f in files_group0 + files_group1]
+cohort = load_cohort(files_group0 + files_group1)   # ids from the filenames
 group_labels = [0] * len(files_group0) + [1] * len(files_group1)
 
 # Configure
@@ -116,7 +115,7 @@ params = CBASParams(
 
 # Run
 result = run_cbas_comparative(
-    subjects_data, group_labels, params,
+    cohort, group_labels, params,
     contingency=2,       # filter to trial condition 2
     encode_reward=True,  # symbol = choice + reward * num_arms
 )
@@ -129,14 +128,15 @@ print(f"{result.n_significant} significant sequences (k={result.k_final})")
 Use correlative mode when each subject has a continuous measure (a clinical score, age, reaction time, performance metric, etc.) and you want to find sequences whose usage tracks with that measure across subjects.
 
 ```python
-from pycbas import CBASParams, load_subject_data, run_cbas_correlative
+from pycbas import CBASParams, load_cohort, run_cbas_correlative
 import numpy as np
 
-subjects_data = [load_subject_data(f) for f in subject_files]
+cohort = load_cohort(subject_files)
 
-# One score per subject, in the same order as subjects_data.
+# One score per subject, in the same order as the cohort. A {id: score} mapping
+# works too, and is safer if the two were assembled separately.
 # This can be any continuous measure: clinical scores, ages, performance, etc.
-scores = np.array([72.1, 58.3, 85.0, ...])  # length must equal len(subjects_data)
+scores = np.array([72.1, 58.3, 85.0, ...])  # length must equal len(cohort)
 
 params = CBASParams(
     num_arms=6,
@@ -145,10 +145,10 @@ params = CBASParams(
     resample_number=10000,
 )
 
-result = run_cbas_correlative(subjects_data, scores, params)
+result = run_cbas_correlative(cohort, scores, params)
 ```
 
-The `scores` array is the covariate. CBAS will test, for every sequence in the count matrix, whether that sequence's usage (across subjects) correlates with these scores. The order must match `subjects_data` — `scores[i]` is the score for `subjects_data[i]`.
+The `scores` array is the covariate. CBAS will test, for every sequence in the count matrix, whether that sequence's usage (across subjects) correlates with these scores. A sequence is read in cohort order, so `scores[i]` is the score for `cohort[i]`; pass a `{id: score}` mapping instead when the scores did not come from the same pass as the files.
 
 ## Working with results
 
@@ -248,7 +248,7 @@ averages raw counts rather than rates, a subject that took twice as long has rou
 twice the counts. If time-to-criterion differs between your groups, that difference
 alone shifts every sequence.
 
-For multi-contingency data use `record_criteria`, which returns one criterion per
+For multi-contingency data use `contingency_criteria`, which returns one criterion per
 subject per contingency, since the criterion applies within each one and a subject can
 reach it in one contingency and fall short in another.
 
@@ -260,9 +260,10 @@ before running:
 from pycbas import subject_criteria
 import numpy as np
 
-criteria = subject_criteria(subjects_data, params, contingency=2, block_aware=True)
-reached = criteria[np.isfinite(criteria)]
-print(f"{criteria.size - reached.size} of {criteria.size} never reached the criterion")
+criteria = subject_criteria(cohort, params, contingency=2, block_aware=True)
+short = [subject_id for subject_id, trial in criteria.items() if not np.isfinite(trial)]
+reached = np.array([t for t in criteria.values() if np.isfinite(t)])
+print(f"{len(short)} of {len(criteria)} never reached the criterion: {short[:5]}")
 if reached.size:
     print(f"trials used: {reached.min():.0f} to {reached.max():.0f}")
 ```
@@ -291,11 +292,12 @@ the single-contingency loader does not carry:
 from pycbas import (CBASParams, load_cohort_with_contingencies,
                     run_cbas_multicontingency)
 
-records, info = load_cohort_with_contingencies("data/my_cohort")
-labels = ...   # 0/1 per subject, aligned with records
+cohort = load_cohort_with_contingencies("data/my_cohort")
+# The info table's columns are on each subject as `meta`, so a grouping can be
+# named rather than assembled: labels = "lesion" derives it from that column.
 
 params = CBASParams(num_arms=6, seq_len_max=4, criterion=100, criterion_order=4)
-result = run_cbas_multicontingency(records, labels, params)
+result = run_cbas_multicontingency(cohort, "lesion", params)
 
 # sequences are (contingency_block, sequence) pairs
 for (block, seq), significant in zip(result.sequences, result.significant_mask):
@@ -325,8 +327,8 @@ Restrict to the shared blocks explicitly if you need to:
 ```python
 from pycbas import shared_contingency_blocks
 
-print(shared_contingency_blocks(records))          # e.g. [1, 2, 3, 4, 5, 6]
-result = run_cbas_multicontingency(records, labels, params, blocks=[1, 2])
+print(shared_contingency_blocks(cohort))          # e.g. [1, 2, 3, 4, 5, 6]
+result = run_cbas_multicontingency(cohort, "lesion", params, blocks=[1, 2])
 ```
 
 **Watch the hypothesis space.** Counting several contingencies multiplies it, and the
@@ -356,10 +358,10 @@ The `chunked=True` option (default in `run_cbas_comparative`) generates the boot
 
 ```python
 # Lower memory (default)
-result = run_cbas_comparative(subjects_data, labels, params, chunked=True)
+result = run_cbas_comparative(cohort, labels, params, chunked=True)
 
 # Faster, more memory
-result = run_cbas_comparative(subjects_data, labels, params, chunked=False)
+result = run_cbas_comparative(cohort, labels, params, chunked=False)
 ```
 
 Use `estimate_resources` to check before running:
@@ -376,69 +378,57 @@ print_resource_estimate(est)
 `build_count_matrix` produces the matrix every later stage reads, so it is where to start for anything CBAS does not do itself: a different statistic, an embedding, an EM fit.
 
 ```python
-from pathlib import Path
-from pycbas import CBASParams, build_count_matrix, decode_sequence, load_subject_data
+from pycbas import CBASParams, build_count_matrix, load_cohort
 
-# One pass over the files, so the ids, the arrays and the labels cannot fall out of step.
-subject_ids, subjects_data, group_labels = [], [], []
-for path in sorted(Path("data/cohort").glob("*.txt")):
-    subject_ids.append(path.stem)
-    subjects_data.append(load_subject_data(path))
-    group_labels.append(0 if "control" in path.stem else 1)   # your own group rule here
-
+cohort = load_cohort("data/cohort")          # ids default to the filenames
 params = CBASParams(num_arms=6, seq_len_max=3, criterion=400)
-sequences, counts = build_count_matrix(subjects_data, params, contingency=2)
 
-counts.shape        # (len(subjects_data), len(sequences))
+matrix = build_count_matrix(cohort, params, contingency=2)
+matrix.shape          # (len(cohort), len(matrix.sequences))
 ```
 
-**Row `i` is `subjects_data[i]`.** Subjects are never sorted or grouped on the way in, and `build_count_matrix` is not given the group labels, so nothing about the groups can move a row. Membership is applied afterwards, as row indices.
+**Row `i` is `cohort[i]`, and `matrix.subject_ids[i]` names it.** Subjects are never sorted or grouped on the way in, and `build_count_matrix` is not given the group labels, so nothing about the groups can move a row.
 
-**Column `j` is `sequences[j]`.** Columns are ordered by each sequence's total count over the whole cohort, not by order of appearance, and that order changes when the cohort changes. Keep `sequences` with the matrix and look columns up through it rather than by position. The full rule is in the [API reference](api.md#row-and-column-order).
+**Column `j` is `matrix.sequences[j]`.** Columns are ordered by each sequence's total count over the whole cohort, not by order of appearance, and that order changes when the cohort changes. Index through `sequences` rather than by position. The full rule is in the [API reference](api.md#row-and-column-order).
 
-Print both to see the mapping on your own data:
+Both labels travel with the counts, so you can look either up:
 
 ```python
-for i, subject_id in enumerate(subject_ids):
-    print(f"row {i}  {subject_id}  group {group_labels[i]}")
-
-for j in range(5):
-    print(f"col {j}  {sequences[j]}  {decode_sequence(sequences[j], num_arms=6)}")
+matrix.row("an7")                      # one subject's counts, by id
+matrix.column_labels(num_arms=6)[:5]   # readable labels for the first columns
 ```
 
-`decode_sequence` writes a symbol tuple in the published convention, so `(8,)` with six arms reads as `3*`, meaning arm 3, rewarded.
+`column_labels` writes each symbol tuple in the published convention, so `(8,)` with six arms reads as `3*`, meaning arm 3, rewarded. `decode_sequence` does one entry at a time.
 
 ### Reordering rows
 
-Nothing in the matrix records which order was used, so permute every per-subject array in the same step:
+`reorder` moves the rows and their ids together, so nothing can be relabelled:
 
 ```python
 import numpy as np
 
-order = np.argsort(group_labels, kind="stable")   # group 0 first, then group 1
-counts = counts[order]
-subject_ids = [subject_ids[i] for i in order]
-group_labels = [group_labels[i] for i in order]
+labels = cohort.labels_from("lesion")             # 0/1 from the info column
+matrix = matrix.reorder(np.argsort(labels, kind="stable"))   # group 0 first
+matrix.subject_ids                                # follows the new row order
 ```
 
-The pipeline rejects a label vector whose length does not match the cohort, holds values outside `{0, 1}`, or leaves a group empty. It cannot detect a permuted vector of the right length, so assemble the cohort in one pass as above.
+Group labels are resolved by id wherever they are used, so reordering the cohort or the matrix cannot pair a subject with another's group. What the pipeline still rejects is a labelling that does not describe the cohort: a mapping missing a subject, a sequence of the wrong length, a value outside `{0, 1}`, or an empty group.
 
 ### One contingency at a time
 
-[Multiple contingencies](#multiple-contingencies) covers that format and its loader. Its count matrix labels every column with a `(block, sequence)` pair and keeps the blocks contiguous, so one contingency slices out, with `records` from that section:
+[Multiple contingencies](#multiple-contingencies) covers that format and its loader. Its count matrix labels every column with a `(block, sequence)` pair, so `select_block` takes one contingency:
 
 ```python
-from pycbas import build_multicontingency_count_matrix, split_sequence_entry
+from pycbas import build_multicontingency_count_matrix, load_cohort_with_contingencies
 
-sequences, counts = build_multicontingency_count_matrix(records, params)
+cohort = load_cohort_with_contingencies("data/my_cohort")
+matrix = build_multicontingency_count_matrix(cohort, params)
 
-# sequences[j] is a pair here, e.g. (1, (8,)), so select on its block.
-in_block_1 = [j for j, entry in enumerate(sequences)
-              if split_sequence_entry(entry)[0] == 1]
-counts[:, in_block_1]
+matrix.sequences[0]              # (1, (8,)): block 1, one symbol
+matrix.select_block(1).shape     # just that contingency's columns
 ```
 
-`split_sequence_entry` also gives a sequence's length, which `len(entry)` does not: `len` is 2 for every pair, whatever the sequence length. Given a bare entry from `build_count_matrix` it reports a block of `None`, so a block test against those selects nothing rather than raising.
+`select_block` raises on a single-contingency matrix rather than selecting nothing, since an empty result there reads as a contingency with no sequences. Use `split_sequence_entry` to get a sequence's length from an entry: `len(entry)` is 2 for every pair, whatever the sequence length.
 
 ## Using individual pipeline stages
 
@@ -446,17 +436,22 @@ For custom workflows, you can call each stage separately:
 
 ```python
 from pycbas import (
-    CBASParams, load_subject_data, build_count_matrix,
+    CBASParams, load_cohort, build_count_matrix,
     compute_test_stats, bootstrap_test_stats, find_k_fwer,
 )
 
 params = CBASParams(num_arms=2, seq_len_max=10, criterion=250, resample_number=10000)
 
 # Build count matrix
-sequences, count_matrix = build_count_matrix(subjects_data, params, contingency=1)
+matrix = build_count_matrix(cohort, params, contingency=1)
+sequences, count_matrix = matrix.sequences, matrix.counts
 
-# Compute test statistics
-group_indices = [np.where(labels == 0)[0], np.where(labels == 1)[0]]
+# Compute test statistics. Row order is matrix.subject_ids, so build the group
+# indices from those rather than from the cohort, in case you reordered either.
+labels = cohort.labels_from("lesion")
+by_id = dict(zip(cohort.ids, labels))
+row_labels = np.array([by_id[i] for i in matrix.subject_ids])
+group_indices = [np.where(row_labels == 0)[0], np.where(row_labels == 1)[0]]
 test_stats = compute_test_stats(count_matrix, group_indices)
 
 # Generate bootstrap null

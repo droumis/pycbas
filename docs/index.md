@@ -30,10 +30,10 @@ pip install -e '.[dev]'
 ## Quick example
 
 ```python
-from pycbas import CBASParams, load_subject_data, run_cbas_comparative
+from pycbas import CBASParams, load_cohort, run_cbas_comparative
 
-subjects_data = [load_subject_data(f) for f in data_files]
-group_labels = [0, 0, 0, 1, 1, 1]
+cohort = load_cohort(data_files)        # ids default to the filenames
+group_labels = [0, 0, 0, 1, 1, 1]      # or {"an1": 0, ...}, or a meta column name
 
 params = CBASParams(
     num_arms=6,
@@ -42,7 +42,7 @@ params = CBASParams(
     resample_number=10000,
 )
 
-result = run_cbas_comparative(subjects_data, group_labels, params)
+result = run_cbas_comparative(cohort, group_labels, params)
 print(f"{result.n_significant} significant sequences (k={result.k_final})")
 ```
 

@@ -2,12 +2,63 @@
 
 ## 0.2.0
 
-Criteria that count performance instead of trials, analysis across several task
-contingencies at once, both usable from the GUI, and a symbol decode for reading a count
-matrix's columns. Two fixes change behaviour. Re-running a 0.1.0 analysis can report
-fewer significant sequences, because the step-down mishandled ties at the alpha boundary
-and resolved them towards significance; and labels that do not describe the cohort now
-raise where they used to return a complete-looking result.
+Subjects now carry their own identity, which changes the shape of the public API:
+the pipelines and builders take a `Cohort` rather than a list of arrays, and the count
+matrix comes back with the ids of its rows. Criteria can count performance instead of
+trials, several task contingencies can be analysed at once, both usable from the GUI,
+and a symbol decode makes a count matrix's columns readable.
+
+Two fixes change results. Re-running a 0.1.0 analysis can report fewer significant
+sequences, because the step-down mishandled ties at the alpha boundary and resolved them
+towards significance; and labels that do not describe the cohort now raise where they
+used to return a complete-looking result.
+
+### Changed, and not compatible with 0.1.0
+
+- **`Cohort` in, `CountMatrix` out.** `build_count_matrix`, the pipelines and the
+  criteria functions took a list of trial arrays, which carried no subject identity, so
+  every per-subject correspondence had to be maintained positionally by the caller. A
+  permuted list of the right length was indistinguishable from a correct one, and
+  per-subject count totals could not tell them apart either, since a fixed criterion
+  truncates every subject to the same number of windows. Identity now travels with the
+  trials.
+
+  ```python
+  # 0.1.0
+  subjects_data = [load_subject_data(f) for f in files]
+  sequences, counts = build_count_matrix(subjects_data, params)
+  result = run_cbas_comparative(subjects_data, labels, params)
+
+  # 0.2.0
+  cohort = load_cohort(files)                 # ids from the filenames
+  matrix = build_count_matrix(cohort, params)  # .counts, .subject_ids, .sequences
+  result = run_cbas_comparative(cohort, labels, params)
+  ```
+
+  A bare list of arrays now raises `TypeError` naming `load_cohort`, rather than being
+  accepted and losing the identity again.
+
+  Group labels may be a `{subject_id: 0/1}` mapping, a sequence in cohort order, or the
+  name of a `meta` column such as `"lesion"`. They are matched to the count matrix's
+  rows by id, so reordering a cohort or a matrix relabels nothing.
+
+- **`SubjectRecord` is now `Subject`**, serving both data formats, with the contingency
+  block index as its `condition` column so that `contingency=2` means the same thing
+  either way. `load_subject_data_with_contingencies` is `load_subject_with_contingencies`
+  and returns a `Subject`; `load_cohort_with_contingencies` returns a `Cohort` and puts
+  the info table on the subjects as `meta` rather than returning it alongside.
+
+- **`record_criteria` is now `contingency_criteria`**, and both it and `subject_criteria`
+  are keyed by subject id, so a shortfall report can name the subject rather than an
+  index into a list the caller has to still be holding.
+
+- **The GUI keeps one cohort** instead of six per-subject collections that had to stay
+  index-aligned, and shares the library's vocabulary for what counts as control or
+  lesion.
+
+- Prose throughout refers to artefacts rather than to people, and no longer explains
+  itself in terms of one specific dataset's composition. `scripts/compare_with_david.py`
+  is now `scripts/compare_with_reference.py`.
 
 ### Added
 
@@ -205,12 +256,6 @@ raise where they used to return a complete-looking result.
   positions counted rather than a maximum start position; `find_k_fwer_chunked` was said
   to match `find_k_fwer` unconditionally when it always applies direction-conditional
   removal; the chunked memory saving was quoted as three different figures.
-
-### Changed
-
-- Prose throughout refers to artefacts rather than to people, and no longer explains
-  itself in terms of one specific dataset's composition. `scripts/compare_with_david.py`
-  is now `scripts/compare_with_reference.py`.
 
 ## 0.1.0
 

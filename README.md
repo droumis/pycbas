@@ -77,10 +77,10 @@ other platforms should use option 2.
 ### Comparative mode (group differences)
 
 ```python
-from pycbas import CBASParams, load_subject_data, run_cbas_comparative
+from pycbas import CBASParams, load_cohort, run_cbas_comparative
 
-subjects_data = [load_subject_data(f) for f in data_files]
-group_labels = [0, 0, 0, 1, 1, 1]
+cohort = load_cohort(data_files)        # ids default to the filenames
+group_labels = [0, 0, 0, 1, 1, 1]      # or {"an1": 0, ...}, or a meta column name
 
 params = CBASParams(
     num_arms=6,
@@ -92,7 +92,7 @@ params = CBASParams(
 # `contingency` selects trials by the contingency column and defaults to 2. Pass the
 # value your data uses, or None for all trials; a value matching no trials counts no
 # sequences and reports nothing significant.
-result = run_cbas_comparative(subjects_data, group_labels, params, contingency=2)
+result = run_cbas_comparative(cohort, group_labels, params, contingency=2)
 print(f"{result.n_significant} significant sequences (k={result.k_final})")
 ```
 
@@ -105,8 +105,8 @@ same arm sequence under two contingencies is two hypotheses.
 ```python
 from pycbas import load_cohort_with_contingencies, run_cbas_multicontingency
 
-records, info = load_cohort_with_contingencies("path/to/cohort")
-result = run_cbas_multicontingency(records, group_labels, params, blocks=[1, 2, 3])
+cohort = load_cohort_with_contingencies("path/to/cohort")
+result = run_cbas_multicontingency(cohort, "lesion", params, blocks=[1, 2, 3])
 ```
 
 `result.sequences` is then keyed by `(block, sequence)`. Counting several
@@ -118,7 +118,7 @@ a long run.
 ```python
 from pycbas import run_cbas_correlative
 
-result = run_cbas_correlative(subjects_data, cbit_scores, params)
+result = run_cbas_correlative(cohort, cbit_scores, params)
 ```
 
 ### Resource estimation

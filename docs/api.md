@@ -5,7 +5,7 @@
 ### `run_cbas_comparative`
 
 ```python
-run_cbas_comparative(subjects_data, group_labels, params=None,
+run_cbas_comparative(cohort, group_labels, params=None,
                      contingency=2, encode_reward=True, chunked=True,
                      block_aware=False)
 ```
@@ -14,13 +14,15 @@ Run the full comparative CBAS pipeline from raw data to significant sequences.
 
 **Arguments**
 
-- `subjects_data` (list of ndarray) - One array per subject from `load_subject_data`.
-- `group_labels` (array-like of int) - 0 or 1 per subject indicating group membership,
-  in the same order as `subjects_data`. Raises `ValueError` if the count does not match
-  the number of subjects, if any label is outside {0, 1}, or if either group is empty:
-  each of those would otherwise analyse a cohort you did not pass, or produce all-NaN
-  statistics, and return a complete-looking result either way. Exclude a subject by
-  dropping it from `subjects_data`, not by labelling it into neither group.
+- `cohort` (Cohort) - Subjects from `load_cohort`, or built directly.
+- `group_labels` - how to group the cohort: a `{subject_id: 0/1}` mapping, a sequence in
+  cohort order, or the name of a `meta` column to derive it from. Labels are matched to
+  the count matrix's rows by id, so the row order cannot misgroup a subject. Raises
+  `ValueError` if a subject has no label, if the count does not match the cohort, if any
+  label is outside {0, 1}, or if either group is empty: each of those would otherwise
+  analyse a cohort you did not pass, or produce all-NaN statistics, and return a
+  complete-looking result either way. Exclude a subject with `Cohort.filter`, not by
+  labelling it into neither group.
 - `params` (CBASParams, optional) - Analysis parameters. Uses defaults if None.
 - `contingency` (int or None) - Trial condition to filter on. None uses all trials.
 - `encode_reward` (bool) - If True, symbol = choice + reward * num_arms (doubles alphabet). Set False for tasks where choice already encodes the outcome.
@@ -34,7 +36,7 @@ Run the full comparative CBAS pipeline from raw data to significant sequences.
 ### `run_cbas_correlative`
 
 ```python
-run_cbas_correlative(subjects_data, covariate, params=None,
+run_cbas_correlative(cohort, covariate, params=None,
                      contingency=2, encode_reward=True, block_aware=False)
 ```
 
@@ -42,15 +44,141 @@ Run the full correlative CBAS pipeline.
 
 **Arguments**
 
-- `subjects_data` (list of ndarray) - One array per subject from `load_subject_data`.
-- `covariate` (array-like of float) - One continuous value per subject (e.g. a behavioral
-  score), in the same order as `subjects_data`. Raises `ValueError` on a length mismatch.
+- `cohort` (Cohort) - Subjects from `load_cohort`, or built directly.
+- `covariate` - one continuous value per subject: a `{subject_id: value}` mapping, a
+  sequence in cohort order, or the name of a `meta` column. Raises `ValueError` on a
+  length mismatch or a missing subject.
 - `params` (CBASParams, optional) - Analysis parameters.
 - `contingency` (int or None) - Trial condition to filter on. None uses all trials.
 - `encode_reward` (bool) - If True, symbol = choice + reward * num_arms (doubles alphabet).
 - `block_aware` (bool) - If True, sequences cannot span block/session boundaries.
 
 **Returns** `CBASResult`
+
+---
+
+## Cohorts and subjects
+
+Everything per-subject is keyed by subject id rather than by list position, so a
+reordering or a filter cannot pair a subject with another's group, covariate or counts.
+
+### `Subject`
+
+```python
+Subject(id, trials, meta=None, blocks=None)
+```
+
+One subject's trials under the identity they were loaded with. `trials` is an
+(n_trials, 4) array of session, choice, reward, condition, exposed also as the
+`.session`, `.choice`, `.reward` and `.condition` properties. `condition` is the file's
+fourth column for single-contingency data and the contingency block index for
+multi-contingency data, so `contingency=2` selects the same thing in both.
+
+`meta` holds whatever the cohort table supplied, such as `lesion`, `sex` or `genotype`.
+Group membership is deliberately not a field: the same subject is control in one
+comparison and, say, male in another, so a label belongs to an analysis rather than to
+the data.
+
+`blocks` is present only for multi-contingency subjects; `has_blocks` reports it, and
+the block methods raise without it rather than treating a raw condition column as a
+validated block structure.
+
+---
+
+### `Cohort`
+
+```python
+Cohort(subjects)
+```
+
+An ordered collection of `Subject`, indexable by position, by id, or by slice. Ids must
+be unique, since everything else is resolved through them.
+
+**Methods**
+
+- `ids` - subject ids, in cohort order.
+- `filter(predicate=None, **meta_equals)` - the subjects passing a predicate and
+  matching every `meta` value given, e.g. `cohort.filter(genotype="WT")`. A value may be
+  a set or list to keep several.
+- `reorder(order)` - a cohort in the given order of positions, identity following each
+  subject.
+- `labels_from(key, coder=None)` - 0/1 group labels from a `meta` column. `coder` maps a
+  raw value to 0, 1, or None to exclude; the default understands `0`/`1` and words like
+  `control`, `sham`, `wt`, `lesion`, `ko`, `mutant`. Subjects with no usable value are
+  reported by id rather than dropped.
+- `covariate_from(key)` - a float covariate from a `meta` column.
+- `meta_values(key)` - one `meta` value per subject, in cohort order.
+- `has_blocks` - whether every subject carries contingency blocks.
+
+---
+
+### `CountMatrix`
+
+```python
+CountMatrix(counts, subject_ids, sequences)
+```
+
+Sequence counts with the ids of its rows and the labels of its columns, so the
+correspondence can be checked rather than assumed. `counts[i, j]` is how often subject
+`subject_ids[i]` used sequence `sequences[j]`.
+
+**Methods**
+
+- `shape` - `counts.shape`.
+- `row(subject_id)` - one subject's counts, by id.
+- `reorder(order)` - rows in the given order, ids following them.
+- `select_block(block)` - the columns of one contingency block. Raises on a
+  single-contingency matrix rather than selecting nothing.
+- `column_labels(num_arms=6, encode_reward=True, join=" ")` - readable labels for every
+  column, in the published convention.
+
+---
+
+### `load_cohort`
+
+```python
+load_cohort(source, pattern="*.txt", meta=None, ids=None)
+```
+
+A cohort from a directory or an explicit list of files. Files from a directory are
+ordered by the digits in their names, so `an2` precedes `an10`; an explicit list keeps
+the order given. Ids default to filename stems. `meta` may be a `{id: dict}` mapping or
+a list in file order.
+
+---
+
+### `load_subject`
+
+```python
+load_subject(filepath, id=None, meta=None)
+```
+
+One subject from the single-contingency text format, with the filename stem as its
+default id.
+
+---
+
+### `resolve_labels`
+
+```python
+resolve_labels(labels, ids, cohort_ids=None)
+```
+
+Labels for `ids`, from a `{id: label}` mapping or a sequence in cohort order. A sequence
+is converted to a mapping first, so the result follows `ids` even when those are not in
+cohort order. This is what the pipelines use to align labels to matrix rows.
+
+---
+
+### `default_group_coder`
+
+```python
+default_group_coder(value)
+```
+
+0, 1, or None for a raw group value from a cohort table. None means "not usable", which
+is distinct from either group: a blank lesion field means the subject had surgery but no
+lesion was evident, so it is neither control nor lesion and is not guessed at.
 
 ---
 
@@ -70,16 +198,16 @@ All analysis parameters. See the [User Guide](guide.md#parameters) for descripti
 ### `run_cbas_multicontingency`
 
 ```python
-run_cbas_multicontingency(records, group_labels, params=None, blocks=None,
+run_cbas_multicontingency(cohort, group_labels, params=None, blocks=None,
                           encode_reward=True, chunked=True)
 ```
 
 Comparative CBAS across several contingencies, each counted as its own set of
-hypotheses. `records` comes from `load_cohort_with_contingencies`. Returns a
+hypotheses. `cohort` comes from `load_cohort_with_contingencies`. Returns a
 `CBASResult` whose `sequences` entries are `(block, sequence_tuple)` pairs rather than
 bare tuples. Everything downstream of the count matrix is the ordinary comparative
 path, including the `group_labels` validation described under
-`run_cbas_comparative`, counted against `records`. See
+`run_cbas_comparative`, counted against the cohort. See
 [multiple contingencies](guide.md#multiple-contingencies).
 
 ---
@@ -91,15 +219,16 @@ load_cohort_with_contingencies(directory, allow_mid_session_change=False)
 ```
 
 Load every `an*.txt` subject file in a directory, ordered numerically, plus the
-`anInfo.txt` table if present. Returns `(records, info)`. Raises if the file count and
-the info row count disagree.
+`anInfo.txt` table if present. Returns a `Cohort` whose subjects carry the info
+table's columns as `meta`, so a grouping or filter can be named rather than assembled
+alongside. Raises if the file count and the info row count disagree.
 
 ---
 
 ### `shared_contingency_blocks`
 
 ```python
-shared_contingency_blocks(records)
+shared_contingency_blocks(cohort)
 ```
 
 Sorted contingency block indices common to every subject, excluding exploration.
@@ -111,12 +240,12 @@ subject did not run a contingency the others did.
 ### `build_multicontingency_count_matrix`
 
 ```python
-build_multicontingency_count_matrix(records, params, blocks=None, encode_reward=True)
+build_multicontingency_count_matrix(cohort, params, blocks=None, encode_reward=True)
 ```
 
 The count matrix behind `run_cbas_multicontingency`. Returns
-`(sequences, count_matrix)` with columns grouped contiguously by contingency, so a
-single contingency can be sliced out. Row `i` is `records[i]`, and within a contingency
+a `CountMatrix` with columns grouped contiguously by contingency, so `select_block`
+can take one. Row `i` is `cohort[i]`, and within a contingency
 the columns follow the same rule as `build_count_matrix`; see
 [Row and column order](#row-and-column-order). Each `sequences` entry is a
 `(block, sequence)` pair rather than a bare tuple.
@@ -138,7 +267,7 @@ subject never gets there. `reward_blocks` is a list of per-session 0/1 arrays.
 ### `subject_criteria`
 
 ```python
-subject_criteria(subjects_data, params, contingency=2, block_aware=False)
+subject_criteria(cohort, params, contingency=2, block_aware=False)
 ```
 
 Per-subject criterion trial index, as a float array so that `inf` survives. `inf` marks
@@ -261,23 +390,16 @@ Count all subsequences of a given length with start position <= criterion.
 
 ---
 
-### `record_criteria`
+### `contingency_criteria`
 
 ```python
-record_criteria(records, params, blocks=None)
+contingency_criteria(cohort, params, blocks=None)
 ```
 
-Criterion trial index per subject per contingency, `inf` where a subject never reached
-it. The multi-contingency counterpart of `subject_criteria`, which takes per-subject
-arrays and so cannot be used on `SubjectRecord`s.
-
-The criterion applies within each contingency, so a subject can reach it in one and fall
-short in another, and the result is a matrix rather than a vector. Worth checking before
-a run: a subject that falls short is not truncated and contributes every window it has,
-so the weakest subjects contribute the most data, and counting more contingencies means
-more chances to fall short.
-
-**Returns** `(criteria, blocks)` where `criteria` has shape `(n_subjects, n_blocks)`.
+Criterion trial index per subject per contingency, `inf` where unreached. Returns
+`({subject_id: {block: trial}}, blocks_used)`. Separate from `subject_criteria` because
+it answers a different question: the criterion applies within each contingency, so a
+subject can reach it in one and fall short in another.
 
 ---
 
@@ -301,7 +423,7 @@ it is not the same as a cap on how many sequences are counted.
 ### `build_count_matrix`
 
 ```python
-build_count_matrix(subjects_data, params, contingency=2, encode_reward=True,
+build_count_matrix(cohort, params, contingency=2, encode_reward=True,
                    block_aware=False)
 ```
 
@@ -309,26 +431,30 @@ Build the full sequence count matrix across all subjects and all sequence length
 
 **Arguments**
 
-- `subjects_data` (list of ndarray) - One array per subject.
+- `cohort` (Cohort) - Subjects from `load_cohort`, or built directly. A bare list of
+  arrays raises `TypeError`, since it carries no subject identity.
 - `params` (CBASParams) - Analysis parameters.
 - `contingency` (int or None) - Trial condition to filter on. None uses all trials.
 - `encode_reward` (bool) - If True, symbol = choice + reward * num_arms.
 - `block_aware` (bool) - If True, sequences cannot span block/session boundaries.
 
-**Returns** `(sequences, count_matrix)` where sequences is a list of tuples and count_matrix is ndarray of shape (n_subjects, n_sequences).
+**Returns** a `CountMatrix` with `.counts` of shape (n_subjects, n_sequences),
+`.subject_ids` naming the rows, and `.sequences` labelling the columns.
 
 #### Row and column order
 
-**Row `i` is `subjects_data[i]`.** The order you pass in is the order you get back;
-subjects are never sorted or grouped, and this function is not given the group labels,
-so group structure cannot affect it. Group membership is applied later as indices into
-these rows, so the two groups need not be contiguous. Align group labels, covariates
-and any per-subject metadata to the matrix positionally.
+**Row `i` is `cohort[i]`, named by `subject_ids[i]`.** The order you pass in is the order
+you get back; subjects are never sorted or grouped, and this function is not given the
+group labels, so group structure cannot affect it.
 
-Note that the caller decides that order, and a cohort loader may impose one of its own:
-`load_cohort_with_contingencies` orders subjects by the digits in their filenames, and a
-caller that sorts its subjects by group before building the matrix gets group-blocked
-rows. Nothing in the returned value records which order was used.
+The ids are why nothing per-subject has to be aligned positionally. Group labels and
+covariates are resolved through them, so reordering a cohort or a matrix relabels
+nothing, and `CountMatrix.reorder` moves the rows and their ids together. Anything else
+you align to the rows should be keyed by id too.
+
+The caller still decides the order, and a loader may impose one of its own:
+`load_cohort` and `load_cohort_with_contingencies` order subjects by the digits in their
+filenames, and a caller that sorts by group before building gets group-blocked rows.
 
 **Column `j` is `sequences[j]`.** Columns are ordered by total count summed over every
 subject, descending, with ties broken by sequence length and then by sequence value.
@@ -336,9 +462,9 @@ They are *not* in order of first appearance, and the order depends on the cohort
 because it is driven by cohort-wide totals, adding or removing one subject can move
 most columns. Only sequences observed in at least one subject get a column at all.
 
-So keep `sequences` with the matrix and index through it. A bare column position is not
-meaningful across two runs, even two runs on nearly the same cohort. `decode_sequence`
-turns an entry into a readable label.
+`sequences` travels with the matrix, so index through it. A bare column position is not
+meaningful across two runs, even two runs on nearly the same cohort.
+`CountMatrix.column_labels` renders them all readably, and `decode_sequence` does one.
 
 ---
 
@@ -402,7 +528,8 @@ Generate the bootstrap null for correlative mode by permuting the covariate.
 ### `romano_wolf_stepdown`
 
 ```python
-romano_wolf_stepdown(test_stats, null_matrix, null_directions=None, k=1)
+romano_wolf_stepdown(test_stats, null_matrix, null_directions=None, k=1,
+                     tie_rtol=0.0)
 ```
 
 Apply the Romano-Wolf step-down procedure at a fixed k.
@@ -414,7 +541,8 @@ Apply the Romano-Wolf step-down procedure at a fixed k.
 ### `find_k_fwer`
 
 ```python
-find_k_fwer(test_stats, null_matrix, alpha=0.5, gamma=0.05, null_directions=None)
+find_k_fwer(test_stats, null_matrix, alpha=0.5, gamma=0.05, null_directions=None,
+            return_history=False, tie_rtol=0.0)
 ```
 
 Run iterative k-FWER to convergence and return the final adjusted p-values.
@@ -476,7 +604,7 @@ Conservative variant that always uses k=1 (standard FWER). Useful for comparison
 
 ```python
 estimate_resources(num_arms, seq_len_max, n_subjects=None, n_observed=None,
-                   resample_number=10000, encode_reward=True)
+                   resample_number=10000, encode_reward=True, n_hypothesis_sets=1)
 ```
 
 Estimate memory and time requirements before running an analysis.
