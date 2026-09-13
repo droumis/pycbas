@@ -18,6 +18,8 @@ __version__ = "0.2.0"
 
 
 from .params import CBASParams, CBASResult
+from .cohort import (Subject, Cohort, CountMatrix, load_subject, load_cohort,
+                     resolve_labels)
 from .io import (load_subject_data, extract_choice_stream, extract_choice_streams_by_block,
                  enumerate_sequences, enumerate_sequences_block_aware,
                  split_sequence_entry, decode_symbol, decode_sequence)
@@ -45,6 +47,12 @@ __all__ = [
     "record_criteria",
     "CBASParams",
     "CBASResult",
+    "Subject",
+    "Cohort",
+    "CountMatrix",
+    "load_subject",
+    "load_cohort",
+    "resolve_labels",
     "load_subject_data",
     "extract_choice_stream",
     "extract_choice_streams_by_block",
