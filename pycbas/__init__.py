@@ -42,6 +42,7 @@ from .contingency import (load_subject_with_contingencies,
                           contingency_criteria)
 from .criterion import criterion_trial, reached_criterion
 from .core import subject_criteria, NonIntegerCountWarning
+from .occurrences import sequence_occurrences
 
 __all__ = [
     "__version__",
@@ -84,6 +85,7 @@ __all__ = [
     "criterion_trial",
     "reached_criterion",
     "subject_criteria",
+    "sequence_occurrences",
     "estimate_resources",
     "print_resource_estimate",
 ]
