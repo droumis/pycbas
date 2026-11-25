@@ -310,6 +310,17 @@ class TestPipeline:
         one = run_cbas_multicontingency(cohort, labels, params, blocks=[1])
         assert len(one.sequences) < len(both.sequences)
 
+    def test_records_the_digest_of_its_matrix(self):
+        from pycbas.params import _counts_digest
+
+        cohort = Cohort([two_block_record(s, n=60) for s in range(12)])
+        params = CBASParams(num_arms=3, seq_len_max=2, criterion=10_000,
+                            resample_number=50)
+        result = run_cbas_multicontingency(cohort, np.array([0, 1] * 6), params)
+        matrix = build_multicontingency_count_matrix(cohort, params)
+        assert result.counts_digest == _counts_digest(
+            matrix.counts, matrix.subject_ids, matrix.sequences)
+
 
 # ---------------------------------------------------------------------------
 # A multi-contingency cohort, supplied separately

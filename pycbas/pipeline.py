@@ -1,7 +1,7 @@
 """High-level CBAS pipeline functions."""
 
 import numpy as np
-from .params import CBASParams, CBASResult
+from .params import CBASParams, CBASResult, _counts_digest
 from .core import build_count_matrix, compute_test_stats, compute_test_stats_correlative
 from .bootstrap import bootstrap_test_stats, bootstrap_test_stats_correlative
 from .stepdown import find_k_fwer, find_k_fwer_chunked
@@ -102,8 +102,7 @@ def run_cbas_multicontingency(cohort, group_labels, params=None, blocks=None,
         cohort, params, blocks=blocks, encode_reward=encode_reward)
     group_indices = _group_indices(group_labels, cohort, matrix.subject_ids)
 
-    return _finish_comparative(matrix.sequences, matrix.counts, group_indices,
-                               params, chunked)
+    return _finish_comparative(matrix, group_indices, params, chunked)
 
 
 def run_cbas_comparative(cohort, group_labels, params=None,
@@ -132,17 +131,17 @@ def run_cbas_comparative(cohort, group_labels, params=None,
                                 encode_reward=encode_reward,
                                 block_aware=block_aware)
     group_indices = _group_indices(group_labels, cohort, matrix.subject_ids)
-    return _finish_comparative(matrix.sequences, matrix.counts, group_indices,
-                               params, chunked)
+    return _finish_comparative(matrix, group_indices, params, chunked)
 
 
-def _finish_comparative(sequences, count_matrix, group_indices, params, chunked):
+def _finish_comparative(matrix, group_indices, params, chunked):
     """Statistic, null, step-down and k-FWER for a comparative count matrix.
 
     Shared by the single- and multi-contingency entry points so both run through
     exactly the same validated numerical path, differing only in how the count
     matrix was built and how its columns are labelled.
     """
+    sequences, count_matrix = matrix.sequences, matrix.counts
     test_stats = compute_test_stats(count_matrix, group_indices)
 
     if chunked:
@@ -169,6 +168,7 @@ def _finish_comparative(sequences, count_matrix, group_indices, params, chunked)
         k_final=k_final,
         significant_mask=significant,
         k_history=k_history,
+        counts_digest=_counts_digest(count_matrix, matrix.subject_ids, sequences),
     )
 
 
@@ -217,4 +217,5 @@ def run_cbas_correlative(cohort, covariate, params=None,
         k_final=k_final,
         significant_mask=significant,
         k_history=k_history,
+        counts_digest=_counts_digest(count_matrix, matrix.subject_ids, sequences),
     )
