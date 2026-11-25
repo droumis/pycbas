@@ -327,6 +327,29 @@ enumeration. Only interesting when `params.criterion_order` is nonzero; see
 
 ---
 
+### `sequence_occurrences`
+
+```python
+sequence_occurrences(cohort, params, sequences, *, contingency=2, block_aware=False,
+                     encode_reward=True, blocks=None, counted=None)
+```
+
+Start positions of every counted occurrence of `sequences`, given in the form of
+`result.sequences`. Pass the settings the analysis used, and its `CBASResult` or a
+`CountMatrix` as `counted`. The function recounts and raises `ValueError` if the counts
+differ. A result is matched by its `counts_digest`. A result without one is matched by
+its sequence list, which is not exact, and a warning says so.
+
+Returns `(occurrences, subjects)`, two dicts of equal-length numpy arrays.
+`occurrences` has one row per counted window, with `subject_id`, `block`, `sequence`,
+`start`, `row` and `session`. `subjects` has one row per subject and contingency, with
+`n_trials`, `reached` and `cutoff`, including subjects that never used the sequences.
+`start` is 0-based and counts only the trials the analysis counted. See
+[when does a sequence occur](guide.md#when-does-a-sequence-occur) for the columns, a
+recipe for group medians, and what to check before comparing groups.
+
+---
+
 ### `CBASResult`
 
 Returned by the pipeline functions.
@@ -338,6 +361,7 @@ Returned by the pipeline functions.
 - `g_values` (ndarray, shape 2S) - Adjusted p-values from the converged step-down. Same layout as test_stats.
 - `k_final` (int) - Converged k value from k-FWER iteration.
 - `significant_mask` (ndarray of bool, shape S) - True for sequences significant in either direction.
+- `counts_digest` (str or None) - SHA-256 of the count matrix the result was computed from, with its row ids and column labels. `sequence_occurrences` checks its recount against it. None for a result built by hand.
 
 **Properties**
 
