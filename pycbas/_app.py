@@ -2086,7 +2086,13 @@ def _occurrence_downloads(result):
             return io.StringIO(frames[which].to_csv(index=False))
         return callback
 
+    restart = ", which restart in each contingency," if "blocks" in inputs["counting"] \
+        else ""
+    compare = ("compare cutoffs across groups before comparing timing between them"
+               if inputs["label_name"] == "group" else
+               "check whether cutoffs track the score before relating timing to it")
     return [
+        pn.pane.Markdown("#### Where the significant sequences occurred"),
         pn.Row(
             pn.widgets.FileDownload(callback=csv("occ"),
                                     filename="cbas_occurrences.csv",
@@ -2096,16 +2102,19 @@ def _occurrence_downloads(result):
                                     label="Download subject windows (CSV)"),
         ),
         pn.pane.Markdown(
-            "The occurrences CSV has one row per counted occurrence of each significant "
-            "sequence. `start` is the 0-based trial of its first choice within the "
-            "counted trials, which restart in each contingency, and `row` is its 0-based "
-            "index in the subject's loaded trials. The subject windows CSV lists every "
-            "subject, including those that never used a sequence, with `cutoff`, the "
-            "last trial at which a counted sequence may start. Positions are bounded "
-            "by each subject's cutoff, so compare cutoffs across groups before "
-            "comparing timing. See the guide, \"When does a sequence occur?\"."
+            f"The occurrences CSV has one row per counted occurrence of each significant "
+            f"sequence. `start` is the 0-based trial of its first choice within the "
+            f"counted trials{restart} and `row` is its 0-based index in the subject's "
+            f"loaded trials. The subject windows CSV lists every subject, including "
+            f"those that never used a sequence, with `cutoff`, the last trial at which a "
+            f"counted sequence may start. Positions are bounded by each subject's "
+            f"cutoff, so {compare}. See [When does a sequence occur?]({_GUIDE_URL}) in "
+            f"the user guide."
         ),
     ]
+
+
+_GUIDE_URL = "https://droumis.github.io/pycbas/guide/#when-does-a-sequence-occur"
 
 
 # --- Demo data generator ---
