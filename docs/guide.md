@@ -436,7 +436,7 @@ matrix.select_block(1).shape     # just that contingency's columns
 
 The count matrix says how often each subject used a sequence. `sequence_occurrences` says where. It returns two tables. In the first, each row is one window the count matrix counted, so the rows for a subject and a sequence add up to that cell of the matrix. The second has a row for every subject, including subjects that never used the sequences, with what is needed to interpret the first.
 
-Pass the same cohort, parameters and counting settings as the analysis, and the result as `counted`. The function recounts and raises if its counts differ from the ones the result was computed from, so a changed setting or a filtered cohort cannot produce positions for data the analysis did not test.
+Pass the same cohort, parameters and counting settings as the analysis, and the result as `counted`. The function recounts and raises if its counts differ from the ones the result was computed from. That catches a changed setting, a filtered or reordered cohort, and edited trials, since almost any edit changes some count. It compares counts, not the trials themselves, so trials rearranged without changing any count would pass. That is rare unless `seq_len_max` is very small, but pass the cohort exactly as the analysis loaded it.
 
 ```python
 import pandas as pd
