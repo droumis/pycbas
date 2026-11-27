@@ -476,23 +476,25 @@ from pycbas import decode_sequence
 group = dict(zip(cohort.ids, cohort.labels_from("lesion")))
 subjects["group"] = subjects["subject_id"].map(group)
 
-per_subject = (occ.groupby(["block", "sequence", "subject_id"])["start"].median()
-               .rename("median_start").reset_index()
-               .merge(subjects, on=["subject_id", "block"]))
+medians = (occ.groupby(["sequence", "subject_id"])["start"].median()
+           .rename("median_start").reset_index())
+# Every subject for every sequence, so subjects that never used one stay in, as NaN.
+per_subject = (occ[["block", "sequence"]].drop_duplicates()
+               .merge(subjects, on="block")
+               .merge(medians, on=["sequence", "subject_id"], how="left"))
 per_subject["fraction"] = per_subject["median_start"] / per_subject["cutoff"]
 
 summary = per_subject.groupby(["sequence", "group"]).agg(
     median_start=("median_start", "median"),
     median_fraction=("fraction", "median"),
-    users=("subject_id", "nunique"),
+    users=("median_start", "count"),
+    group_size=("subject_id", "size"),
 ).reset_index()
-summary["group_size"] = summary["group"].map(
-    subjects.drop_duplicates("subject_id").groupby("group").size())
 summary["label"] = summary["sequence"].map(
     lambda s: decode_sequence(s, num_arms=params.num_arms))
 ```
 
-`users` counts the subjects in the group that used the sequence at all, and `group_size` counts all of them. Subjects that never used a sequence have no median and are left out, so compare `users` with `group_size` before comparing groups.
+`users` counts the subjects in the group that used the sequence at all, and `group_size` counts all of them. Every group gets a row for every sequence: one that no subject in the group used has `users` of 0 and no median. The medians are over users only, so compare `users` with `group_size` before comparing groups.
 
 ### Before reading timing differences
 

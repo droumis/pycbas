@@ -7,7 +7,9 @@ loops checks the positions, and the function's own check against the count matri
 checks the totals.
 """
 
+import re
 from dataclasses import replace
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -241,6 +243,80 @@ class TestTables:
         a = sequence_occurrences(cohort, self.params, seqs)[0]
         b = sequence_occurrences(cohort, self.params, as_numpy)[0]
         assert a["sequence"].tolist() == b["sequence"].tolist()
+
+
+GUIDE = Path(__file__).resolve().parents[1] / "docs" / "guide.md"
+
+
+def guide_section_code(heading):
+    """The Python blocks of one `##` section of the guide, in order."""
+    text = GUIDE.read_text()
+    start = text.index(f"\n## {heading}\n")
+    end = text.find("\n## ", start + 1)
+    section = text[start:end if end != -1 else None]
+    return re.findall(r"```python\n(.*?)```", section, flags=re.DOTALL)
+
+
+class TestGuideRecipe:
+    """The guide's group-median recipe, run as written.
+
+    It is the documented way to get the number the feature exists for, so it is
+    tested like code. The cohort has a sequence that one group never uses, which is
+    the case a recipe built only from the occurrence rows silently drops.
+    """
+
+    params = CBASParams(num_arms=3, seq_len_max=2, criterion=40, resample_number=50)
+
+    def cohort(self):
+        rng = np.random.default_rng(7)
+        subjects = []
+        for i in range(8):
+            group = i % 2
+            n = 60
+            # group 1 never chooses arm 2, so no sequence containing it is theirs
+            arms = 3 if group == 0 else 2
+            trials = np.column_stack([np.ones(n, dtype=int), rng.integers(0, arms, n),
+                                      rng.integers(0, 2, n), np.full(n, 2)])
+            subjects.append(Subject(id=f"s{i}", trials=trials, meta={"lesion": group}))
+        return Cohort(subjects)
+
+    def test_every_group_has_a_row_for_every_sequence(self):
+        pytest.importorskip("pandas")
+        blocks = guide_section_code("When does a sequence occur?")
+        assert len(blocks) == 2, "update this test to the guide's code blocks"
+
+        cohort = self.cohort()
+        matrix = build_count_matrix(cohort, self.params)
+        result = run_cbas_comparative(cohort, "lesion", self.params)
+        # Pin the selection rather than depend on what reaches significance: one
+        # sequence only group 0 uses, and one both groups use.
+        users = matrix.counts > 0
+        groups = cohort.labels_from("lesion")
+        only_0 = next(j for j in range(users.shape[1])
+                      if users[groups == 0, j].any() and not users[groups == 1, j].any())
+        both = next(j for j in range(users.shape[1])
+                    if users[groups == 0, j].any() and users[groups == 1, j].any())
+        mask = np.zeros(len(result.sequences), dtype=bool)
+        mask[[only_0, both]] = True
+        result = replace(result, significant_mask=mask)
+
+        namespace = dict(cohort=cohort, params=self.params, result=result)
+        for code in blocks:
+            exec(code, namespace)
+        summary = namespace["summary"]
+
+        assert len(summary) == 2 * 2
+        assert not summary.duplicated(["sequence", "group"]).any()
+        for _, row in summary.iterrows():
+            j = matrix.sequences.index(row["sequence"])
+            in_group = groups == row["group"]
+            assert row["users"] == users[in_group, j].sum()
+            assert row["group_size"] == in_group.sum()
+            assert np.isnan(row["median_start"]) == (row["users"] == 0)
+
+        missing = summary[(summary["sequence"] == matrix.sequences[only_0])
+                          & (summary["group"] == 1)]
+        assert len(missing) == 1 and missing["users"].item() == 0
 
 
 class TestVerification:
