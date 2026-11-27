@@ -14,7 +14,7 @@ Nature Communications (2026) https://www.nature.com/articles/s41467-026-76681-3
 #: hatch. Worth being able to check from Python: 0.2.0 changes numerical output at
 #: ties, so "which version produced this result" is a question users will need to
 #: answer.
-__version__ = "0.2.0"
+__version__ = "0.3.0.dev0"
 
 
 from .params import CBASParams, CBASResult
