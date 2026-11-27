@@ -357,6 +357,46 @@ class TestResults:
         assert app.make_sig_table(result) is not None
         assert app.build_results_tabs() is not None
 
+    def test_occurrence_downloads_follow_the_significant_sequences(self, result):
+        from dataclasses import replace
+        mask = np.zeros(len(result.sequences), dtype=bool)
+        mask[:4] = True
+        section = app.make_download_section(replace(result, significant_mask=mask))
+        downloads = {d.filename: d for d in section.select(app.pn.widgets.FileDownload)}
+
+        occ = pd.read_csv(downloads["cbas_occurrences.csv"].callback())
+        subjects = pd.read_csv(downloads["cbas_subject_windows.csv"].callback())
+        assert list(occ.columns) == ["subject_id", "group", "block", "sequence",
+                                     "start", "row", "session"]
+        assert list(subjects.columns) == ["subject_id", "group", "block", "n_trials",
+                                          "reached", "cutoff"]
+        assert set(occ["sequence"]) <= {app._seq_label(s) for s in result.sequences[:4]}
+        assert set(occ["group"]) <= {0, 1}
+        n_subjects = len(app.app_state._run_inputs["cohort"])
+        assert len(subjects) == n_subjects * 3
+
+    def test_no_occurrence_downloads_without_significant_sequences(self, result):
+        from dataclasses import replace
+        none = replace(result, significant_mask=np.zeros(len(result.sequences), bool))
+        names = {d.filename for d in app.make_download_section(none).select(
+            app.pn.widgets.FileDownload)}
+        assert "cbas_occurrences.csv" not in names
+
+    def test_occurrences_use_the_cohort_the_run_analysed(self, result):
+        """The subject filter replaces the live cohort and leaves the result alone."""
+        inputs = app.app_state._run_inputs
+        dropped = app.app_state.cohort.ids[0]
+        app.app_state.cohort = app.app_state.cohort.filter(lambda s: s.id != dropped)
+        assert app.app_state._run_inputs is inputs
+
+        _, subjects = app._occurrence_frames(result, inputs, result.sequences[:3])
+        assert dropped in set(subjects["subject_id"])
+
+        # and the live cohort, had it been used, is refused rather than exported
+        live = dict(inputs, cohort=app.app_state.cohort)
+        with pytest.raises(ValueError, match="does not match"):
+            app._occurrence_frames(result, live, result.sequences[:3])
+
 
 class TestManhattanPlot:
     """The figure in README.md, so its faults are the first thing anyone sees."""

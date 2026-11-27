@@ -99,6 +99,10 @@ class CBASApp(param.Parameterized):
     progress_value = param.Integer(default=0)
     status_text = param.String(default="")
     result = param.Parameter(default=None)
+    # What the run behind `result` analysed, captured when it started. The loaders and
+    # the subject filter replace `cohort` without touching `result`, so anything that
+    # recounts for a result must use these rather than the live state.
+    _run_inputs = param.Parameter(default=None, doc="Cohort, labels and settings of the last run")
 
     @property
     def has_blocks(self):
@@ -180,32 +184,33 @@ class CBASApp(param.Parameterized):
             criterion_order=self.criterion_order,
             resample_number=self.resample_number,
         )
+        # Read the cohort and settings once. The run can take minutes on a thread, and
+        # the same values are kept with the result for anything that recounts later.
+        cohort = self.cohort
         # The label is read off each subject by name, so the run cannot pair a
         # subject with another's group however the cohort was filtered or ordered.
-        if self.has_blocks:
+        key = SCORE_KEY if self.mode == "Correlative" and not cohort.has_blocks \
+            else GROUP_KEY
+        labels = {s.id: s.meta.get(key) for s in cohort}
+        if cohort.has_blocks:
             # Each contingency is its own hypothesis set, corrected jointly, so
             # `blocks` changes the size of the hypothesis space rather than
             # subsetting a result. chunked is left at its default for that reason.
             from pycbas.pipeline import run_cbas_multicontingency
-            self.result = run_cbas_multicontingency(
-                self.cohort, GROUP_KEY, params,
-                blocks=list(self.selected_blocks) or None,
-                encode_reward=self.encode_reward,
-            )
-        elif self.mode == "Comparative":
-            self.result = run_cbas_comparative(
-                self.cohort, GROUP_KEY, params,
-                contingency=self.contingency,
-                encode_reward=self.encode_reward,
-                block_aware=self.block_aware,
-            )
+            counting = dict(blocks=list(self.selected_blocks) or None,
+                            encode_reward=self.encode_reward)
+            result = run_cbas_multicontingency(cohort, key, params, **counting)
         else:
-            self.result = run_cbas_correlative(
-                self.cohort, SCORE_KEY, params,
-                contingency=self.contingency,
-                encode_reward=self.encode_reward,
-                block_aware=self.block_aware,
-            )
+            counting = dict(contingency=self.contingency,
+                            encode_reward=self.encode_reward,
+                            block_aware=self.block_aware)
+            run = run_cbas_comparative if key == GROUP_KEY else run_cbas_correlative
+            result = run(cohort, key, params, **counting)
+        self._run_inputs = dict(
+            cohort=cohort, params=params, counting=counting,
+            label_name="group" if key == GROUP_KEY else "score", labels=labels,
+        )
+        self.result = result
 
     _observed_cache_key = param.Parameter(default=None)
     #: None when the count could not be determined, so the estimate falls back
@@ -2043,7 +2048,73 @@ def make_download_section(result):
             "The CSV contains all sequences with their test statistics, "
             "g-values (adjusted p-values), and significance status."
         ),
+        *_occurrence_downloads(result),
     )
+
+
+def _occurrence_frames(result, inputs, sequences):
+    """Occurrence and subject tables for `sequences`, as the export writes them.
+
+    Recounts from the inputs captured when the run started, and is checked against
+    the result's digest, so a cohort loaded or filtered since cannot leak in.
+    """
+    from pycbas import sequence_occurrences
+    occ, subjects = sequence_occurrences(inputs["cohort"], inputs["params"], sequences,
+                                         counted=result, **inputs["counting"])
+    occ, subjects = pd.DataFrame(occ), pd.DataFrame(subjects)
+    # The same label as the results CSV, so the files join on `sequence`.
+    occ["sequence"] = occ["sequence"].map(_seq_label)
+    for frame in (occ, subjects):
+        frame.insert(1, inputs["label_name"],
+                     frame["subject_id"].map(inputs["labels"]))
+    return occ, subjects
+
+
+def _occurrence_downloads(result):
+    """Download buttons for where each significant sequence occurred."""
+    inputs = app_state._run_inputs
+    if inputs is None or result.n_significant == 0:
+        return []
+    significant = [s for s, m in zip(result.sequences, result.significant_mask) if m]
+    frames = {}
+
+    def csv(which):
+        def callback():
+            if not frames:
+                frames["occ"], frames["subjects"] = _occurrence_frames(
+                    result, inputs, significant)
+            return io.StringIO(frames[which].to_csv(index=False))
+        return callback
+
+    restart = ", which restart in each contingency," if "blocks" in inputs["counting"] \
+        else ""
+    compare = ("compare cutoffs across groups before comparing timing between them"
+               if inputs["label_name"] == "group" else
+               "check whether cutoffs track the score before relating timing to it")
+    return [
+        pn.pane.Markdown("#### Where the significant sequences occurred"),
+        pn.Row(
+            pn.widgets.FileDownload(callback=csv("occ"),
+                                    filename="cbas_occurrences.csv",
+                                    label="Download sequence occurrences (CSV)"),
+            pn.widgets.FileDownload(callback=csv("subjects"),
+                                    filename="cbas_subject_windows.csv",
+                                    label="Download subject windows (CSV)"),
+        ),
+        pn.pane.Markdown(
+            f"The occurrences CSV has one row per counted occurrence of each significant "
+            f"sequence. `start` is the 0-based trial of its first choice within the "
+            f"counted trials{restart} and `row` is its 0-based index in the subject's "
+            f"loaded trials. The subject windows CSV lists every subject, including "
+            f"those that never used a sequence, with `cutoff`, the last trial at which a "
+            f"counted sequence may start. Positions are bounded by each subject's "
+            f"cutoff, so {compare}. See [When does a sequence occur?]({_GUIDE_URL}) in "
+            f"the user guide."
+        ),
+    ]
+
+
+_GUIDE_URL = "https://droumis.github.io/pycbas/guide/#when-does-a-sequence-occur"
 
 
 # --- Demo data generator ---

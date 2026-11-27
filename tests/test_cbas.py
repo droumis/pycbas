@@ -5,6 +5,7 @@ import pytest
 
 from pycbas import (
     CBASParams,
+    CBASResult,
     Cohort,
     Subject,
     load_subject_data,
@@ -20,6 +21,7 @@ from pycbas import (
     run_cbas_comparative,
     run_cbas_correlative,
 )
+from pycbas.params import _counts_digest
 
 from conftest import IGOR_DATA_DIR as DATA_DIR, require_reference_path
 
@@ -468,6 +470,78 @@ class TestCohortLabelValidation:
         result = run_cbas_comparative(self.cohort(), np.array([0, 1, 0, 1, 0, 1]),
                                       self.params)
         assert len(result.sequences) == len(result.significant_mask)
+
+
+class TestCountsDigest:
+    """`CBASResult.counts_digest` names the count matrix the result came from."""
+
+    params = CBASParams(num_arms=3, seq_len_max=2, criterion=50, resample_number=50)
+
+    def cohort(self):
+        return synthetic_cohort([synthetic_subject(seed) for seed in range(6)])
+
+    def test_pipelines_record_the_digest_of_their_matrix(self):
+        cohort = self.cohort()
+        expected = _counts_digest(*self._parts(build_count_matrix(cohort, self.params)))
+        comparative = run_cbas_comparative(cohort, [0, 0, 0, 1, 1, 1], self.params)
+        correlative = run_cbas_correlative(cohort, np.arange(6.0), self.params)
+        assert comparative.counts_digest == expected
+        assert correlative.counts_digest == expected
+
+    def test_settings_that_change_the_counts_change_the_digest(self):
+        cohort = self.cohort()
+        base = run_cbas_comparative(cohort, [0, 0, 0, 1, 1, 1], self.params)
+        shifted = CBASParams(num_arms=3, seq_len_max=2, criterion=49,
+                             resample_number=50)
+        other = run_cbas_comparative(cohort, [0, 0, 0, 1, 1, 1], shifted)
+        assert base.counts_digest != other.counts_digest
+
+    def test_any_count_id_or_label_changes_it(self):
+        counts, ids, sequences = self._parts(
+            build_count_matrix(self.cohort(), self.params))
+        base = _counts_digest(counts, ids, sequences)
+
+        bumped = counts.copy()
+        bumped[2, 3] += 1
+        assert _counts_digest(bumped, ids, sequences) != base
+        assert _counts_digest(counts, ids[::-1], sequences) != base
+        assert _counts_digest(counts, ids, sequences[::-1]) != base
+
+    def test_ids_cannot_run_together(self):
+        """Distinct id lists of the same length never share a digest, whatever
+        separator or bracket characters the ids hold."""
+        counts = np.ones((2, 1))
+        id_lists = [
+            ["a", "b\x1fc"], ["a\x1fb", "c"],
+            ["a", "b,c"], ["a,b", "c"],
+            ['a"', "b"], ["a", '"b'],
+            ["a]", "[b"], ["a", "]["],
+            ["1", "2"], [1, 2],
+        ]
+        digests = {}
+        for ids in id_lists:
+            digests.setdefault(_counts_digest(counts, ids, [(0,)]), []).append(ids)
+        # The digest compares ids as strings, so an int id and its string agree.
+        collided = [ids for ids in digests.values() if len(ids) > 1]
+        assert collided == [[["1", "2"], [1, 2]]]
+
+    def test_numpy_integers_in_labels_do_not_change_it(self):
+        counts = np.ones((1, 2))
+        plain = _counts_digest(counts, ["a"], [(1, (0, 1)), (2, (1,))])
+        numpy = _counts_digest(counts, ["a"],
+                               [(np.int64(1), (np.int32(0), np.int32(1))),
+                                (np.int64(2), (np.int32(1),))])
+        assert plain == numpy
+
+    def test_defaults_to_none_when_built_by_hand(self):
+        result = CBASResult(sequences=[], test_stats=np.array([]),
+                            g_values=np.array([]), k_final=1,
+                            significant_mask=np.array([], dtype=bool))
+        assert result.counts_digest is None
+
+    @staticmethod
+    def _parts(matrix):
+        return matrix.counts, matrix.subject_ids, matrix.sequences
 
 
 class TestBuildCountMatrix:

@@ -432,6 +432,79 @@ matrix.select_block(1).shape     # just that contingency's columns
 
 `select_block` raises on a single-contingency matrix rather than selecting nothing, since an empty result there reads as a contingency with no sequences. Use `split_sequence_entry` to get a sequence's length from an entry: `len(entry)` is 2 for every pair, whatever the sequence length.
 
+## When does a sequence occur?
+
+The count matrix says how often each subject used a sequence. `sequence_occurrences` says where. It returns two tables. In the first, each row is one window the count matrix counted, so the rows for a subject and a sequence add up to that cell of the matrix. The second has a row for every subject, including subjects that never used the sequences, with what is needed to interpret the first.
+
+Pass the same cohort, parameters and counting settings as the analysis, and the result as `counted`. The function recounts and raises if its counts differ from the ones the result was computed from. That catches a changed setting, a filtered or reordered cohort, and edited trials, since almost any edit changes some count. It compares counts, not the trials themselves, so trials rearranged without changing any count would pass. That is rare unless `seq_len_max` is very small, but pass the cohort exactly as the analysis loaded it.
+
+```python
+import pandas as pd
+from pycbas import sequence_occurrences
+
+significant = [s for s, m in zip(result.sequences, result.significant_mask) if m]
+occ, subjects = sequence_occurrences(cohort, params, significant,
+                                     contingency=2, counted=result)
+occ, subjects = pd.DataFrame(occ), pd.DataFrame(subjects)
+```
+
+| `occ` column | Meaning |
+|---|---|
+| `subject_id` | The subject |
+| `block` | The contingency block, or the `contingency` value for a single-contingency run |
+| `sequence` | The entry as passed |
+| `start` | 0-based position of the window's first trial among the subject's counted trials |
+| `row` | Index of that trial in `Subject.trials` |
+| `session` | Session of that trial |
+
+| `subjects` column | Meaning |
+|---|---|
+| `subject_id`, `block` | One row per subject and contingency |
+| `n_trials` | Number of counted trials, after the contingency filter |
+| `reached` | Whether the subject reached the criterion |
+| `cutoff` | Last position at which a counted window may start |
+
+**What `start` counts.** Positions are in the coordinate the criterion uses. Only trials of the selected contingency are counted, across sessions, and in multi-contingency data the count restarts in each contingency. Exploration trials and rows the loader dropped are not counted either. Use `row` to get back to the raw data. A window of `n` symbols ends at `start + n - 1`, with `n = len(split_sequence_entry(sequence)[1])`, because `len` of a multi-contingency entry is always 2. That end is in counted trials: its row is not `row + n - 1` when trials of another condition fall inside the window. Without `block_aware` a window can span two sessions.
+
+### A median per group
+
+The library does not summarise the positions, because every summary involves choices that belong to the analysis. This recipe takes one median per subject, then the median across the subjects in each group, so a subject that uses a sequence often counts no more than one that uses it rarely.
+
+```python
+from pycbas import decode_sequence
+
+group = dict(zip(cohort.ids, cohort.labels_from("lesion")))
+subjects["group"] = subjects["subject_id"].map(group)
+
+medians = (occ.groupby(["sequence", "subject_id"])["start"].median()
+           .rename("median_start").reset_index())
+# Every subject for every sequence, so subjects that never used one stay in, as NaN.
+per_subject = (occ[["block", "sequence"]].drop_duplicates()
+               .merge(subjects, on="block")
+               .merge(medians, on=["sequence", "subject_id"], how="left"))
+per_subject["fraction"] = per_subject["median_start"] / per_subject["cutoff"]
+
+summary = per_subject.groupby(["sequence", "group"]).agg(
+    median_start=("median_start", "median"),
+    median_fraction=("fraction", "median"),
+    users=("median_start", "count"),
+    group_size=("subject_id", "size"),
+).reset_index()
+summary["label"] = summary["sequence"].map(
+    lambda s: decode_sequence(s, num_arms=params.num_arms))
+```
+
+`users` counts the subjects in the group that used the sequence at all, and `group_size` counts all of them. Every group gets a row for every sequence: one that no subject in the group used has `users` of 0 and no median. The medians are over users only, so compare `users` with `group_size` before comparing groups.
+
+### Before reading timing differences
+
+- **Positions are bounded by each subject's cutoff.** With a performance criterion, a subject that takes longer to reach it has more trials in which any sequence can start, so its median start is later for every sequence, whatever it did. A sequence used evenly has a median near half the cutoff, which is why the recipe also reports `fraction`. Compare `cutoff` across groups, and look separately at subjects that did not reach the criterion, since they contribute their whole stream.
+- **The criterion trial is not trials to criterion.** For orders 1 and above, `cutoff` is the trial where the subject's `criterion`-th qualifying run starts, not where it ends. For order 0, reaching the criterion only means the subject had at least that many trials.
+- **Overlapping windows each count.** Five consecutive choices of the same arm hold three windows of that arm repeated three times, so repeated runs weigh more in a median than a single use.
+- **Timing of significant sequences is descriptive.** Those sequences were selected because their counts differ, so testing their timing on the same data counts the evidence twice.
+
+The app's Export tab writes both tables as CSV for the significant sequences, with the group or score added.
+
 ## Using individual pipeline stages
 
 For custom workflows, you can call each stage separately:

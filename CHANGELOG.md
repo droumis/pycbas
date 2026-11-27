@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- **`sequence_occurrences`.** The start of every counted window of the given sequences,
+  per subject, with each subject's counting cutoff, so timing summaries such as a
+  group's median trial can be computed from the windows the analysis counted. It
+  recounts with the given settings and raises if the counts differ from the result's.
+
+- **`CBASResult.counts_digest`.** A SHA-256 of the count matrix a result was computed
+  from, which `sequence_occurrences` checks against. It defaults to None, and no numbers
+  change.
+
+- **Occurrence downloads in the app.** The Export tab writes both tables for the
+  significant sequences, built from the cohort and settings the run used.
+
 ## 0.2.0
 
 Subjects now carry their own identity, which changes the shape of the public API:

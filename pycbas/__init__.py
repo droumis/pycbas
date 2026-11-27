@@ -14,7 +14,7 @@ Nature Communications (2026) https://www.nature.com/articles/s41467-026-76681-3
 #: hatch. Worth being able to check from Python: 0.2.0 changes numerical output at
 #: ties, so "which version produced this result" is a question users will need to
 #: answer.
-__version__ = "0.2.0"
+__version__ = "0.3.0.dev0"
 
 
 from .params import CBASParams, CBASResult
@@ -42,6 +42,7 @@ from .contingency import (load_subject_with_contingencies,
                           contingency_criteria)
 from .criterion import criterion_trial, reached_criterion
 from .core import subject_criteria, NonIntegerCountWarning
+from .occurrences import sequence_occurrences
 
 __all__ = [
     "__version__",
@@ -84,6 +85,7 @@ __all__ = [
     "criterion_trial",
     "reached_criterion",
     "subject_criteria",
+    "sequence_occurrences",
     "estimate_resources",
     "print_resource_estimate",
 ]

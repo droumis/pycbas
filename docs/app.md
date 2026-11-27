@@ -176,6 +176,12 @@ Results are presented across several tabs:
 
 **Export** — download full results or significant-only as CSV.
 
+When some sequences are significant, the Export tab also offers two tables of where they
+occurred. The occurrences CSV has one row per counted occurrence, and the subject windows
+CSV gives each subject's counting cutoff. Both are built from the cohort and settings the
+run used, so loading or filtering data afterwards does not change them. Read
+[when does a sequence occur](guide.md#when-does-a-sequence-occur) before comparing groups.
+
 For multi-contingency runs every sequence label carries the contingency block it belongs
 to, as `c3: 2-4-2`, in the plots, the tables and the CSV. The same arm sequence appearing
 under two contingencies is two rows, because it is two hypotheses.
