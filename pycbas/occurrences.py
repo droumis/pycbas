@@ -77,9 +77,13 @@ def sequence_occurrences(cohort, params, sequences, *, contingency=2,
           single-contingency analysis
         - `sequence`, the entry as passed
         - `start`, the 0-based position of the window's first trial in the counted
-          stream. Its last trial is `start + len(sequence) - 1`, and without
-          `block_aware` a window can span two sessions.
-        - `row`, the index of that first trial in `Subject.trials`
+          stream. Its last trial is `start + n - 1` for a sequence of `n` symbols,
+          `n = len(split_sequence_entry(sequence)[1])`, since `len` of a
+          multi-contingency pair is always 2. Without `block_aware` a window can
+          span two sessions.
+        - `row`, the index of that first trial in `Subject.trials`. The last
+          trial's row is not `row + n - 1` when trials of another condition fall
+          between them, since `start` counts only the counted trials.
         - `session`, the session of that first trial
 
         `subjects` has one row per subject and block, including subjects that never

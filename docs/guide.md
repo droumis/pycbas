@@ -464,7 +464,7 @@ occ, subjects = pd.DataFrame(occ), pd.DataFrame(subjects)
 | `reached` | Whether the subject reached the criterion |
 | `cutoff` | Last position at which a counted window may start |
 
-**What `start` counts.** Positions are in the coordinate the criterion uses. Only trials of the selected contingency are counted, across sessions, and in multi-contingency data the count restarts in each contingency. Exploration trials and rows the loader dropped are not counted either. Use `row` to get back to the raw data. A window's last trial is `start + len(sequence) - 1`, and without `block_aware` a window can span two sessions.
+**What `start` counts.** Positions are in the coordinate the criterion uses. Only trials of the selected contingency are counted, across sessions, and in multi-contingency data the count restarts in each contingency. Exploration trials and rows the loader dropped are not counted either. Use `row` to get back to the raw data. A window of `n` symbols ends at `start + n - 1`, with `n = len(split_sequence_entry(sequence)[1])`, because `len` of a multi-contingency entry is always 2. That end is in counted trials: its row is not `row + n - 1` when trials of another condition fall inside the window. Without `block_aware` a window can span two sessions.
 
 ### A median per group
 
