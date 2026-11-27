@@ -102,6 +102,10 @@ def sequence_occurrences(cohort, params, sequences, *, contingency=2,
     if not multi and blocks is not None:
         raise ValueError("blocks applies to multi-contingency sequences, which are "
                          "(block, sequence) pairs")
+    if blocks is not None:
+        # One list for both the recount and the scan: an iterator would be used up
+        # by the first, and a repeated block would repeat subject rows in the second.
+        blocks = sorted(set(blocks))
     for entry in entries:
         length = len(entry[1] if multi else entry)
         if not 1 <= length <= params.seq_len_max:
@@ -111,7 +115,7 @@ def sequence_occurrences(cohort, params, sequences, *, contingency=2,
     if multi:
         matrix = build_multicontingency_count_matrix(
             cohort, params, blocks=blocks, encode_reward=encode_reward)
-        used_blocks = sorted(blocks) if blocks is not None else \
+        used_blocks = blocks if blocks is not None else \
             shared_contingency_blocks(cohort)
     else:
         matrix = build_count_matrix(cohort, params, contingency=contingency,
@@ -132,6 +136,7 @@ def sequence_occurrences(cohort, params, sequences, *, contingency=2,
     for entry in entries:
         block, seq = entry if multi else (contingency, entry)
         targets.setdefault(block, []).append(seq)
+    plans = {block: _plan(seqs) for block, seqs in targets.items()}
 
     occ = {"subject_id": [], "block": [], "sequence": [], "start": [], "row": [],
            "session": []}
@@ -139,6 +144,8 @@ def sequence_occurrences(cohort, params, sequences, *, contingency=2,
             "cutoff": []}
     order = getattr(params, "criterion_order", 0)
     matrix_row = {sid: i for i, sid in enumerate(matrix.subject_ids)}
+    entry_columns = np.array([column[entry] for entry in entries], dtype=np.int64)
+    empty = np.empty(0, dtype=np.int64)
 
     for subject in cohort:
         found = {}
@@ -160,18 +167,18 @@ def sequence_occurrences(cohort, params, sequences, *, contingency=2,
             subj["reached"].append(bool(np.isfinite(criterion)))
             subj["cutoff"].append(cutoff)
 
-            for seq, hits in _scan(symbols, rows, targets.get(block, []),
-                                   cutoff).items():
-                found[(block, seq) if multi else seq] = hits
+            if block in plans:
+                for seq, hits in _scan(symbols, rows, plans[block], cutoff).items():
+                    found[(block, seq) if multi else seq] = hits
 
-        counts = matrix.counts[matrix_row[subject.id]]
-        for entry in entries:
-            starts, hit_rows = found[entry]
-            if len(starts) != counts[column[entry]]:
-                raise RuntimeError(
-                    f"found {len(starts)} occurrences of {entry!r} for subject "
-                    f"{subject.id!r} where the count matrix has "
-                    f"{counts[column[entry]]:g}. This is a bug in pycbas.")
+        # Only the entries this subject used, in the order given. Anything left in
+        # `found` afterwards was found where the count matrix has none.
+        expected = matrix.counts[matrix_row[subject.id], entry_columns]
+        for i in np.flatnonzero(expected):
+            entry = entries[i]
+            starts, hit_rows = found.pop(entry, (empty, empty))
+            if len(starts) != expected[i]:
+                _count_bug(entry, subject, len(starts), expected[i])
             n = len(starts)
             occ["subject_id"].extend([subject.id] * n)
             occ["block"].extend([entry[0] if multi else contingency] * n)
@@ -179,9 +186,17 @@ def sequence_occurrences(cohort, params, sequences, *, contingency=2,
             occ["start"].append(starts)
             occ["row"].append(hit_rows)
             occ["session"].append(subject.trials[hit_rows, SESSION])
+        for entry, (starts, _) in found.items():
+            _count_bug(entry, subject, len(starts), 0)
 
     return _columns(occ, ("start", "row", "session")), \
         _columns(subj, ("n_trials", "cutoff"), bools=("reached",))
+
+
+def _count_bug(entry, subject, found, counted):
+    raise RuntimeError(
+        f"found {found} occurrences of {entry!r} for subject {subject.id!r} where "
+        f"the count matrix has {counted:g}. This is a bug in pycbas.")
 
 
 def _normalise(sequences):
@@ -191,9 +206,10 @@ def _normalise(sequences):
         paired = len(entry) == 2 and isinstance(entry[1], (tuple, list, np.ndarray))
         kinds.add(paired)
         if paired:
-            entries.append((int(entry[0]), tuple(int(s) for s in entry[1])))
+            entries.append((_as_int(entry[0], entry),
+                            tuple(_as_int(s, entry) for s in entry[1])))
         else:
-            entries.append(tuple(int(s) for s in entry))
+            entries.append(tuple(_as_int(s, entry) for s in entry))
     if not entries:
         raise ValueError("sequences is empty")
     if len(kinds) > 1:
@@ -201,6 +217,23 @@ def _normalise(sequences):
     if len(set(entries)) != len(entries):
         raise ValueError("sequences contains repeated entries")
     return entries, kinds.pop()
+
+
+def _as_int(value, entry):
+    """`value` as a builtin int, refusing anything the conversion would change.
+
+    `int` truncates 0.9 to 0 and parses "1", either of which would return the
+    occurrences of a sequence other than the one asked for.
+    """
+    try:
+        converted = int(value)
+    except (TypeError, ValueError):
+        converted = None
+    if converted is None or isinstance(value, (bool, np.bool_, str, bytes)) \
+            or converted != value:
+        raise ValueError(f"sequence {entry!r} holds {value!r}, which is not an "
+                         f"integer symbol or block")
+    return converted
 
 
 def _verify(counted, matrix):
@@ -275,33 +308,87 @@ def _check_rows(subject, symbols, rows, num_arms, encode_reward):
                                f"its counted stream. This is a bug in pycbas.")
 
 
-def _scan(symbols, rows, targets, cutoff):
-    """Counted start positions and rows of each target, by the enumeration rules.
+def _plan(seqs):
+    """How to find `seqs`, grouped by length, worked out once for every subject.
+
+    Each window is read as one base-`base` integer, so a segment is scanned once
+    per length however many sequences are requested. Symbols no target uses are
+    all read as `base - 1`, so any window holding one matches nothing. A length
+    whose codes could overflow, or targets with negative symbols, fall back to
+    comparing whole windows.
+    """
+    by_length = {}
+    for seq in seqs:
+        by_length.setdefault(len(seq), []).append(seq)
+    plan = {}
+    for length, group in by_length.items():
+        base = max(max(seq) for seq in group) + 2
+        if min(min(seq) for seq in group) < 0 or base ** length >= 2 ** 63:
+            plan[length] = (group, None, None, None)
+            continue
+        wanted = {}
+        for seq in group:
+            code = 0
+            for s in seq:
+                code = code * base + s
+            wanted[code] = seq
+        keys = np.fromiter(wanted, dtype=np.int64, count=len(wanted))
+        plan[length] = (group, base, wanted, keys)
+    return plan
+
+
+def _scan(symbols, rows, plan, cutoff):
+    """Counted start positions and rows of the planned sequences, by the
+    enumeration rules. Only sequences found at least once are returned.
 
     A window starting at global position p is counted when p <= cutoff and the
     window lies inside one segment. Global positions run across segments, and every
     segment adds its full length, including segments too short for the window.
     """
-    by_length = {}
-    for seq in targets:
-        by_length.setdefault(len(seq), []).append(seq)
-    starts = {seq: [] for seq in targets}
-    hit_rows = {seq: [] for seq in targets}
+    starts, hit_rows = {}, {}
     offset = 0
     for sym, idx in zip(symbols, rows):
         if offset > cutoff:
             break
-        for length, seqs in by_length.items():
-            if len(sym) < length:
+        sym = np.asarray(sym, dtype=np.int64)
+        for length, step in plan.items():
+            # Only windows that start at or before the cutoff and end in the segment.
+            n_windows = min(len(sym) - length + 1, cutoff - offset + 1)
+            if n_windows <= 0:
                 continue
-            windows = sliding_window_view(np.asarray(sym), length)
-            for seq in seqs:
-                hits = np.flatnonzero((windows == np.asarray(seq)).all(axis=1))
-                hits = hits[offset + hits <= cutoff]
-                starts[seq].append(offset + hits)
-                hit_rows[seq].append(idx[hits])
+            for seq, hits in _match(sym, length, n_windows, *step):
+                starts.setdefault(seq, []).append(offset + hits)
+                hit_rows.setdefault(seq, []).append(idx[hits])
         offset += len(sym)
-    return {seq: (_concat(starts[seq]), _concat(hit_rows[seq])) for seq in targets}
+    return {seq: (_concat(starts[seq]), _concat(hit_rows[seq])) for seq in starts}
+
+
+def _match(sym, length, n_windows, seqs, base, wanted, keys):
+    """`(seq, starts)` for each of `seqs` found among the first `n_windows` windows."""
+    if base is None:
+        windows = sliding_window_view(sym, length)[:n_windows]
+        for seq in seqs:
+            hits = np.flatnonzero((windows == np.asarray(seq)).all(axis=1))
+            if len(hits):
+                yield seq, hits
+        return
+
+    other = base - 1
+    sym = np.where((sym >= 0) & (sym < other), sym, other)
+    codes = np.zeros(n_windows, dtype=np.int64)
+    for k in range(length):
+        codes = codes * base + sym[k:k + n_windows]
+
+    hits = np.flatnonzero(np.isin(codes, keys))
+    if not len(hits):
+        return
+    # A stable sort keeps each sequence's starts in increasing order.
+    found = codes[hits]
+    order = np.argsort(found, kind="stable")
+    hits, found = hits[order], found[order]
+    present, first = np.unique(found, return_index=True)
+    for code, positions in zip(present.tolist(), np.split(hits, first[1:])):
+        yield wanted[code], positions
 
 
 def _concat(parts):

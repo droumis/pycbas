@@ -197,6 +197,20 @@ class TestMultiContingency:
         assert set(occ["block"]) == {1}
         assert set(subjects["block"]) == {1}
 
+    @pytest.mark.parametrize("blocks", [lambda: iter([1]), lambda: [1, 1],
+                                        lambda: (1,)])
+    def test_blocks_in_any_iterable_form_match_a_list(self, blocks):
+        cohort = self.cohort()
+        matrix = build_multicontingency_count_matrix(cohort, self.params, blocks=[1])
+        expected = sequence_occurrences(cohort, self.params, matrix.sequences,
+                                        blocks=[1], counted=matrix)
+        got = sequence_occurrences(cohort, self.params, matrix.sequences,
+                                   blocks=blocks(), counted=matrix)
+        for want, have in zip(expected, got):
+            assert want.keys() == have.keys()
+            for key in want:
+                assert want[key].tolist() == have[key].tolist(), key
+
     def test_checked_against_a_pipeline_result(self):
         cohort = self.cohort()
         result = run_cbas_multicontingency(cohort, [0, 1] * 3, self.params)
@@ -243,6 +257,49 @@ class TestTables:
         a = sequence_occurrences(cohort, self.params, seqs)[0]
         b = sequence_occurrences(cohort, self.params, as_numpy)[0]
         assert a["sequence"].tolist() == b["sequence"].tolist()
+
+    def test_integral_floats_are_the_integers_they_hold(self):
+        cohort = irregular_cohort()
+        seqs = build_count_matrix(cohort, self.params).sequences[:3]
+        as_float = [tuple(float(s) for s in seq) for seq in seqs]
+        a = sequence_occurrences(cohort, self.params, seqs)[0]
+        b = sequence_occurrences(cohort, self.params, as_float)[0]
+        assert a["start"].tolist() == b["start"].tolist()
+        assert a["sequence"].tolist() == b["sequence"].tolist()
+
+
+@pytest.mark.parametrize("seed", range(5))
+def test_both_scan_paths_find_the_same_windows(seed):
+    """Integer window codes, and the whole-window comparison used when codes could
+    overflow, agree with each other and with the reference. The streams include
+    symbols no target uses, negative ones among them."""
+    from pycbas.occurrences import _plan, _scan
+
+    rng = np.random.default_rng(seed)
+    segments = [rng.integers(-1, 6, n) for n in rng.integers(0, 30, 4)]
+    rows = []
+    start = 0
+    for segment in segments:
+        rows.append(np.arange(start, start + len(segment)))
+        start += len(segment)
+    targets = sorted({tuple(int(s) for s in rng.integers(0, 4, length))
+                      for length in (1, 2, 3, 3, 4) for _ in range(6)})
+    cutoff = int(rng.integers(0, start + 1))
+
+    plan = _plan(targets)
+    fallback = {length: (step[0], None, None, None) for length, step in plan.items()}
+    coded, compared = _scan(segments, rows, plan, cutoff), \
+        _scan(segments, rows, fallback, cutoff)
+
+    expected = {}
+    for length in (1, 2, 3, 4):
+        expected.update({seq: starts for seq, starts in
+                         reference_starts(segments, length, cutoff).items()
+                         if seq in targets and starts})
+    for found in (coded, compared):
+        assert {seq: starts.tolist() for seq, (starts, _) in found.items()} == expected
+        for starts, hit_rows in found.values():
+            assert hit_rows.tolist() == starts.tolist()  # rows here are positions
 
 
 GUIDE = Path(__file__).resolve().parents[1] / "docs" / "guide.md"
@@ -388,6 +445,10 @@ class TestVerification:
         ([(0,), (1, (0,))], "mixes"),
         ([(0, 1, 0)], "seq_len_max"),
         ([(3,)], "never counted"),
+        ([(0.9,)], "not an integer"),
+        ([("1",)], "not an integer"),
+        ([(True,)], "not an integer"),
+        ([(1.5, (0,))], "not an integer"),
     ])
     def test_malformed_sequences_are_refused(self, sequences, match):
         with pytest.raises(ValueError, match=match):
