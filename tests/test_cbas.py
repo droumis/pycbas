@@ -507,6 +507,24 @@ class TestCountsDigest:
         assert _counts_digest(counts, ids[::-1], sequences) != base
         assert _counts_digest(counts, ids, sequences[::-1]) != base
 
+    def test_ids_cannot_run_together(self):
+        """Distinct id lists of the same length never share a digest, whatever
+        separator or bracket characters the ids hold."""
+        counts = np.ones((2, 1))
+        id_lists = [
+            ["a", "b\x1fc"], ["a\x1fb", "c"],
+            ["a", "b,c"], ["a,b", "c"],
+            ['a"', "b"], ["a", '"b'],
+            ["a]", "[b"], ["a", "]["],
+            ["1", "2"], [1, 2],
+        ]
+        digests = {}
+        for ids in id_lists:
+            digests.setdefault(_counts_digest(counts, ids, [(0,)]), []).append(ids)
+        # The digest compares ids as strings, so an int id and its string agree.
+        collided = [ids for ids in digests.values() if len(ids) > 1]
+        assert collided == [[["1", "2"], [1, 2]]]
+
     def test_numpy_integers_in_labels_do_not_change_it(self):
         counts = np.ones((1, 2))
         plain = _counts_digest(counts, ["a"], [(1, (0, 1)), (2, (1,))])

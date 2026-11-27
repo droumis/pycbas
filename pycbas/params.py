@@ -1,6 +1,7 @@
 """CBAS parameter and result dataclasses."""
 
 import hashlib
+import json
 
 import numpy as np
 from dataclasses import dataclass
@@ -53,12 +54,17 @@ class CBASResult:
 
 
 def _counts_digest(counts, subject_ids, sequences):
-    """SHA-256 of a count matrix together with its row and column labels."""
+    """SHA-256 of a count matrix together with its row and column labels.
+
+    Each part must mark its own end, or two different inputs could run together
+    into the same bytes. The shape fixes the length of the counts, and the ids are
+    a JSON array, which escapes any character an id holds and ends at its `]`.
+    """
     counts = np.ascontiguousarray(counts, dtype="<f8")
     h = hashlib.sha256()
     h.update(repr(counts.shape).encode())
     h.update(counts.tobytes())
-    h.update("\x1f".join(str(i) for i in subject_ids).encode())
+    h.update(json.dumps([str(i) for i in subject_ids]).encode())
     h.update(repr([_plain(entry) for entry in sequences]).encode())
     return h.hexdigest()
 
